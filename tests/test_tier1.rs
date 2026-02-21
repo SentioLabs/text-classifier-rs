@@ -1,6 +1,6 @@
-use text_classifier::{classify, TextType, Tier};
-use text_classifier::tier1::classify_tier1;
 use text_classifier::features::extract_features;
+use text_classifier::tier1::classify_tier1;
+use text_classifier::{TextType, Tier, classify};
 
 fn read_fixture(path: &str) -> String {
     std::fs::read_to_string(format!("tests/fixtures/{path}")).unwrap()

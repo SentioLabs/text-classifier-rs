@@ -5,6 +5,10 @@ edition = "2024"
 description = "Classify text fields for translation eligibility"
 license = "MIT"
 repository = "https://github.com/SentioLabs/text-classifier-rs"
+homepage = "https://github.com/SentioLabs/text-classifier-rs"
+readme = "README.md"
+keywords = ["text-classification", "nlp", "translation", "cli"]
+categories = ["command-line-utilities", "text-processing"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

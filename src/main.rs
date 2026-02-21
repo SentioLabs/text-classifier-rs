@@ -91,9 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     let classifier = match &cli.model {
-        Some(path) => Classifier::with_model(
-            path.to_str().ok_or("Invalid model path")?,
-        )?,
+        Some(path) => Classifier::with_model(path.to_str().ok_or("Invalid model path")?)?,
         None => Classifier::new(),
     };
 
@@ -102,17 +100,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Default: read from stdin, classify each line
             classify_stdin(&classifier)?;
         }
-        Some(Commands::File { input, output, text_field }) => {
+        Some(Commands::File {
+            input,
+            output,
+            text_field,
+        }) => {
             classify_file(&classifier, &input, &output, &text_field)?;
         }
-        Some(Commands::Filter { input, translatable, skipped, text_fields, min_confidence }) => {
+        Some(Commands::Filter {
+            input,
+            translatable,
+            skipped,
+            text_fields,
+            min_confidence,
+        }) => {
             let fields: Vec<&str> = text_fields.split(',').map(|s| s.trim()).collect();
-            filter_file(&classifier, &input, &translatable, &skipped, &fields, min_confidence)?;
+            filter_file(
+                &classifier,
+                &input,
+                &translatable,
+                &skipped,
+                &fields,
+                min_confidence,
+            )?;
         }
-        Some(Commands::Features { input, output, text_field }) => {
+        Some(Commands::Features {
+            input,
+            output,
+            text_field,
+        }) => {
             extract_features_file(&classifier, &input, &output, &text_field)?;
         }
-        Some(Commands::LabelCorpus { input, output, text_field }) => {
+        Some(Commands::LabelCorpus {
+            input,
+            output,
+            text_field,
+        }) => {
             label_corpus(&classifier, &input, &output, &text_field)?;
         }
         Some(Commands::Train { input, output }) => {
@@ -216,7 +239,8 @@ fn filter_file(
     let mut total = 0u64;
     let mut trans_count = 0u64;
     let mut skip_count = 0u64;
-    let mut category_counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut category_counts: std::collections::HashMap<String, u64> =
+        std::collections::HashMap::new();
 
     for line in reader.lines() {
         let line = line?;
@@ -251,7 +275,9 @@ fn filter_file(
                     any_translatable = true;
                 }
 
-                *category_counts.entry(result.text_type.to_string()).or_insert(0) += 1;
+                *category_counts
+                    .entry(result.text_type.to_string())
+                    .or_insert(0) += 1;
 
                 field_classifications.insert(
                     field_name.to_string(),
@@ -305,7 +331,10 @@ fn extract_features_file(
     let mut out = io::BufWriter::new(std::fs::File::create(output)?);
 
     // CSV header
-    writeln!(out, "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio")?;
+    writeln!(
+        out,
+        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio"
+    )?;
 
     let mut count = 0;
     for line in reader.lines() {
@@ -320,9 +349,16 @@ fn extract_features_file(
             writeln!(
                 out,
                 "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4}",
-                f.line_length_cv, f.char_entropy, f.leading_whitespace_ratio,
-                f.tab_density, f.sentence_punctuation_rate, f.paragraph_break_rate,
-                f.alpha_ratio, f.line_uniqueness, f.short_line_ratio, f.symbol_ratio
+                f.line_length_cv,
+                f.char_entropy,
+                f.leading_whitespace_ratio,
+                f.tab_density,
+                f.sentence_punctuation_rate,
+                f.paragraph_break_rate,
+                f.alpha_ratio,
+                f.line_uniqueness,
+                f.short_line_ratio,
+                f.symbol_ratio
             )?;
             count += 1;
         }
