@@ -1,0 +1,21 @@
+<div class="container mx-auto px-4">
+  <header class="flex items-center justify-between py-6">
+    <h1 class="text-2xl font-bold">Dashboard</h1>
+    <nav class="flex gap-4">
+      <a href="/home" class="text-blue-600 hover:underline">Home</a>
+      <a href="/settings" class="text-blue-600 hover:underline">Settings</a>
+      <a href="/profile" class="text-blue-600 hover:underline">Profile</a>
+    </nav>
+  </header>
+  <main class="grid grid-cols-3 gap-6 mt-8">
+    <div class="col-span-2 bg-white rounded-lg shadow p-6">
+      <h2 class="text-xl font-semibold mb-4">Recent Activity</h2>
+      <ul class="space-y-3">
+        <li class="flex items-center gap-3">
+          <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+          <span>Deployment completed successfully</span>
+        </li>
+      </ul>
+    </div>
+  </main>
+</div>

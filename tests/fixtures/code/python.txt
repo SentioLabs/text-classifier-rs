@@ -1,0 +1,32 @@
+import asyncio
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+class DataProcessor:
+    """Process incoming data streams."""
+
+    def __init__(self, config: dict) -> None:
+        self.config = config
+        self._buffer: list[str] = []
+
+    async def process(self, data: bytes) -> dict:
+        try:
+            decoded = data.decode("utf-8")
+            self._buffer.append(decoded)
+
+            if len(self._buffer) >= self.config.get("batch_size", 100):
+                result = await self._flush()
+                return {"status": "ok", "processed": len(result)}
+        except Exception as e:
+            logger.error(f"Processing failed: {e}")
+            raise
+
+        return {"status": "buffered", "count": len(self._buffer)}
+
+    async def _flush(self) -> list[dict]:
+        items = self._buffer.copy()
+        self._buffer.clear()
+        return [{"item": i, "index": idx} for idx, i in enumerate(items)]

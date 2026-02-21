@@ -1,0 +1,6 @@
+/target
+/.venv
+/validation/*.jsonl
+/validation/*.jsonl.gz
+*.bin
+.arc.json

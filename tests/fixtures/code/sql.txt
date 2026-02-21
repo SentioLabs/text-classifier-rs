@@ -1,0 +1,25 @@
+SELECT u.id, u.name, u.email, COUNT(o.id) AS order_count, SUM(o.total) AS lifetime_value
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+WHERE u.created_at >= '2024-01-01'
+  AND u.status = 'active'
+  AND u.email NOT LIKE '%@test.com'
+GROUP BY u.id, u.name, u.email
+HAVING COUNT(o.id) > 0
+ORDER BY lifetime_value DESC
+LIMIT 100;
+
+CREATE TABLE audit_log (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    action VARCHAR(50) NOT NULL,
+    details JSONB,
+    ip_address INET,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_log_user_id ON audit_log(user_id);
+CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
+
+INSERT INTO audit_log (user_id, action, details, ip_address)
+VALUES (1, 'login', '{"method": "password"}', '192.168.1.1');
