@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/SentioLabs/text-classifier-rs/compare/text-classifier-v0.2.0...text-classifier-v0.2.1) (2026-02-21)
+
+
+### Refactoring
+
+* rename Translatable to Prose across all source files ([8f72e35](https://github.com/SentioLabs/text-classifier-rs/commit/8f72e35996b15a22ec6cb48ecbdc66ad9250bfe7))
+
 ## [0.2.0](https://github.com/SentioLabs/text-classifier-rs/compare/text-classifier-v0.1.0...text-classifier-v0.2.0) (2026-02-21)
 
 
