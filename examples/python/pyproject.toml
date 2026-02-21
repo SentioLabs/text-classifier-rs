@@ -1,0 +1,11 @@
+[project]
+name = "text-classifier-example"
+version = "0.1.0"
+description = "Example usage of text-classifier with uv"
+requires-python = ">=3.10"
+dependencies = [
+    "text-classifier",
+]
+
+[tool.uv.sources]
+text-classifier = { git = "https://github.com/SentioLabs/text-classifier-rs", tag = "text-classifier-v0.2.1" }

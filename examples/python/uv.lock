@@ -1,0 +1,19 @@
+version = 1
+revision = 3
+requires-python = ">=3.10"
+
+[[package]]
+name = "text-classifier"
+version = "0.1.0"
+source = { git = "https://github.com/SentioLabs/text-classifier-rs?tag=text-classifier-v0.2.1#ab416371167372a0c836e447b6b20322e1092592" }
+
+[[package]]
+name = "text-classifier-example"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "text-classifier" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "text-classifier", git = "https://github.com/SentioLabs/text-classifier-rs?tag=text-classifier-v0.2.1" }]
