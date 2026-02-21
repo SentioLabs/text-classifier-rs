@@ -1,10 +1,15 @@
 .PHONY: build build-release test test-single fmt fmt-check clippy lint check clean \
 	python-setup python-build \
-	install run review help
+	install run review release-local help
 
 # Build metadata
 VERSION ?= $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+HOST_TARGET := $(shell rustc -vV | grep '^host:' | cut -d' ' -f2)
+
+# Release targets (mirrors .github/workflows/release.yml matrix)
+RELEASE_TARGETS ?= x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin
+DIST_DIR := dist
 
 # Default target
 .DEFAULT_GOAL := help
@@ -140,10 +145,41 @@ endif
 # Release
 #
 
-release-build: ## Build release binaries for distribution
+release-build: ## Build release binary for current platform
 	@echo "Building release binary v$(VERSION) ($(COMMIT))..."
 	cargo build --release
 	@echo "Binary: target/release/classify"
+
+release-local: ## Build + package release archives (like CI) for all targets
+	@echo "Building release v$(VERSION) ($(COMMIT))"
+	@echo "Targets: $(RELEASE_TARGETS)"
+	@echo ""
+	@rm -rf $(DIST_DIR)
+	@for target in $(RELEASE_TARGETS); do \
+		echo "=== $$target ==="; \
+		if [ "$$target" = "$(HOST_TARGET)" ]; then \
+			echo "  Building natively..."; \
+			cargo build --release --target "$$target" 2>&1 || exit 1; \
+		elif command -v cross >/dev/null 2>&1; then \
+			echo "  Building with cross..."; \
+			cross build --release --target "$$target" 2>&1 || exit 1; \
+		else \
+			echo "  Skipping (not host target and cross not installed)"; \
+			echo "  Install cross: cargo install cross --git https://github.com/cross-rs/cross"; \
+			continue; \
+		fi; \
+		ARCHIVE_NAME="text-classifier_$(VERSION)_$$target"; \
+		mkdir -p "$(DIST_DIR)/$$ARCHIVE_NAME"; \
+		cp "target/$$target/release/classify" "$(DIST_DIR)/$$ARCHIVE_NAME/"; \
+		cp README.md LICENSE "$(DIST_DIR)/$$ARCHIVE_NAME/"; \
+		(cd $(DIST_DIR) && tar czf "$$ARCHIVE_NAME.tar.gz" "$$ARCHIVE_NAME"); \
+		(cd $(DIST_DIR) && sha256sum "$$ARCHIVE_NAME.tar.gz" > "$$ARCHIVE_NAME.tar.gz.sha256"); \
+		rm -rf "$(DIST_DIR)/$$ARCHIVE_NAME"; \
+		echo "  -> $(DIST_DIR)/$$ARCHIVE_NAME.tar.gz"; \
+		echo ""; \
+	done
+	@echo "=== Done ==="
+	@ls -lh $(DIST_DIR)/*.tar.gz 2>/dev/null || echo "No archives built"
 
 # Help target for self-documentation
 help: ## Display this help
