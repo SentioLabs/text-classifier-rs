@@ -1,6 +1,7 @@
 .PHONY: build build-release test test-single fmt fmt-check clippy lint check clean \
 	python-setup python-build \
-	install run review release-local help
+	install run review \
+	release-build release-local release-list release-show release-download release-delete release-pr help
 
 # Build metadata
 VERSION ?= $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
@@ -180,6 +181,37 @@ release-local: ## Build + package release archives (like CI) for all targets
 	done
 	@echo "=== Done ==="
 	@ls -lh $(DIST_DIR)/*.tar.gz 2>/dev/null || echo "No archives built"
+
+#
+# Release Management (requires gh CLI)
+#
+
+release-list: ## List recent GitHub releases
+	gh release list --limit 10
+
+release-show: ## Show details for a release (usage: make release-show TAG=v0.1.0)
+ifndef TAG
+	$(error TAG is required. Usage: make release-show TAG=v0.1.0)
+endif
+	gh release view $(TAG)
+
+release-download: ## Download release assets (usage: make release-download TAG=v0.1.0)
+ifndef TAG
+	$(error TAG is required. Usage: make release-download TAG=v0.1.0)
+endif
+	@mkdir -p $(DIST_DIR)
+	gh release download $(TAG) --dir $(DIST_DIR)
+	@echo "Assets downloaded to $(DIST_DIR)/"
+	@ls -lh $(DIST_DIR)/
+
+release-delete: ## Delete a GitHub release (usage: make release-delete TAG=v0.1.0)
+ifndef TAG
+	$(error TAG is required. Usage: make release-delete TAG=v0.1.0)
+endif
+	gh release delete $(TAG) --cleanup-tag --yes
+
+release-pr: ## Show the current release-please PR (if any)
+	@gh pr list --label "autorelease: pending" --json number,title,url --template '{{range .}}#{{.number}} {{.title}}{{"\n"}}  {{.url}}{{"\n"}}{{else}}No pending release PR{{"\n"}}{{end}}'
 
 # Help target for self-documentation
 help: ## Display this help
