@@ -5,12 +5,12 @@ build-backend = "maturin"
 [project]
 name = "text-classifier"
 version = "0.1.0"
-description = "Classify text fields for translation eligibility"
+description = "Classify text fields by structural type — prose, code, tabular data, or PDF artifacts"
 requires-python = ">=3.10"
 license = "MIT"
 readme = "README.md"
 authors = [{ name = "SentioLabs" }]
-keywords = ["text-classification", "nlp", "translation", "machine-learning"]
+keywords = ["text-classification", "nlp", "prose-detection", "machine-learning"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

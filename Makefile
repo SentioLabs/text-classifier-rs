@@ -130,17 +130,17 @@ ifndef OUT
 endif
 	cargo run --release -- file $(IN) -o $(OUT)
 
-run-filter: ## Filter JSONL into translatable/skipped (usage: make run-filter IN=input.jsonl TRANS=trans.jsonl SKIP=skip.jsonl)
+run-filter: ## Filter JSONL into prose/skipped (usage: make run-filter IN=input.jsonl PROSE=prose.jsonl SKIP=skip.jsonl)
 ifndef IN
 	$(error IN is required)
 endif
-ifndef TRANS
-	$(error TRANS is required)
+ifndef PROSE
+	$(error PROSE is required)
 endif
 ifndef SKIP
 	$(error SKIP is required)
 endif
-	cargo run --release -- filter $(IN) --translatable $(TRANS) --skipped $(SKIP)
+	cargo run --release -- filter $(IN) --prose $(PROSE) --skipped $(SKIP)
 
 #
 # Release
