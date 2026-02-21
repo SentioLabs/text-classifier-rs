@@ -1,0 +1,8 @@
+Name	Department	Salary	Start Date	Location
+Alice Johnson	Engineering	125000	2019-03-15	New York
+Bob Smith	Marketing	95000	2020-07-22	Chicago
+Carol Davis	Engineering	135000	2018-01-10	San Jose
+David Wilson	Sales	88000	2021-11-03	Austin
+Eve Martinez	Engineering	142000	2017-06-28	Seattle
+Frank Brown	Marketing	91000	2022-02-14	New York
+Grace Lee	Sales	92000	2020-09-01	Chicago

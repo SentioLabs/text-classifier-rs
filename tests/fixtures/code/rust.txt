@@ -1,0 +1,50 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+#[derive(Debug, Clone)]
+pub struct CacheEntry<V> {
+    value: V,
+    expires_at: std::time::Instant,
+}
+
+pub struct Cache<K, V> {
+    store: Arc<RwLock<HashMap<K, CacheEntry<V>>>>,
+    ttl: std::time::Duration,
+}
+
+impl<K: Eq + std::hash::Hash + Clone, V: Clone> Cache<K, V> {
+    pub fn new(ttl: std::time::Duration) -> Self {
+        Self {
+            store: Arc::new(RwLock::new(HashMap::new())),
+            ttl,
+        }
+    }
+
+    pub async fn get(&self, key: &K) -> Option<V> {
+        let store = self.store.read().await;
+        store.get(key).and_then(|entry| {
+            if entry.expires_at > std::time::Instant::now() {
+                Some(entry.value.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    pub async fn insert(&self, key: K, value: V) {
+        let mut store = self.store.write().await;
+        store.insert(key, CacheEntry {
+            value,
+            expires_at: std::time::Instant::now() + self.ttl,
+        });
+    }
+
+    pub async fn evict_expired(&self) -> usize {
+        let mut store = self.store.write().await;
+        let now = std::time::Instant::now();
+        let before = store.len();
+        store.retain(|_, entry| entry.expires_at > now);
+        before - store.len()
+    }
+}

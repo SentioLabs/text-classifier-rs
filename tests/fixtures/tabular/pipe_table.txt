@@ -1,0 +1,12 @@
+| Name          | Department  | Salary    | Start Date | Location   |
+|---------------|-------------|-----------|------------|------------|
+| Alice Johnson | Engineering | 125000.00 | 2019-03-15 | New York   |
+| Bob Smith     | Marketing   | 95000.00  | 2020-07-22 | Chicago    |
+| Carol Davis   | Engineering | 135000.00 | 2018-01-10 | San Jose   |
+| David Wilson  | Sales       | 88000.00  | 2021-11-03 | Austin     |
+| Eve Martinez  | Engineering | 142000.00 | 2017-06-28 | Seattle    |
+| Frank Brown   | Marketing   | 91000.00  | 2022-02-14 | New York   |
+| Grace Lee     | Sales       | 92000.00  | 2020-09-01 | Chicago    |
+| Henry Taylor  | Engineering | 128000.00 | 2019-12-05 | San Jose   |
+| Ivy Chen      | Marketing   | 97000.00  | 2021-04-17 | Seattle    |
+| Jack White    | Sales       | 86000.00  | 2022-08-30 | Austin     |
