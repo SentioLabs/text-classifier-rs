@@ -35,10 +35,17 @@ make install
 ### Python
 
 ```bash
-pip install text-classifier
+# uv (recommended)
+uv add git+https://github.com/SentioLabs/text-classifier-rs --tag v0.2.0
+
+# pip
+pip install git+https://github.com/SentioLabs/text-classifier-rs@v0.2.0
+
 # or build from source:
 make python-setup && make python-build
 ```
+
+> **Note:** Installing from git requires a Rust toolchain — maturin compiles the extension locally. Pin to a release tag for reproducible builds.
 
 ### As a Rust dependency
 
