@@ -1,4 +1,4 @@
-# text-classifier
+# text-classifier-rs
 
 Rust library + CLI that classifies English text fields for translation eligibility.
 
@@ -25,9 +25,17 @@ echo "This is a paragraph of prose." | ./target/release/classify
 
 Two-tier hybrid classification:
 - **Tier 1** — Structural features (line length CV, character entropy, sentence punctuation rate, etc.)
-- **Tier 2** — Optional fasttext model for ambiguous cases
+- **Tier 2** — Optional fasttext model for ambiguous cases (confidence < 0.7)
 
-See `docs/plans/2026-02-20-text-classifier-design.md` for full design.
+### Categories
+
+| Category | Description | Translatable |
+|----------|-------------|:---:|
+| `translatable` | Human-readable prose | Yes |
+| `code` | Source code, scripts, markup | No |
+| `tabular` | Tables, CSVs, spreadsheets | No |
+| `pdf_dump` | OCR garbage, PDF artifacts | No |
+| `skip` | Too short or ambiguous | No |
 
 ## Building
 
@@ -57,12 +65,6 @@ result = clf.classify("Some text here")
 print(f"{result.text_type} (confidence={result.confidence:.2f})")
 ```
 
-## Categories
+## License
 
-| Category | Description | Translatable |
-|----------|-------------|:---:|
-| `translatable` | Human-readable prose | Yes |
-| `code` | Source code, scripts, markup | No |
-| `tabular` | Tables, CSVs, spreadsheets | No |
-| `pdf_dump` | OCR garbage, PDF artifacts | No |
-| `skip` | Too short or ambiguous | No |
+MIT
