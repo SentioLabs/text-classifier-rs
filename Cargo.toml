@@ -3,6 +3,8 @@ name = "text-classifier"
 version = "0.1.0"
 edition = "2024"
 description = "Classify text fields for translation eligibility"
+license = "MIT"
+repository = "https://github.com/SentioLabs/text-classifier-rs"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
