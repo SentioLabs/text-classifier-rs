@@ -2,12 +2,12 @@
 name = "text-classifier"
 version = "0.2.0"
 edition = "2024"
-description = "Classify text fields for translation eligibility"
+description = "Classify text fields by structural type — prose, code, tabular data, or PDF artifacts"
 license = "MIT"
 repository = "https://github.com/SentioLabs/text-classifier-rs"
 homepage = "https://github.com/SentioLabs/text-classifier-rs"
 readme = "README.md"
-keywords = ["text-classification", "nlp", "translation", "cli"]
+keywords = ["text-classification", "nlp", "prose-detection", "cli"]
 categories = ["command-line-utilities", "text-processing"]
 
 [dependencies]

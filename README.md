@@ -3,7 +3,7 @@
 [![CI](https://github.com/SentioLabs/text-classifier-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/SentioLabs/text-classifier-rs/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Classify English text fields for translation eligibility. Text is categorized as **translatable**, **code**, **tabular**, **pdf_dump**, or **skip** — so you can filter large JSONL exports before sending them to a translation pipeline.
+Classify text fields by structural type. Text is categorized as **prose**, **code**, **tabular**, **pdf_dump**, or **skip** — useful for filtering large JSONL exports before downstream processing (translation, indexing, analysis, etc.).
 
 Available as a **Rust CLI**, a **Rust library crate**, and a **pip-installable Python package**.
 
@@ -14,13 +14,13 @@ Two-tier hybrid classification:
 1. **Tier 1 (structural)** — 10 statistical features (line-length CV, character entropy, symbol ratio, etc.) fed into a rule-based classifier. Handles ~90% of inputs with high confidence.
 2. **Tier 2 (model)** — Optional fasttext model catches ambiguous cases where Tier 1 confidence falls below 0.7.
 
-| Category | Description | Translatable? |
-|----------|-------------|:---:|
-| `translatable` | Human-readable prose | Yes |
-| `code` | Source code, scripts, config, markup | No |
-| `tabular` | Tables, CSVs, TSV, spreadsheet data | No |
-| `pdf_dump` | OCR garbage, PDF extraction artifacts | No |
-| `skip` | Too short or ambiguous to classify | No |
+| Category | Description |
+|----------|-------------|
+| `prose` | Human-readable natural language |
+| `code` | Source code, scripts, config, markup |
+| `tabular` | Tables, CSVs, TSV, spreadsheet data |
+| `pdf_dump` | OCR garbage, PDF extraction artifacts |
+| `skip` | Too short or ambiguous to classify |
 
 ## Installation
 
@@ -58,9 +58,9 @@ echo "This is a paragraph of English prose." | classify
 # Classify a JSONL file (supports .gz)
 classify file input.jsonl -o classified.jsonl
 
-# Filter for translation pipeline
+# Filter by category
 classify filter export.jsonl.gz \
-  --translatable translatable.jsonl \
+  --prose prose.jsonl \
   --skipped skipped.jsonl \
   --text-fields bodytext,summarytext,title
 
@@ -92,8 +92,8 @@ use text_classifier::{Classifier, TextType};
 let clf = Classifier::new();
 let result = clf.classify("Hello world, this is a test paragraph.");
 
-if result.text_type == TextType::Translatable {
-    println!("Send to translation pipeline");
+if result.text_type == TextType::Prose {
+    println!("Human-readable prose detected");
 }
 
 // Batch classification (parallel via rayon)
