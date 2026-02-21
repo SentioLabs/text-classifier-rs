@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use text_classifier::{Classifier, TextType};
 
 #[derive(Parser)]
-#[command(name = "classify", about = "Classify text for translation eligibility")]
+#[command(name = "classify", about = "Classify text by structural type")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -28,13 +28,13 @@ enum Commands {
         #[arg(long, default_value = "text")]
         text_field: String,
     },
-    /// Filter JSONL into translatable + skipped files
+    /// Filter JSONL into prose + skipped files
     Filter {
         /// Input JSONL file (supports .gz)
         input: PathBuf,
-        /// Output file for translatable docs
+        /// Output file for prose docs
         #[arg(long)]
-        translatable: PathBuf,
+        prose: PathBuf,
         /// Output file for skipped docs
         #[arg(long)]
         skipped: PathBuf,
@@ -109,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(Commands::Filter {
             input,
-            translatable,
+            prose,
             skipped,
             text_fields,
             min_confidence,
@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             filter_file(
                 &classifier,
                 &input,
-                &translatable,
+                &prose,
                 &skipped,
                 &fields,
                 min_confidence,
@@ -227,17 +227,17 @@ fn classify_file(
 fn filter_file(
     classifier: &Classifier,
     input: &PathBuf,
-    translatable_path: &PathBuf,
+    prose_path: &PathBuf,
     skipped_path: &PathBuf,
     text_fields: &[&str],
     min_confidence: f32,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let reader = open_reader(input)?;
-    let mut trans_out = io::BufWriter::new(std::fs::File::create(translatable_path)?);
+    let mut prose_out = io::BufWriter::new(std::fs::File::create(prose_path)?);
     let mut skip_out = io::BufWriter::new(std::fs::File::create(skipped_path)?);
 
     let mut total = 0u64;
-    let mut trans_count = 0u64;
+    let mut prose_count = 0u64;
     let mut skip_count = 0u64;
     let mut category_counts: std::collections::HashMap<String, u64> =
         std::collections::HashMap::new();
@@ -252,27 +252,27 @@ fn filter_file(
         total += 1;
 
         // Classify each field independently
-        let mut any_translatable = false;
+        let mut any_prose = false;
         let mut field_classifications = serde_json::Map::new();
 
         for &field_name in text_fields {
             if let Some(text) = resolve_field(&doc, field_name) {
-                // Short fields (<50 chars) auto-translatable
+                // Short fields (<50 chars) auto-classified as prose
                 if text.len() < 50 {
-                    any_translatable = true;
+                    any_prose = true;
                     field_classifications.insert(
                         field_name.to_string(),
-                        serde_json::json!({"text_type": "translatable", "confidence": 1.0, "reason": "short field"}),
+                        serde_json::json!({"text_type": "prose", "confidence": 1.0, "reason": "short field"}),
                     );
                     continue;
                 }
 
                 let result = classifier.classify(text);
-                let is_trans = result.text_type == TextType::Translatable
-                    || (result.confidence < min_confidence); // uncertain → let through
+                let is_prose =
+                    result.text_type == TextType::Prose || (result.confidence < min_confidence); // uncertain → let through
 
-                if is_trans {
-                    any_translatable = true;
+                if is_prose {
+                    any_prose = true;
                 }
 
                 *category_counts
@@ -295,10 +295,10 @@ fn filter_file(
         let mut output_doc = doc.clone();
         output_doc["_field_classifications"] = serde_json::Value::Object(field_classifications);
 
-        if any_translatable {
-            serde_json::to_writer(&mut trans_out, &output_doc)?;
-            writeln!(trans_out)?;
-            trans_count += 1;
+        if any_prose {
+            serde_json::to_writer(&mut prose_out, &output_doc)?;
+            writeln!(prose_out)?;
+            prose_count += 1;
         } else {
             serde_json::to_writer(&mut skip_out, &output_doc)?;
             writeln!(skip_out)?;
@@ -308,7 +308,7 @@ fn filter_file(
 
     eprintln!("── Filter Summary ──");
     eprintln!("  Total docs:       {total}");
-    eprintln!("  Translatable:     {trans_count}");
+    eprintln!("  Prose:            {prose_count}");
     eprintln!("  Skipped:          {skip_count}");
     eprintln!("  Categories:");
     let mut sorted: Vec<_> = category_counts.iter().collect();
@@ -316,7 +316,7 @@ fn filter_file(
     for (cat, count) in sorted {
         eprintln!("    {cat:<15} {count}");
     }
-    eprintln!("  → {translatable_path:?}");
+    eprintln!("  → {prose_path:?}");
     eprintln!("  → {skipped_path:?}");
     Ok(())
 }

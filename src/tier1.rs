@@ -24,7 +24,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
         try_tabular(features),
         try_code(features),
         try_pdf_dump(features),
-        try_translatable(features),
+        try_prose(features),
     ];
 
     // Return the first candidate with confidence >= threshold
@@ -156,14 +156,14 @@ fn try_pdf_dump(f: &FeatureVector) -> Option<Classification> {
     }
 }
 
-fn try_translatable(f: &FeatureVector) -> Option<Classification> {
-    // Translatable: sentence structure + alphanumeric content + variable line lengths
+fn try_prose(f: &FeatureVector) -> Option<Classification> {
+    // Prose: sentence structure + alphanumeric content + variable line lengths
     if f.sentence_punctuation_rate > 0.03 && f.alpha_ratio > 0.70 && f.line_length_cv > 0.3 {
         // Scale confidence by how strong the sentence signal is (cap at 0.08)
         let punct_score = (f.sentence_punctuation_rate / 0.08).min(1.0);
         let confidence = 0.6 + 0.4 * punct_score;
         Some(Classification {
-            text_type: TextType::Translatable,
+            text_type: TextType::Prose,
             confidence: confidence.min(1.0),
             reason: format!(
                 "sentence structure (punct={:.3}), high alpha (ratio={:.2})",
@@ -179,10 +179,10 @@ fn try_translatable(f: &FeatureVector) -> Option<Classification> {
 /// Fallback when no rule triggers at >= 0.7 confidence.
 /// Returns a low-confidence guess that signals Tier 2 should decide.
 fn fallback_classification(f: &FeatureVector) -> Classification {
-    // Lean toward translatable if there's some sentence structure
+    // Lean toward prose if there's some sentence structure
     if f.sentence_punctuation_rate > 0.02 && f.alpha_ratio > 0.55 {
         Classification {
-            text_type: TextType::Translatable,
+            text_type: TextType::Prose,
             confidence: 0.5,
             reason: "ambiguous — moderate sentence structure".to_string(),
             tier: Tier::Structural,

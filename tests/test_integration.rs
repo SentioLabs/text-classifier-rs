@@ -9,7 +9,7 @@ fn read_fixture(path: &str) -> String {
 fn end_to_end_prose() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("prose/simple.txt"));
-    assert_eq!(result.text_type, TextType::Translatable);
+    assert_eq!(result.text_type, TextType::Prose);
     assert!(result.confidence >= 0.7);
 }
 

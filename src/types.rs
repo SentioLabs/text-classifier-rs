@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-/// Text content category for translation eligibility.
+/// Text content category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextType {
-    Translatable,
+    Prose,
     Code,
     Tabular,
     PdfDump,
@@ -12,15 +12,15 @@ pub enum TextType {
 }
 
 impl TextType {
-    pub fn is_translatable(self) -> bool {
-        matches!(self, TextType::Translatable)
+    pub fn is_prose(self) -> bool {
+        matches!(self, TextType::Prose)
     }
 }
 
 impl std::fmt::Display for TextType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TextType::Translatable => write!(f, "translatable"),
+            TextType::Prose => write!(f, "prose"),
             TextType::Code => write!(f, "code"),
             TextType::Tabular => write!(f, "tabular"),
             TextType::PdfDump => write!(f, "pdf_dump"),

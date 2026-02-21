@@ -109,7 +109,7 @@ impl ModelClassifier {
     fn classify_fallback(&self, features: &FeatureVector) -> Classification {
         if features.sentence_punctuation_rate > 0.02 && features.alpha_ratio > 0.55 {
             Classification {
-                text_type: TextType::Translatable,
+                text_type: TextType::Prose,
                 confidence: 0.5,
                 reason: "no model — fallback: moderate prose signals".to_string(),
                 tier: Tier::Structural,
@@ -130,7 +130,7 @@ fn label_to_text_type(label: &str) -> TextType {
     // fasttext labels are prefixed with __label__
     let clean = label.strip_prefix("__label__").unwrap_or(label);
     match clean.to_lowercase().as_str() {
-        "translatable" => TextType::Translatable,
+        "prose" => TextType::Prose,
         "code" => TextType::Code,
         "tabular" => TextType::Tabular,
         "pdf_dump" | "pdfdump" => TextType::PdfDump,

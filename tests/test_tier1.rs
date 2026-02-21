@@ -7,10 +7,10 @@ fn read_fixture(path: &str) -> String {
 }
 
 #[test]
-fn prose_classified_as_translatable() {
+fn prose_classified_as_prose() {
     let features = extract_features(&read_fixture("prose/simple.txt"));
     let result = classify_tier1(&features);
-    assert_eq!(result.text_type, TextType::Translatable);
+    assert_eq!(result.text_type, TextType::Prose);
     assert_eq!(result.tier, Tier::Structural);
     assert!(result.confidence >= 0.7, "confidence={}", result.confidence);
 }
