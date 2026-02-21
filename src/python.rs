@@ -1,8 +1,8 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use crate::types::Classification;
 use crate::Classifier as RustClassifier;
+use crate::types::Classification;
 
 #[pyclass(name = "Classification", from_py_object)]
 #[derive(Clone)]

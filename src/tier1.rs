@@ -28,11 +28,9 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
     ];
 
     // Return the first candidate with confidence >= threshold
-    for candidate in &candidates {
-        if let Some(c) = candidate {
-            if c.confidence >= MIN_CONFIDENCE {
-                return c.clone();
-            }
+    for c in candidates.iter().flatten() {
+        if c.confidence >= MIN_CONFIDENCE {
+            return c.clone();
         }
     }
 
@@ -84,12 +82,10 @@ fn try_code(f: &FeatureVector) -> Option<Classification> {
     // Path C: Config-like (YAML, TOML) — heavy indentation, no prose signals
     // Structural chars like : and - are excluded from symbol_ratio, so we
     // rely on indentation alone when it's very strong
-    let config_like = f.leading_whitespace_ratio > 0.5
-        && f.sentence_punctuation_rate < 0.01;
+    let config_like = f.leading_whitespace_ratio > 0.5 && f.sentence_punctuation_rate < 0.01;
 
     // Path D: Dense symbols (minified code) — single long line packed with symbols
-    let dense = f.symbol_ratio > 0.12
-        && f.sentence_punctuation_rate < 0.01;
+    let dense = f.symbol_ratio > 0.12 && f.sentence_punctuation_rate < 0.01;
 
     if indented {
         let confidence = 0.6 + 0.4 * f.leading_whitespace_ratio;

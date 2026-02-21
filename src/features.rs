@@ -103,11 +103,7 @@ fn compute_char_entropy(text: &str) -> f32 {
         .values()
         .map(|&count| {
             let p = count as f64 / total_f;
-            if p > 0.0 {
-                -p * p.log2()
-            } else {
-                0.0
-            }
+            if p > 0.0 { -p * p.log2() } else { 0.0 }
         })
         .sum();
 
@@ -197,7 +193,7 @@ fn compute_short_line_ratio(lines: &[&str], n_lines: usize) -> f32 {
         .iter()
         .filter(|l| {
             let trimmed_len = l.trim().len();
-            trimmed_len >= 1 && trimmed_len <= 14
+            (1..=14).contains(&trimmed_len)
         })
         .count();
 
@@ -214,8 +210,7 @@ fn compute_symbol_ratio(text: &str, total_chars: f32) -> f32 {
             !c.is_alphanumeric()
                 && !matches!(
                     c,
-                    ' ' | '\n' | '\t' | '\r' | '.' | ',' | ';' | ':' | '!' | '?' | '-' | '\''
-                        | '"'
+                    ' ' | '\n' | '\t' | '\r' | '.' | ',' | ';' | ':' | '!' | '?' | '-' | '\'' | '"'
                 )
         })
         .count();
