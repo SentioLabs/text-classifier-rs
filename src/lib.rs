@@ -67,7 +67,7 @@ impl Classifier {
         let tier1_result = tier1::classify_tier1(&features);
 
         // If Tier 1 is confident, use it
-        if tier1_result.confidence >= 0.7 {
+        if tier1_result.confidence >= tier1::MIN_CONFIDENCE {
             return tier1_result;
         }
 

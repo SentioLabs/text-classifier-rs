@@ -1,11 +1,12 @@
 use crate::types::{Classification, FeatureVector, TextType, Tier};
 
 /// Minimum confidence to accept a Tier 1 classification.
-const MIN_CONFIDENCE: f32 = 0.7;
+pub const MIN_CONFIDENCE: f32 = 0.7;
 
 /// Classify text using Tier 1 structural features.
 ///
-/// Returns a Classification. If confidence < 0.7, the caller should
+/// Returns a Classification. Low-confidence results (< 0.7) indicate
+/// ambiguous input — `Classifier::classify()` uses this as a signal to
 /// fall through to Tier 2 (model-based classification).
 pub fn classify_tier1(features: &FeatureVector) -> Classification {
     // Rule 1: Too short — fewer than ~5 words means all features are unreliable
@@ -39,16 +40,20 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
     fallback_classification(features)
 }
 
-/// Check if the caller passed in features for very short text.
-/// This is called by the public `classify()` function before `classify_tier1()`.
+/// Check if text is too short for reliable feature extraction.
+/// Requires both few whitespace-delimited tokens AND few characters.
+/// The character check prevents CJK/Thai text (which lacks spaces between
+/// words) from being wrongly skipped.
 pub fn is_too_short(text: &str) -> bool {
-    text.split_whitespace().count() < 5
+    text.split_whitespace().count() < 5 && text.chars().count() < 20
 }
 
 fn try_tabular(f: &FeatureVector) -> Option<Classification> {
     // Tabular: uniform line lengths AND (tabs or no sentence structure)
+    // Requires at least 3 lines — CV is meaningless with fewer data points
     // Exclude high-symbol content (e.g. minified code has cv=0 but symbol_ratio > 0.10)
-    if f.line_length_cv < 0.15
+    if f.line_count >= 3
+        && f.line_length_cv < 0.15
         && f.symbol_ratio < 0.10
         && (f.tab_density > 0.03 || f.sentence_punctuation_rate < 0.01)
     {
@@ -137,10 +142,12 @@ fn try_code(f: &FeatureVector) -> Option<Classification> {
 }
 
 fn try_pdf_dump(f: &FeatureVector) -> Option<Classification> {
-    // PdfDump: very high short-line ratio alone (>0.8), or moderate short-line ratio
-    // with either high symbols or low line uniqueness. OCR char-by-char dumps have
-    // low entropy (not high), so we don't use entropy as a signal.
-    if f.short_line_ratio > 0.8 || (f.short_line_ratio > 0.5 && f.line_uniqueness < 0.5) {
+    // PdfDump: very high short-line ratio with low alpha content (excludes config
+    // files which are mostly alphabetic key-value pairs), or moderate short-line
+    // ratio with low line uniqueness (repeated fragments typical of OCR dumps).
+    if (f.short_line_ratio > 0.8 && f.alpha_ratio < 0.75)
+        || (f.short_line_ratio > 0.5 && f.line_uniqueness < 0.5)
+    {
         let confidence = 0.6 + 0.4 * f.short_line_ratio;
         Some(Classification {
             text_type: TextType::PdfDump,

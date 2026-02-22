@@ -26,7 +26,7 @@ pub fn extract_features(text: &str) -> FeatureVector {
 
     let lines: Vec<&str> = sample.lines().collect();
     let n_lines = lines.len().max(1);
-    let total_chars = sample.len().max(1) as f32;
+    let total_chars = sample.chars().count().max(1) as f32;
 
     // Count words (whitespace-delimited tokens)
     let word_count = sample.split_whitespace().count().max(1) as f32;
@@ -39,9 +39,10 @@ pub fn extract_features(text: &str) -> FeatureVector {
         sentence_punctuation_rate: compute_sentence_punctuation_rate(sample, word_count),
         paragraph_break_rate: compute_paragraph_break_rate(sample, n_lines),
         alpha_ratio: compute_alpha_ratio(sample, total_chars),
-        line_uniqueness: compute_line_uniqueness(&lines, n_lines),
+        line_uniqueness: compute_line_uniqueness(&lines),
         short_line_ratio: compute_short_line_ratio(&lines, n_lines),
         symbol_ratio: compute_symbol_ratio(sample, total_chars),
+        line_count: n_lines,
     }
 }
 
@@ -58,6 +59,7 @@ impl FeatureVector {
             line_uniqueness: 0.0,
             short_line_ratio: 0.0,
             symbol_ratio: 0.0,
+            line_count: 0,
         }
     }
 }
@@ -84,7 +86,7 @@ fn compute_line_length_cv(lines: &[&str]) -> f32 {
 }
 
 /// Shannon entropy of character distribution (bits per character).
-/// English prose ~4.0-4.5, code ~3.0-3.5, garbled >5.0.
+/// Not currently used in Tier 1 rules — available for analysis and Tier 2.
 fn compute_char_entropy(text: &str) -> f32 {
     let mut freq: HashMap<char, u32> = HashMap::new();
     let mut total = 0u32;
@@ -110,13 +112,18 @@ fn compute_char_entropy(text: &str) -> f32 {
     entropy as f32
 }
 
-/// Fraction of lines that start with >2 whitespace characters.
+/// Fraction of lines that start with >2 columns of whitespace.
+/// Tabs count as 4 columns to correctly detect tab-indented code (Go, Makefiles).
 /// High = code indentation pattern.
 fn compute_leading_whitespace_ratio(lines: &[&str], n_lines: usize) -> f32 {
     let count = lines
         .iter()
         .filter(|line| {
-            let leading: usize = line.chars().take_while(|c| c.is_whitespace()).count();
+            let leading: usize = line
+                .chars()
+                .take_while(|c| c.is_whitespace())
+                .map(|c| if c == '\t' { 4 } else { 1 })
+                .sum();
             leading > 2
         })
         .count();
@@ -155,7 +162,7 @@ fn compute_sentence_punctuation_rate(text: &str, word_count: f32) -> f32 {
 }
 
 /// Double-newline (paragraph break) frequency per line.
-/// Prose has regular paragraph breaks.
+/// Not currently used in Tier 1 rules — available for analysis and Tier 2.
 fn compute_paragraph_break_rate(text: &str, n_lines: usize) -> f32 {
     let breaks = text.matches("\n\n").count();
     breaks as f32 / n_lines as f32
@@ -171,9 +178,9 @@ fn compute_alpha_ratio(text: &str, total_chars: f32) -> f32 {
     alpha as f32 / total_chars
 }
 
-/// Ratio of unique lines to total lines (first 500).
+/// Ratio of unique lines to total lines within the first 500 lines.
 /// Data dumps have many repeated lines (< 0.3).
-fn compute_line_uniqueness(lines: &[&str], _n_lines: usize) -> f32 {
+fn compute_line_uniqueness(lines: &[&str]) -> f32 {
     let sample: &[&str] = if lines.len() > UNIQUENESS_LINES {
         &lines[..UNIQUENESS_LINES]
     } else {

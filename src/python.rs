@@ -82,6 +82,7 @@ impl PyClassifier {
         dict.set_item("line_uniqueness", f.line_uniqueness)?;
         dict.set_item("short_line_ratio", f.short_line_ratio)?;
         dict.set_item("symbol_ratio", f.symbol_ratio)?;
+        dict.set_item("line_count", f.line_count)?;
         Ok(dict)
     }
 }

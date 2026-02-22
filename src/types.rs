@@ -68,4 +68,7 @@ pub struct FeatureVector {
     pub line_uniqueness: f32,
     pub short_line_ratio: f32,
     pub symbol_ratio: f32,
+    /// Number of lines in the sampled text. Used by rules that need
+    /// a minimum sample size (e.g. tabular detection).
+    pub line_count: usize,
 }

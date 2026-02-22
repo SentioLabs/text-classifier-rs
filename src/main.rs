@@ -2,7 +2,8 @@ use std::io::{self, BufRead, Read, Write};
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use text_classifier::{Classifier, TextType};
+use text_classifier::tier1::MIN_CONFIDENCE;
+use text_classifier::{Classifier, TextType, classify};
 
 #[derive(Parser)]
 #[command(name = "classify", about = "Classify text by structural type")]
@@ -136,7 +137,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output,
             text_field,
         }) => {
-            label_corpus(&classifier, &input, &output, &text_field)?;
+            label_corpus(&input, &output, &text_field)?;
         }
         Some(Commands::Train { input, output }) => {
             eprintln!("Training not yet implemented — use fasttext CLI directly:");
@@ -197,6 +198,7 @@ fn classify_file(
     let reader = open_reader(input)?;
     let mut out = io::BufWriter::new(std::fs::File::create(output)?);
     let mut count = 0;
+    let mut missing_field = 0u64;
 
     for line in reader.lines() {
         let line = line?;
@@ -213,6 +215,8 @@ fn classify_file(
                 "reason": result.reason,
                 "tier": result.tier,
             });
+        } else {
+            missing_field += 1;
         }
 
         serde_json::to_writer(&mut out, &doc)?;
@@ -221,6 +225,9 @@ fn classify_file(
     }
 
     eprintln!("Classified {count} documents → {output:?}");
+    if missing_field > 0 {
+        eprintln!("  Warning: {missing_field} documents missing field \"{text_field}\"");
+    }
     Ok(())
 }
 
@@ -257,9 +264,12 @@ fn filter_file(
 
         for &field_name in text_fields {
             if let Some(text) = resolve_field(&doc, field_name) {
-                // Short fields (<50 chars) auto-classified as prose
+                // Short fields (<50 bytes) auto-classified as prose
                 if text.len() < 50 {
                     any_prose = true;
+                    *category_counts
+                        .entry(TextType::Prose.to_string())
+                        .or_insert(0) += 1;
                     field_classifications.insert(
                         field_name.to_string(),
                         serde_json::json!({"text_type": "prose", "confidence": 1.0, "reason": "short field"}),
@@ -333,7 +343,7 @@ fn extract_features_file(
     // CSV header
     writeln!(
         out,
-        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio"
+        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio,line_count"
     )?;
 
     let mut count = 0;
@@ -348,7 +358,7 @@ fn extract_features_file(
             let f = classifier.extract_features(text);
             writeln!(
                 out,
-                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4}",
+                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{}",
                 f.line_length_cv,
                 f.char_entropy,
                 f.leading_whitespace_ratio,
@@ -358,7 +368,8 @@ fn extract_features_file(
                 f.alpha_ratio,
                 f.line_uniqueness,
                 f.short_line_ratio,
-                f.symbol_ratio
+                f.symbol_ratio,
+                f.line_count
             )?;
             count += 1;
         }
@@ -369,7 +380,6 @@ fn extract_features_file(
 }
 
 fn label_corpus(
-    classifier: &Classifier,
     input: &PathBuf,
     output: &PathBuf,
     text_field: &str,
@@ -377,8 +387,9 @@ fn label_corpus(
     let reader = open_reader(input)?;
     let mut out = io::BufWriter::new(std::fs::File::create(output)?);
 
-    let mut count = 0;
-    let mut ambiguous = 0;
+    let mut count = 0u64;
+    let mut ambiguous = 0u64;
+    let mut missing_field = 0u64;
 
     for line in reader.lines() {
         let line = line?;
@@ -388,8 +399,11 @@ fn label_corpus(
 
         let doc: serde_json::Value = serde_json::from_str(&line)?;
         if let Some(text) = resolve_field(&doc, text_field) {
-            let result = classifier.classify(text);
-            if result.confidence < 0.7 {
+            // Always use Tier 1 only — prevents circular labeling when a
+            // model is loaded (the model's own predictions must never become
+            // its training labels).
+            let result = classify(text);
+            if result.confidence < MIN_CONFIDENCE {
                 ambiguous += 1;
             }
 
@@ -404,10 +418,15 @@ fn label_corpus(
             serde_json::to_writer(&mut out, &labeled)?;
             writeln!(out)?;
             count += 1;
+        } else {
+            missing_field += 1;
         }
     }
 
     eprintln!("Labeled {count} documents → {output:?}");
     eprintln!("  Ambiguous (confidence < 0.7): {ambiguous} — review these manually");
+    if missing_field > 0 {
+        eprintln!("  Warning: {missing_field} documents missing field \"{text_field}\"");
+    }
     Ok(())
 }
