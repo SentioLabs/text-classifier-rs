@@ -145,4 +145,5 @@ fn features_extraction_returns_all_fields() {
     assert!(f.line_uniqueness >= 0.0);
     assert!(f.short_line_ratio >= 0.0);
     assert!(f.symbol_ratio >= 0.0);
+    assert!(f.line_count > 0);
 }
