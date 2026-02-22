@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/SentioLabs/text-classifier-rs/compare/text-classifier-v0.2.1...text-classifier-v0.2.2) (2026-02-22)
+
+
+### Bug Fixes
+
+* resolve 13 code review findings across classification pipeline ([aeb034c](https://github.com/SentioLabs/text-classifier-rs/commit/aeb034cf62850aa3ab28d8085cd364ad87f0b6ed))
+
 ## [0.2.1](https://github.com/SentioLabs/text-classifier-rs/compare/text-classifier-v0.2.0...text-classifier-v0.2.1) (2026-02-21)
 
 
