@@ -1,6 +1,6 @@
 [package]
 name = "text-classifier"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 description = "Classify text fields by structural type — prose, code, tabular data, or PDF artifacts"
 license = "MIT"
