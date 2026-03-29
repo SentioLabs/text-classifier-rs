@@ -1,17 +1,26 @@
-# text-classifier-rs Makefile
-# Run `make` or `make help` for available targets.
+.PHONY: build build-release test test-single fmt fmt-check clippy lint check clean \
+	python-setup python-build \
+	install run review \
+	release-build release-local release-list release-show release-download release-delete release-pr \
+	generate-golden-eval generate-golden-train dedup golden-pipeline \
+	validate-golden validate-golden-clear validate-golden-boundary \
+	help
 
+# Build metadata
 VERSION ?= $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 HOST_TARGET := $(shell rustc -vV | grep '^host:' | cut -d' ' -f2)
+
+# Release targets (mirrors .github/workflows/release.yml matrix)
 RELEASE_TARGETS ?= x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin
 DIST_DIR := dist
 
+# Default target
 .DEFAULT_GOAL := help
 
-# ─── Build ──────────────────────────────────────────────────────────────────
-
-.PHONY: build build-release build-model install clean
+#
+# Build
+#
 
 build: ## Build in debug mode (Tier 1 only)
 	cargo build
@@ -28,28 +37,28 @@ install: ## Install the classify binary to ~/.cargo/bin
 clean: ## Remove build artifacts
 	cargo clean
 
-# ─── Test ───────────────────────────────────────────────────────────────────
-
-.PHONY: test test-single test-file
+#
+# Test
+#
 
 test: ## Run all tests
 	cargo test
 
-test-single: ## Run a single test (T=test_name)
+test-single: ## Run a single test by name (usage: make test-single T=test_name)
 ifndef T
-	$(error T is required — e.g. make test-single T=test_name)
+	$(error T is required. Usage: make test-single T=test_name)
 endif
 	cargo test $(T)
 
-test-file: ## Run a single test file (F=test_tier1)
+test-file: ## Run a single test file (usage: make test-file F=test_tier1)
 ifndef F
-	$(error F is required — e.g. make test-file F=test_tier1)
+	$(error F is required. Usage: make test-file F=test_tier1)
 endif
 	cargo test --test $(F)
 
-# ─── Lint & Format ──────────────────────────────────────────────────────────
-
-.PHONY: fmt fmt-check clippy lint
+#
+# Lint & Format
+#
 
 fmt: ## Auto-format all Rust source files
 	cargo fmt
@@ -62,13 +71,13 @@ clippy: ## Run clippy lints (warnings are errors)
 
 lint: fmt-check clippy ## Run all lints (format check + clippy)
 
-# ─── Combined Checks ───────────────────────────────────────────────────────
+#
+# Combined Checks
+#
 
-.PHONY: check review
+check: lint test ## Run all checks (lint + test)
 
-check: lint test ## Lint + test — the pre-commit gate
-
-review: ## Full review with pass/fail status reporting
+review: ## Full review with status reporting
 	@echo "=== Format ===" && \
 	if cargo fmt --check 2>&1; then \
 		printf "\n  fmt ok\n\n"; FMT=0; \
@@ -98,9 +107,9 @@ review: ## Full review with pass/fail status reporting
 		exit 1; \
 	fi
 
-# ─── Python Extension ──────────────────────────────────────────────────────
-
-.PHONY: python-setup python-build
+#
+# Python Extension
+#
 
 python-setup: ## Create venv and install maturin
 	uv venv && uv pip install maturin
@@ -108,89 +117,44 @@ python-setup: ## Create venv and install maturin
 python-build: ## Build the Python extension (release mode)
 	. .venv/bin/activate && maturin develop --release
 
-# ─── Training Pipeline ─────────────────────────────────────────────────────
+#
+# Run
+#
 
-.PHONY: training-setup generate-data generate-fixtures generate-test-set generate-ambiguous train validate test-model test-model-ambiguous train-pipeline build-onnx update-model
-
-training-setup: ## Set up the training Python environment
-	cd training && uv sync --group dev
-
-generate-data: ## Generate all training data (fixtures + synthetic + perturbations + test set)
-	cd training && uv run python generate.py --mode all --output data/ --samples-per-type 200
-
-generate-fixtures: ## Generate training data from test fixtures only (no API key needed)
-	cd training && uv run python generate.py --mode fixtures --output data/
-
-generate-test-set: ## Generate labeled test set from fixtures for validation
-	cd training && uv run python generate.py --mode test-set --output data/
-
-train: ## Train the model and export to ONNX
-	cd training && uv run python train.py --data data/combined.csv --output models/
-
-validate: ## Validate classifier accuracy (INPUT=test.jsonl)
-ifndef INPUT
-	$(error INPUT is required — e.g. make validate INPUT=test.jsonl)
-endif
-	cargo run --release -- validate --input $(INPUT)
-
-generate-ambiguous: ## Generate 100 ambiguous boundary-case test samples (requires API key)
-	cd training && uv run python generate.py --mode ambiguous-test-set --output data/
-
-test-model: generate-test-set ## Validate classifier with ONNX model against fixture test set
-	cargo run --release --features onnx-model -- validate --input training/data/test_set.jsonl
-
-test-model-ambiguous: ## Validate classifier against ambiguous test samples (run generate-ambiguous first)
-	@test -f training/data/ambiguous_test_set.jsonl || { echo "Error: run 'make generate-ambiguous' first"; exit 1; }
-	cargo run --release --features onnx-model -- validate --input training/data/ambiguous_test_set.jsonl
-
-train-pipeline: generate-data train update-model test-model ## Full pipeline: generate → train → embed → validate
-
-build-onnx: ## Build with embedded ONNX model (Tier 1 + 2)
-	cargo build --release --features onnx-model
-
-update-model: ## Copy trained model from training/models/ to src/ for embedding
-	cd training && uv run python -c "import onnx; m = onnx.load('models/model.onnx', load_external_data=True); onnx.save(m, '../src/model.onnx')"
-	cp training/models/model_config.json src/model_config.json
-	@echo "Model files updated in src/. Rebuild with: make build-onnx"
-
-# ─── Run ────────────────────────────────────────────────────────────────────
-
-.PHONY: run run-file run-filter
-
-run: ## Classify text from stdin
+run: ## Classify text from stdin (usage: echo "text" | make run)
 	cargo run --release
 
-run-file: ## Classify a JSONL file (IN=input.jsonl OUT=output.jsonl)
+run-file: ## Classify a JSONL file (usage: make run-file IN=input.jsonl OUT=output.jsonl)
 ifndef IN
-	$(error IN and OUT are required — e.g. make run-file IN=input.jsonl OUT=output.jsonl)
+	$(error IN is required. Usage: make run-file IN=input.jsonl OUT=output.jsonl)
 endif
 ifndef OUT
-	$(error IN and OUT are required — e.g. make run-file IN=input.jsonl OUT=output.jsonl)
+	$(error OUT is required. Usage: make run-file IN=input.jsonl OUT=output.jsonl)
 endif
 	cargo run --release -- file $(IN) -o $(OUT)
 
-run-filter: ## Filter JSONL into prose/skipped (IN= PROSE= SKIP=)
+run-filter: ## Filter JSONL into prose/skipped (usage: make run-filter IN=input.jsonl PROSE=prose.jsonl SKIP=skip.jsonl)
 ifndef IN
-	$(error IN, PROSE, SKIP are required)
+	$(error IN is required)
 endif
 ifndef PROSE
-	$(error IN, PROSE, SKIP are required)
+	$(error PROSE is required)
 endif
 ifndef SKIP
-	$(error IN, PROSE, SKIP are required)
+	$(error SKIP is required)
 endif
 	cargo run --release -- filter $(IN) --prose $(PROSE) --skipped $(SKIP)
 
-# ─── Release ────────────────────────────────────────────────────────────────
-
-.PHONY: release-build release-local release-list release-show release-download release-delete release-pr
+#
+# Release
+#
 
 release-build: ## Build release binary for current platform
 	@echo "Building release binary v$(VERSION) ($(COMMIT))..."
 	cargo build --release
 	@echo "Binary: target/release/classify"
 
-release-local: ## Build + package release archives for all targets
+release-local: ## Build + package release archives (like CI) for all targets
 	@echo "Building release v$(VERSION) ($(COMMIT))"
 	@echo "Targets: $(RELEASE_TARGETS)"
 	@echo ""
@@ -221,68 +185,67 @@ release-local: ## Build + package release archives for all targets
 	@echo "=== Done ==="
 	@ls -lh $(DIST_DIR)/*.tar.gz 2>/dev/null || echo "No archives built"
 
+#
+# Release Management (requires gh CLI)
+#
+
 release-list: ## List recent GitHub releases
 	gh release list --limit 10
 
-release-show: ## Show release details (TAG=v0.1.0)
+release-show: ## Show details for a release (usage: make release-show TAG=v0.1.0)
 ifndef TAG
-	$(error TAG is required — e.g. make release-show TAG=v0.1.0)
+	$(error TAG is required. Usage: make release-show TAG=v0.1.0)
 endif
 	gh release view $(TAG)
 
-release-download: ## Download release assets (TAG=v0.1.0)
+release-download: ## Download release assets (usage: make release-download TAG=v0.1.0)
 ifndef TAG
-	$(error TAG is required — e.g. make release-download TAG=v0.1.0)
+	$(error TAG is required. Usage: make release-download TAG=v0.1.0)
 endif
 	@mkdir -p $(DIST_DIR)
 	gh release download $(TAG) --dir $(DIST_DIR)
 	@echo "Assets downloaded to $(DIST_DIR)/"
 	@ls -lh $(DIST_DIR)/
 
-release-delete: ## Delete a GitHub release (TAG=v0.1.0)
+release-delete: ## Delete a GitHub release (usage: make release-delete TAG=v0.1.0)
 ifndef TAG
-	$(error TAG is required — e.g. make release-delete TAG=v0.1.0)
+	$(error TAG is required. Usage: make release-delete TAG=v0.1.0)
 endif
 	gh release delete $(TAG) --cleanup-tag --yes
 
-release-pr: ## Show the current release-please PR
+release-pr: ## Show the current release-please PR (if any)
 	@gh pr list --label "autorelease: pending" --json number,title,url --template '{{range .}}#{{.number}} {{.title}}{{"\n"}}  {{.url}}{{"\n"}}{{else}}No pending release PR{{"\n"}}{{end}}'
 
-# ─── Help & Completion ──────────────────────────────────────────────────────
+#
+# Golden Eval & Training
+#
 
-.PHONY: help completion targets
+generate-golden-eval: ## Generate golden evaluation sets (clear + boundary)
+	python training/generate_eval.py --mode all --output-dir eval/
 
+generate-golden-train: ## Generate raw golden training data
+	python training/generate.py --mode golden-train --output-dir training/data/
+
+dedup: ## Deduplicate golden training data
+	python training/dedup.py --input training/data/golden_raw.csv --output training/data/golden_train.csv
+
+golden-pipeline: generate-golden-train dedup train update-model validate-golden ## Full golden pipeline: generate → dedup → train → update → validate
+
+validate-golden: validate-golden-clear validate-golden-boundary ## Validate model against both golden eval sets
+	@echo "=== Golden validation complete ==="
+
+validate-golden-clear: ## Validate model against clear eval set
+	cargo run --release -- validate --input eval/clear.jsonl --model model.bin
+
+validate-golden-boundary: ## Validate model against boundary eval set
+	cargo run --release -- validate --input eval/boundary.jsonl --model model.bin
+
+# Help target for self-documentation
 help: ## Display this help
-	@printf "text-classifier-rs v%s\n\n" "$(VERSION)"
-	@awk 'BEGIN { FS = ":.*##"; section = "" } \
-		/^# ─── / { \
-			gsub(/^# ─── /, ""); gsub(/ ─+$$/, ""); section = $$0; next \
-		} \
-		/^[a-zA-Z0-9_-]+:.*##/ { \
-			if (section != prev) { printf "\n\033[1m%s\033[0m\n", section; prev = section } \
-			printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 \
-		}' $(MAKEFILE_LIST)
+	@echo "text-classifier-rs v$(VERSION)"
 	@echo ""
-
-targets: ## List all target names (for shell completion)
-	@awk -F: '/^[a-zA-Z0-9_-]+:.*##/ { print $$1 }' $(MAKEFILE_LIST)
-
-completion: ## Print shell completion snippet (eval "$(make completion)")
-	@echo '# Add to ~/.zshrc or ~/.bashrc:'
-	@echo '#   eval "$$(make -C /path/to/text-classifier-rs completion)"'
-	@echo ''
-	@echo '_make_text_classifier() {'
-	@echo '  local targets'
-	@echo '  targets=$$(make -C "$${COMP_PROJECT_DIR:-.}" targets 2>/dev/null)'
-	@echo '  if [ -n "$$ZSH_VERSION" ]; then'
-	@echo '    _arguments "1:target:($$targets)"'
-	@echo '  else'
-	@echo '    COMPREPLY=($$(compgen -W "$$targets" -- "$${COMP_WORDS[COMP_CWORD]}"))'
-	@echo '  fi'
-	@echo '}'
-	@echo ''
-	@echo 'if [ -n "$$ZSH_VERSION" ]; then'
-	@echo '  compdef _make_text_classifier make'
-	@echo 'else'
-	@echo '  complete -F _make_text_classifier make'
-	@echo 'fi'
+	@echo "Usage:"
+	@echo "  make <target>"
+	@echo ""
+	@echo "Targets:"
+	@grep -E '^[a-zA-Z0-9_-]+:.*##' Makefile | sort | awk 'BEGIN { FS=":.*?## " } { names[NR]=$$1; descs[NR]=$$2; if (length($$1)>max) max=length($$1) } END { w=max+2; for (i=1; i<=NR; i++) printf "  \033[36m%-*s\033[0m %s\n", w, names[i], descs[i] }'
