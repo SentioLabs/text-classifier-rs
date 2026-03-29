@@ -18,6 +18,8 @@ from train import (
     FEATURE_COLUMNS,
     TextClassifier,
     load_and_prepare_data,
+    parse_args,
+    train_model,
 )
 
 
@@ -107,6 +109,65 @@ class TestModel:
         assert hasattr(model, "shared")
         assert hasattr(model, "category_head")
         assert hasattr(model, "sub_type_head")
+
+    def test_three_shared_linear_layers(self):
+        """Model should have 3 linear layers: 18->128, 128->64, 64->32."""
+        import torch.nn as nn
+
+        model = TextClassifier(n_features=18, n_categories=5, n_sub_types=10)
+        linear_layers = [m for m in model.shared if isinstance(m, nn.Linear)]
+        assert len(linear_layers) == 3, f"Expected 3 Linear layers, got {len(linear_layers)}"
+        assert linear_layers[0].in_features == 18
+        assert linear_layers[0].out_features == 128
+        assert linear_layers[1].in_features == 128
+        assert linear_layers[1].out_features == 64
+        assert linear_layers[2].in_features == 64
+        assert linear_layers[2].out_features == 32
+
+    def test_dropout_rate_is_0_3(self):
+        """Dropout layers should use p=0.3."""
+        import torch.nn as nn
+
+        model = TextClassifier(n_features=18, n_categories=5, n_sub_types=10)
+        dropout_layers = [m for m in model.shared if isinstance(m, nn.Dropout)]
+        assert len(dropout_layers) >= 1, "No Dropout layers found"
+        for d in dropout_layers:
+            assert d.p == pytest.approx(0.3), f"Expected dropout p=0.3, got {d.p}"
+
+
+class TestTrainingDefaults:
+    def test_default_epochs_200(self):
+        """Default epochs should be 200."""
+        args = parse_args(["--data", "dummy.csv", "--output", "out"])
+        assert args.epochs == 200
+
+    def test_default_patience_15(self):
+        """Default patience should be 15."""
+        args = parse_args(["--data", "dummy.csv", "--output", "out"])
+        assert args.patience == 15
+
+    def test_lr_scheduler_used_in_training(self, dummy_csv):
+        """Training should use ReduceLROnPlateau scheduler."""
+        import unittest.mock as mock
+
+        data = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+        n_sub_types = len(data["sub_type_map"])
+
+        with mock.patch("torch.optim.lr_scheduler.ReduceLROnPlateau") as mock_sched_cls:
+            mock_scheduler = mock.MagicMock()
+            mock_sched_cls.return_value = mock_scheduler
+
+            train_model(data, n_sub_types=n_sub_types, epochs=3, patience=5)
+
+            # Scheduler should be created with correct params
+            mock_sched_cls.assert_called_once()
+            _, kwargs = mock_sched_cls.call_args
+            assert kwargs.get("mode") == "min"
+            assert kwargs.get("factor") == 0.5
+            assert kwargs.get("patience") == 5
+
+            # scheduler.step should be called once per epoch
+            assert mock_scheduler.step.call_count == 3
 
 
 class TestDataLoading:

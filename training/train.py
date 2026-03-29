@@ -5,8 +5,8 @@ format along with configuration and metrics JSON files.
 
 Usage:
     python training/train.py --data training/data/combined.csv \
-        --output training/models/ [--epochs 100] [--batch-size 64] \
-        [--lr 0.001] [--patience 10]
+        --output training/models/ [--epochs 200] [--batch-size 64] \
+        [--lr 0.001] [--patience 15]
 """
 
 from __future__ import annotations
@@ -129,12 +129,15 @@ class TextClassifier(nn.Module):
     ):
         super().__init__()
         self.shared = nn.Sequential(
-            nn.Linear(n_features, 64),
+            nn.Linear(n_features, 128),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.3),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.3),
         )
         self.category_head = nn.Linear(32, n_categories)
         self.sub_type_head = nn.Linear(32, n_sub_types)
@@ -152,10 +155,10 @@ class TextClassifier(nn.Module):
 def train_model(
     data: dict,
     n_sub_types: int,
-    epochs: int = 100,
+    epochs: int = 200,
     batch_size: int = 64,
     lr: float = 0.001,
-    patience: int = 10,
+    patience: int = 15,
 ) -> tuple[TextClassifier, dict]:
     """Train the model and return it along with metrics."""
     device = torch.device("cpu")
@@ -174,6 +177,9 @@ def train_model(
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=5
+    )
     cat_criterion = nn.CrossEntropyLoss()
     sub_criterion = nn.CrossEntropyLoss()
 
@@ -229,6 +235,9 @@ def train_model(
             f"val_sub_acc={val_sub_acc:.4f}",
             file=sys.stderr,
         )
+
+        # --- Learning rate scheduling ---
+        scheduler.step(val_loss)
 
         # --- Early stopping ---
         if val_loss < best_val_loss:
@@ -337,8 +346,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--epochs",
         type=int,
-        default=100,
-        help="Maximum number of training epochs (default: 100).",
+        default=200,
+        help="Maximum number of training epochs (default: 200).",
     )
     parser.add_argument(
         "--batch-size",
@@ -355,8 +364,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--patience",
         type=int,
-        default=10,
-        help="Early stopping patience in epochs (default: 10).",
+        default=15,
+        help="Early stopping patience in epochs (default: 15).",
     )
     return parser.parse_args(argv)
 
