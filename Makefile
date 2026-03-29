@@ -139,7 +139,8 @@ generate-ambiguous: ## Generate 100 ambiguous boundary-case test samples (requir
 test-model: generate-test-set ## Validate classifier with ONNX model against fixture test set
 	cargo run --release --features onnx-model -- validate --input training/data/test_set.jsonl
 
-test-model-ambiguous: generate-ambiguous ## Validate classifier against ambiguous test samples
+test-model-ambiguous: ## Validate classifier against ambiguous test samples (run generate-ambiguous first)
+	@test -f training/data/ambiguous_test_set.jsonl || { echo "Error: run 'make generate-ambiguous' first"; exit 1; }
 	cargo run --release --features onnx-model -- validate --input training/data/ambiguous_test_set.jsonl
 
 train-pipeline: generate-data train update-model test-model ## Full pipeline: generate → train → embed → validate
