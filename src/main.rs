@@ -77,15 +77,194 @@ enum Commands {
         #[arg(long)]
         output: PathBuf,
     },
-    /// Validate model against labeled data
+    /// Validate classifier against labeled data
     Validate {
         /// Input labeled JSONL file
         #[arg(long)]
         input: PathBuf,
-        /// Model file to validate
+        /// Field containing text to classify
+        #[arg(long, default_value = "text")]
+        text_field: String,
+        /// Output results as JSON
         #[arg(long)]
-        model: PathBuf,
+        json: bool,
     },
+}
+
+struct Evaluator {
+    predictions: Vec<(String, String)>,
+}
+
+impl Evaluator {
+    fn new() -> Self {
+        Evaluator {
+            predictions: Vec::new(),
+        }
+    }
+
+    fn add(&mut self, predicted: &str, actual: &str) {
+        self.predictions
+            .push((predicted.to_string(), actual.to_string()));
+    }
+
+    fn total(&self) -> usize {
+        self.predictions.len()
+    }
+
+    fn accuracy(&self) -> f64 {
+        if self.predictions.is_empty() {
+            return 0.0;
+        }
+        let correct = self
+            .predictions
+            .iter()
+            .filter(|(p, a)| p == a)
+            .count();
+        correct as f64 / self.predictions.len() as f64
+    }
+
+    fn categories(&self) -> Vec<String> {
+        let mut cats: Vec<String> = self
+            .predictions
+            .iter()
+            .map(|(_, a)| a.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        cats.sort();
+        cats
+    }
+
+    fn precision_recall_f1(&self, category: &str) -> (f64, f64, f64, usize) {
+        let true_positives = self
+            .predictions
+            .iter()
+            .filter(|(p, a)| p == category && a == category)
+            .count();
+        let predicted_positive = self
+            .predictions
+            .iter()
+            .filter(|(p, _)| p == category)
+            .count();
+        let actual_positive = self
+            .predictions
+            .iter()
+            .filter(|(_, a)| a == category)
+            .count();
+
+        let precision = if predicted_positive > 0 {
+            true_positives as f64 / predicted_positive as f64
+        } else {
+            0.0
+        };
+        let recall = if actual_positive > 0 {
+            true_positives as f64 / actual_positive as f64
+        } else {
+            0.0
+        };
+        let f1 = if precision + recall > 0.0 {
+            2.0 * precision * recall / (precision + recall)
+        } else {
+            0.0
+        };
+
+        (precision, recall, f1, actual_positive)
+    }
+
+    fn confusion_matrix(&self) -> (Vec<String>, Vec<Vec<usize>>) {
+        let labels = self.categories();
+        let n = labels.len();
+        let mut matrix = vec![vec![0usize; n]; n];
+
+        for (predicted, actual) in &self.predictions {
+            let actual_idx = labels.iter().position(|l| l == actual).unwrap();
+            let predicted_idx = labels.iter().position(|l| l == predicted).unwrap_or(n);
+            if predicted_idx < n {
+                matrix[actual_idx][predicted_idx] += 1;
+            }
+        }
+
+        (labels, matrix)
+    }
+
+    fn print_report(&self) {
+        eprintln!("── Validation Summary ──");
+        eprintln!("  Total samples:     {}", self.total());
+        eprintln!("  Overall accuracy:  {:.3}", self.accuracy());
+        eprintln!();
+        eprintln!("── Per-Category ──────────────────────────────────");
+        eprintln!(
+            "{:<13}{:<11}{:<8}{:<7}N",
+            "Category", "Precision", "Recall", "F1"
+        );
+        for cat in &self.categories() {
+            let (prec, recall, f1, count) = self.precision_recall_f1(cat);
+            eprintln!(
+                "{:<13}{:<11.2}{:<8.2}{:<7.2}{}",
+                cat, prec, recall, f1, count
+            );
+        }
+        eprintln!();
+
+        let (labels, matrix) = self.confusion_matrix();
+        eprintln!("── Confusion Matrix ──────────────────────────────");
+        // Header: abbreviated labels (first 3 chars, capitalized)
+        let abbrevs: Vec<String> = labels
+            .iter()
+            .map(|l| {
+                let mut chars = l.chars();
+                let first = chars.next().unwrap_or(' ').to_uppercase().to_string();
+                let rest: String = chars.take(2).collect();
+                format!("{first}{rest}")
+            })
+            .collect();
+        eprint!("{:<13}", "Predicted →");
+        for abbr in &abbrevs {
+            eprint!("{:<6}", abbr);
+        }
+        eprintln!();
+        for (i, label) in labels.iter().enumerate() {
+            // Capitalize first letter of label
+            let display: String = {
+                let mut chars = label.chars();
+                match chars.next() {
+                    Some(c) => c.to_uppercase().to_string() + chars.as_str(),
+                    None => String::new(),
+                }
+            };
+            eprint!("{:<13}", display);
+            for cell in &matrix[i] {
+                eprint!("{cell:<6}");
+            }
+            eprintln!();
+        }
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        let mut per_category = Vec::new();
+        for cat in &self.categories() {
+            let (prec, recall, f1, count) = self.precision_recall_f1(cat);
+            per_category.push(serde_json::json!({
+                "category": cat,
+                "precision": prec,
+                "recall": recall,
+                "f1": f1,
+                "count": count,
+            }));
+        }
+
+        let (labels, matrix) = self.confusion_matrix();
+
+        serde_json::json!({
+            "total": self.total(),
+            "accuracy": self.accuracy(),
+            "per_category": per_category,
+            "confusion_matrix": {
+                "labels": labels,
+                "matrix": matrix,
+            },
+        })
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -144,11 +323,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("  fasttext supervised -input {input:?} -output {output:?}");
             std::process::exit(1);
         }
-        Some(Commands::Validate { input, model }) => {
-            eprintln!("Validation not yet implemented");
-            eprintln!("  input: {input:?}");
-            eprintln!("  model: {model:?}");
-            std::process::exit(1);
+        Some(Commands::Validate {
+            input,
+            text_field,
+            json,
+        }) => {
+            validate(&classifier, &input, &text_field, json)?;
         }
     }
 
@@ -440,4 +620,170 @@ fn label_corpus(
         eprintln!("  Warning: {missing_field} documents missing field \"{text_field}\"");
     }
     Ok(())
+}
+
+fn validate(
+    classifier: &Classifier,
+    input: &PathBuf,
+    text_field: &str,
+    json_output: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let reader = open_reader(input)?;
+    let mut evaluator = Evaluator::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let doc: serde_json::Value = serde_json::from_str(&line)?;
+        let label = doc["label"]
+            .as_str()
+            .ok_or("Missing or non-string 'label' field")?;
+
+        if let Some(text) = resolve_field(&doc, text_field) {
+            let result = classifier.classify(text);
+            evaluator.add(&result.text_type.to_string(), label);
+        }
+    }
+
+    if json_output {
+        let json = evaluator.to_json();
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        evaluator.print_report();
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evaluator_new_is_empty() {
+        let eval = Evaluator::new();
+        assert_eq!(eval.total(), 0);
+    }
+
+    #[test]
+    fn evaluator_add_increments_total() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose");
+        eval.add("code", "prose");
+        assert_eq!(eval.total(), 2);
+    }
+
+    #[test]
+    fn evaluator_accuracy_all_correct() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose");
+        eval.add("code", "code");
+        eval.add("tabular", "tabular");
+        assert!((eval.accuracy() - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn evaluator_accuracy_none_correct() {
+        let mut eval = Evaluator::new();
+        eval.add("code", "prose");
+        eval.add("prose", "code");
+        assert!((eval.accuracy() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn evaluator_accuracy_partial() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose");
+        eval.add("code", "prose");
+        eval.add("code", "code");
+        eval.add("prose", "code");
+        assert!((eval.accuracy() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn evaluator_accuracy_empty_returns_zero() {
+        let eval = Evaluator::new();
+        assert!((eval.accuracy() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn evaluator_categories_sorted() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "code");
+        eval.add("code", "prose");
+        eval.add("tabular", "tabular");
+        let cats = eval.categories();
+        assert_eq!(cats, vec!["code", "prose", "tabular"]);
+    }
+
+    #[test]
+    fn evaluator_precision_recall_f1() {
+        let mut eval = Evaluator::new();
+        // 3 actual prose, 2 predicted correctly, 1 mislabeled as code
+        eval.add("prose", "prose");
+        eval.add("prose", "prose");
+        eval.add("code", "prose");
+        // 2 actual code, 1 predicted correctly, 1 mislabeled as prose
+        eval.add("code", "code");
+        eval.add("prose", "code");
+
+        let (prec, recall, f1, count) = eval.precision_recall_f1("prose");
+        // Predicted prose: 3 (2 correct + 1 was actually code) → precision = 2/3
+        assert!((prec - 2.0 / 3.0).abs() < 1e-9);
+        // Actual prose: 3, correctly predicted 2 → recall = 2/3
+        assert!((recall - 2.0 / 3.0).abs() < 1e-9);
+        // F1 = 2 * (2/3 * 2/3) / (2/3 + 2/3) = 2/3
+        assert!((f1 - 2.0 / 3.0).abs() < 1e-9);
+        assert_eq!(count, 3); // actual count for prose
+    }
+
+    #[test]
+    fn evaluator_precision_recall_f1_no_predictions() {
+        let mut eval = Evaluator::new();
+        eval.add("code", "prose");
+        // No predictions for "prose" category — precision 0, recall 0
+        // Wait, "code" was predicted, "prose" was actual.
+        // precision_recall_f1("prose"): predicted prose = 0, actual prose = 1
+        // precision = 0/0 = 0 (no predictions of prose)
+        // recall = 0/1 = 0 (none of actual prose predicted correctly)
+        let (prec, recall, f1, count) = eval.precision_recall_f1("prose");
+        assert!((prec - 0.0).abs() < f64::EPSILON);
+        assert!((recall - 0.0).abs() < f64::EPSILON);
+        assert!((f1 - 0.0).abs() < f64::EPSILON);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn evaluator_confusion_matrix() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose");
+        eval.add("prose", "prose");
+        eval.add("code", "prose");
+        eval.add("code", "code");
+        eval.add("prose", "code");
+
+        let (labels, matrix) = eval.confusion_matrix();
+        assert_eq!(labels, vec!["code", "prose"]);
+        // matrix[actual_idx][predicted_idx]
+        // actual=code (idx 0): predicted code=1, predicted prose=1
+        assert_eq!(matrix[0], vec![1, 1]);
+        // actual=prose (idx 1): predicted code=1, predicted prose=2
+        assert_eq!(matrix[1], vec![1, 2]);
+    }
+
+    #[test]
+    fn evaluator_to_json_structure() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose");
+        eval.add("code", "code");
+
+        let json = eval.to_json();
+        assert_eq!(json["total"], 2);
+        assert!((json["accuracy"].as_f64().unwrap() - 1.0).abs() < f64::EPSILON);
+        assert!(json["per_category"].is_array());
+        assert!(json["confusion_matrix"].is_object());
+    }
 }
