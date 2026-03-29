@@ -235,8 +235,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model",
-        default="claude-sonnet-4-6",
-        help="Claude model for synthetic generation (default: claude-sonnet-4-6)",
+        default="claude-sonnet-4-20250514",
+        help="Claude model for synthetic generation (default: claude-sonnet-4-20250514)",
     )
     return parser
 
@@ -315,7 +315,7 @@ def run_synthetic_mode(
     classify_bin: str = DEFAULT_CLASSIFY_BIN,
     api_key: str | None = None,
     samples_per_type: int = 50,
-    model: str = "claude-sonnet-4-6",
+    model: str = "claude-sonnet-4-20250514",
 ) -> str | None:
     """Generate synthetic text via Claude API and extract features.
 
@@ -363,9 +363,10 @@ def run_synthetic_mode(
                     max_tokens=8192,
                     messages=[
                         {"role": "user", "content": prompt},
+                        {"role": "assistant", "content": "["},
                     ],
                 )
-                response_text = message.content[0].text
+                response_text = "[" + message.content[0].text
                 samples = extract_json_array(response_text)
             except Exception as e:
                 tqdm.write(
@@ -483,7 +484,7 @@ def run_all_mode(
     classify_bin: str,
     api_key: str | None,
     samples_per_type: int,
-    model: str = "claude-sonnet-4-6",
+    model: str = "claude-sonnet-4-20250514",
 ) -> None:
     """Run all modes and combine results."""
     csv_paths = []
