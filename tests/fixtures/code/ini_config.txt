@@ -1,0 +1,49 @@
+; Application configuration file
+; Last updated: 2024-03-15
+
+[server]
+host = 0.0.0.0
+port = 8443
+workers = 8
+max_connections = 2048
+keep_alive = true
+
+[database]
+; Primary database connection
+host = db-primary.internal
+port = 5432
+name = production
+user = app_user
+pool_size = 25
+pool_timeout = 30
+ssl_mode = require
+
+[database.replica]
+; Read replica for reporting queries
+host = db-replica.internal
+port = 5432
+pool_size = 10
+
+[cache]
+enabled = true
+backend = redis
+host = cache-01.internal
+port = 6379
+ttl = 600
+max_memory = 256mb
+eviction_policy = allkeys-lru
+
+[logging]
+level = info
+format = json
+output = /var/log/app/server.log
+rotate = daily
+max_files = 30
+
+[auth]
+; JWT token configuration
+issuer = inventory-service
+token_ttl = 86400
+refresh_ttl = 604800
+algorithm = RS256
+public_key = /etc/keys/public.pem

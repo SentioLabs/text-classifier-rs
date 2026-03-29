@@ -1,0 +1,44 @@
+FROM rust:1.77-slim-bookworm AS builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release && rm -rf src
+
+COPY src/ src/
+RUN touch src/main.rs && cargo build --release
+
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/inventory /usr/local/bin/inventory
+COPY config/ /app/config/
+
+ENV RUST_LOG=info
+ENV APP_ENV=production
+ENV DATABASE_POOL_SIZE=25
+
+EXPOSE 8080
+EXPOSE 9090
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+USER appuser
+
+CMD ["inventory", "--config", "/app/config/production.toml"]

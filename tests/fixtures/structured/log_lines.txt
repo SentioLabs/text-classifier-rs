@@ -1,0 +1,20 @@
+2024-01-15T10:30:45.123Z INFO  [api] Server started on 0.0.0.0:8080
+2024-01-15T10:30:45.456Z INFO  [db] Connection pool initialized with 25 connections
+2024-01-15T10:30:46.001Z DEBUG [cache] Redis connection established to cache-01.internal:6379
+2024-01-15T10:31:02.334Z INFO  [api] GET /api/v2/users 200 45ms
+2024-01-15T10:31:03.112Z INFO  [api] POST /api/v2/orders 201 128ms
+2024-01-15T10:31:05.789Z WARN  [auth] Failed login attempt for user_id=usr_9173 from 192.168.1.45
+2024-01-15T10:31:06.001Z INFO  [api] GET /api/v2/products?category=electronics 200 67ms
+2024-01-15T10:31:08.445Z ERROR [db] Query timeout after 30000ms: SELECT * FROM inventory WHERE warehouse_id = 7
+2024-01-15T10:31:08.446Z WARN  [api] GET /api/v2/inventory 504 30012ms
+2024-01-15T10:31:10.223Z INFO  [api] DELETE /api/v2/sessions/sess_4821 204 12ms
+2024-01-15T10:31:12.567Z INFO  [worker] Background job job_id=jb_1042 completed in 4523ms
+2024-01-15T10:31:15.890Z DEBUG [cache] Cache hit for key=product:8842 ttl=245s
+2024-01-15T10:31:17.334Z INFO  [api] PUT /api/v2/users/usr_6502 200 89ms
+2024-01-15T10:31:19.112Z ERROR [auth] Token verification failed: expired token for user_id=usr_3347
+2024-01-15T10:31:20.445Z INFO  [api] GET /api/v2/reports/monthly 200 234ms
+2024-01-15T10:31:22.778Z WARN  [worker] Job queue depth exceeded threshold: 150 pending jobs
+2024-01-15T10:31:25.001Z INFO  [api] POST /api/v2/webhooks 201 56ms
+2024-01-15T10:31:27.334Z DEBUG [db] Slow query detected: 890ms for users_by_department
+2024-01-15T10:31:30.667Z INFO  [api] GET /api/v2/health 200 3ms
+2024-01-15T10:31:32.890Z INFO  [metrics] Prometheus metrics exported: 847 time series

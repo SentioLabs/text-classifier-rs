@@ -1,0 +1,18 @@
+{"id": 1, "event": "user.login", "user_id": "usr_4821", "timestamp": "2024-03-15T08:12:33Z", "ip": "192.168.1.45"}
+{"id": 2, "event": "page.view", "user_id": "usr_4821", "timestamp": "2024-03-15T08:12:45Z", "path": "/dashboard"}
+{"id": 3, "event": "api.request", "user_id": "usr_9173", "timestamp": "2024-03-15T08:13:01Z", "method": "GET", "status": 200}
+{"id": 4, "event": "user.login", "user_id": "usr_6502", "timestamp": "2024-03-15T08:13:15Z", "ip": "10.0.0.112"}
+{"id": 5, "event": "api.request", "user_id": "usr_3347", "timestamp": "2024-03-15T08:13:22Z", "method": "POST", "status": 500}
+{"id": 6, "event": "page.view", "user_id": "usr_9173", "timestamp": "2024-03-15T08:14:03Z", "path": "/settings"}
+{"id": 7, "event": "user.logout", "user_id": "usr_4821", "timestamp": "2024-03-15T08:14:17Z", "session_duration": 305}
+{"id": 8, "event": "api.request", "user_id": "usr_6502", "timestamp": "2024-03-15T08:14:29Z", "method": "PUT", "status": 200}
+{"id": 9, "event": "page.view", "user_id": "usr_3347", "timestamp": "2024-03-15T08:15:01Z", "path": "/reports/monthly"}
+{"id": 10, "event": "user.login", "user_id": "usr_2210", "timestamp": "2024-03-15T08:15:18Z", "ip": "172.16.5.88"}
+{"id": 11, "event": "api.request", "user_id": "usr_9173", "timestamp": "2024-03-15T08:15:33Z", "method": "DELETE", "status": 204}
+{"id": 12, "event": "page.view", "user_id": "usr_2210", "timestamp": "2024-03-15T08:16:02Z", "path": "/users/list"}
+{"id": 13, "event": "api.request", "user_id": "usr_6502", "timestamp": "2024-03-15T08:16:14Z", "method": "GET", "status": 403}
+{"id": 14, "event": "user.logout", "user_id": "usr_9173", "timestamp": "2024-03-15T08:16:30Z", "session_duration": 572}
+{"id": 15, "event": "page.view", "user_id": "usr_3347", "timestamp": "2024-03-15T08:17:05Z", "path": "/dashboard"}
+{"id": 16, "event": "api.request", "user_id": "usr_2210", "timestamp": "2024-03-15T08:17:22Z", "method": "POST", "status": 201}
+{"id": 17, "event": "user.login", "user_id": "usr_8894", "timestamp": "2024-03-15T08:17:45Z", "ip": "192.168.2.201"}
+{"id": 18, "event": "page.view", "user_id": "usr_8894", "timestamp": "2024-03-15T08:18:01Z", "path": "/analytics"}

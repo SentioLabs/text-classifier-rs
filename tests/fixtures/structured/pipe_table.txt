@@ -1,0 +1,22 @@
+| Name            | Age | City       | Department  | Salary  | Start Date |
+|-----------------|-----|------------|-------------|---------|------------|
+| Alice Johnson   | 32  | Portland   | Engineering | 95000   | 2019-03-15 |
+| Bob Smith       | 45  | Seattle    | Marketing   | 87000   | 2015-06-22 |
+| Carol Williams  | 28  | Denver     | Engineering | 91000   | 2021-01-10 |
+| David Brown     | 51  | Austin     | Sales       | 102000  | 2012-09-05 |
+| Eva Martinez    | 37  | Chicago    | Marketing   | 89000   | 2018-11-30 |
+| Frank Lee       | 29  | Boston     | Engineering | 93000   | 2022-02-14 |
+| Grace Kim       | 43  | Miami      | Sales       | 98000   | 2016-07-19 |
+| Henry Davis     | 34  | Portland   | Engineering | 96000   | 2020-04-01 |
+| Irene Chen      | 26  | Seattle    | Marketing   | 78000   | 2023-06-12 |
+| Jack Wilson     | 55  | Denver     | Sales       | 110000  | 2010-03-28 |
+| Karen Taylor    | 31  | Austin     | Engineering | 92000   | 2021-08-15 |
+| Leo Anderson    | 48  | Chicago    | Marketing   | 94000   | 2014-05-07 |
+| Mona Thomas     | 39  | Boston     | Sales       | 99000   | 2017-10-23 |
+| Nathan White    | 27  | Miami      | Engineering | 88000   | 2023-01-09 |
+| Olivia Harris   | 42  | Portland   | Marketing   | 91000   | 2016-12-04 |
+| Paul Clark      | 36  | Seattle    | Sales       | 97000   | 2019-08-17 |
+| Quinn Lewis     | 30  | Denver     | Engineering | 90000   | 2022-05-20 |
+| Rachel Walker   | 53  | Austin     | Marketing   | 103000  | 2011-02-11 |
+| Sam Robinson    | 33  | Chicago    | Sales       | 95000   | 2020-07-30 |
+| Tina Hall       | 44  | Boston     | Engineering | 101000  | 2015-04-16 |

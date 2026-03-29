@@ -1,0 +1,50 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\title{On the Convergence Properties of Stochastic Gradient Methods}
+\author{J. Smith \and A. Chen}
+\date{March 2024}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Stochastic gradient descent (SGD) has become the dominant optimization method
+for training large-scale machine learning models. In this paper, we analyze the
+convergence behavior of SGD under relaxed smoothness assumptions and provide
+tighter bounds for the non-convex setting.
+
+Let $f : \mathbb{R}^d \to \mathbb{R}$ denote the objective function we wish
+to minimize. We assume access to an unbiased gradient oracle that returns
+$g(x, \xi)$ such that $\mathbb{E}[g(x, \xi)] = \nabla f(x)$.
+
+\section{Preliminaries}
+
+\textbf{Definition 1.} A function $f$ is $L$-smooth if for all $x, y$:
+\begin{equation}
+  \|\nabla f(x) - \nabla f(y)\| \leq L \|x - y\|
+\end{equation}
+
+We further assume bounded variance of the stochastic gradients:
+\begin{equation}
+  \mathbb{E}\left[\|g(x, \xi) - \nabla f(x)\|^2\right] \leq \sigma^2
+\end{equation}
+
+\section{Main Results}
+
+\textbf{Theorem 1.} Under Assumptions 1--3, running SGD with step size
+$\eta_t = \frac{c}{\sqrt{T}}$ for $T$ iterations yields:
+\begin{equation}
+  \frac{1}{T}\sum_{t=1}^{T} \mathbb{E}\|\nabla f(x_t)\|^2
+  \leq \frac{2(f(x_0) - f^*)}{\sqrt{T}} + \frac{L\sigma^2}{\sqrt{T}}
+\end{equation}
+
+This result improves upon the classical bound by a factor of $\log T$ in the
+dominant term. The proof relies on a novel recursive decomposition of the
+gradient norm, which we detail in Section~4.
+
+\end{document}
