@@ -1,0 +1,61 @@
+-- Migration: Add user activity tracking tables
+-- Author: Backend Team
+-- Date: 2024-03-15
+-- Description: Creates tables for tracking user sessions, page views,
+-- and API calls. Includes indexes for common query patterns and a
+-- materialized view for the analytics dashboard.
+
+BEGIN;
+
+-- Create the sessions table to track user login sessions.
+-- Each session has a unique ID and is linked to a user account.
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ended_at TIMESTAMPTZ,
+    ip_address INET NOT NULL,
+    user_agent TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- Index for finding active sessions by user (most common query pattern).
+CREATE INDEX idx_sessions_user_active
+    ON user_sessions (user_id, is_active)
+    WHERE is_active = TRUE;
+
+-- Page views are the most frequent event type. We partition by month
+-- to keep query performance manageable as the table grows.
+CREATE TABLE IF NOT EXISTS page_views (
+    id BIGSERIAL,
+    session_id UUID NOT NULL REFERENCES user_sessions(id),
+    url TEXT NOT NULL,
+    referrer TEXT,
+    viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    duration_ms INTEGER,
+    PRIMARY KEY (id, viewed_at)
+) PARTITION BY RANGE (viewed_at);
+
+-- Create partitions for the current and next quarter.
+CREATE TABLE page_views_2024_q1 PARTITION OF page_views
+    FOR VALUES FROM ('2024-01-01') TO ('2024-04-01');
+CREATE TABLE page_views_2024_q2 PARTITION OF page_views
+    FOR VALUES FROM ('2024-04-01') TO ('2024-07-01');
+
+-- Materialized view for the daily active users dashboard widget.
+-- Refreshed every 15 minutes by a background job.
+CREATE MATERIALIZED VIEW daily_active_users AS
+SELECT
+    DATE_TRUNC('day', s.started_at) AS day,
+    COUNT(DISTINCT s.user_id) AS active_users,
+    COUNT(DISTINCT s.id) AS total_sessions,
+    AVG(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at))) AS avg_session_duration_seconds
+FROM user_sessions s
+WHERE s.started_at >= NOW() - INTERVAL '90 days'
+GROUP BY DATE_TRUNC('day', s.started_at)
+ORDER BY day DESC;
+
+CREATE UNIQUE INDEX idx_dau_day ON daily_active_users (day);
+
+COMMIT;
