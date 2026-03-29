@@ -22,14 +22,18 @@ version = "0.28"
 features = ["extension-module"]
 optional = true
 
-[dependencies.fasttext]
-version = "0.7"
+[dependencies.ort]
+version = "2.0.0-rc.12"
+optional = true
+
+[dependencies.ndarray]
+version = "0.16"
 optional = true
 
 [features]
 default = []
 python = ["pyo3"]
-model = ["fasttext"]
+onnx-model = ["ort", "ndarray"]
 
 [lib]
 name = "text_classifier"
