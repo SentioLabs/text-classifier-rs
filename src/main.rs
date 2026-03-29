@@ -644,7 +644,7 @@ fn validate(
 
         if let Some(text) = resolve_field(&doc, text_field) {
             let result = classifier.classify(text);
-            evaluator.add(&result.text_type.to_string(), label);
+            evaluator.add(&result.category.to_string(), label);
         }
     }
 
