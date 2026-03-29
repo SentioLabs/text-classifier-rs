@@ -110,7 +110,7 @@ python-build: ## Build the Python extension (release mode)
 
 # ─── Training Pipeline ─────────────────────────────────────────────────────
 
-.PHONY: training-setup generate-data generate-fixtures generate-test-set train validate test-model train-pipeline
+.PHONY: training-setup generate-data generate-fixtures generate-test-set train validate test-model train-pipeline build-onnx update-model
 
 training-setup: ## Set up the training Python environment
 	cd training && uv sync --group dev
@@ -133,10 +133,18 @@ ifndef INPUT
 endif
 	cargo run --release -- validate --input $(INPUT)
 
-test-model: generate-test-set ## Validate classifier against fixture test set
-	cargo run --release -- validate --input training/data/test_set.jsonl
+test-model: generate-test-set ## Validate classifier with ONNX model against fixture test set
+	cargo run --release --features onnx-model -- validate --input training/data/test_set.jsonl
 
-train-pipeline: generate-data train test-model ## Full pipeline: generate → train → validate
+train-pipeline: generate-data train update-model test-model ## Full pipeline: generate → train → embed → validate
+
+build-onnx: ## Build with embedded ONNX model (Tier 1 + 2)
+	cargo build --release --features onnx-model
+
+update-model: ## Copy trained model from training/models/ to src/ for embedding
+	cd training && uv run python -c "import onnx; m = onnx.load('models/model.onnx', load_external_data=True); onnx.save(m, '../src/model.onnx')"
+	cp training/models/model_config.json src/model_config.json
+	@echo "Model files updated in src/. Rebuild with: make build-onnx"
 
 # ─── Run ────────────────────────────────────────────────────────────────────
 
