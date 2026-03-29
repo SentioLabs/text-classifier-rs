@@ -1,5 +1,30 @@
 use text_classifier::Classifier;
 use text_classifier::TextType;
+use text_classifier::Tier;
+
+/// Verify that Classifier::classify() uses per-type thresholds for Tier 1 acceptance.
+/// A prose result at confidence >= 0.65 (PROSE threshold) should be accepted at Tier 1
+/// without falling through to Tier 2.
+#[test]
+fn classifier_uses_per_type_thresholds_prose() {
+    let clf = Classifier::new();
+    // This is a standard prose fixture — Tier 1 should accept it at
+    // the prose threshold (0.65) rather than the old single threshold (0.7).
+    let result = clf.classify(&read_fixture("prose/simple.txt"));
+    assert_eq!(result.category, TextType::Prose);
+    assert!(result.confidence >= 0.65);
+    assert_eq!(result.tier, Tier::Structural);
+}
+
+/// Verify that structured data uses the STRUCTURED threshold (0.60).
+#[test]
+fn classifier_uses_per_type_thresholds_structured() {
+    let clf = Classifier::new();
+    let result = clf.classify(&read_fixture("tabular/pipe_table.txt"));
+    assert_eq!(result.category, TextType::Structured);
+    assert!(result.confidence >= 0.60);
+    assert_eq!(result.tier, Tier::Structural);
+}
 
 fn read_fixture(path: &str) -> String {
     std::fs::read_to_string(format!("tests/fixtures/{path}")).unwrap()
