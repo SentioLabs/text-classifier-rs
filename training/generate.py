@@ -235,8 +235,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model",
-        default="claude-sonnet-4-5-20241022",
-        help="Claude model for synthetic generation (default: claude-sonnet-4-5-20241022)",
+        default="claude-sonnet-4-6-latest",
+        help="Claude model for synthetic generation (default: claude-sonnet-4-6-latest)",
     )
     return parser
 
@@ -311,7 +311,7 @@ def run_synthetic_mode(
     classify_bin: str = DEFAULT_CLASSIFY_BIN,
     api_key: str | None = None,
     samples_per_type: int = 50,
-    model: str = "claude-sonnet-4-5-20241022",
+    model: str = "claude-sonnet-4-6-latest",
 ) -> str | None:
     """Generate synthetic text via Claude API and extract features.
 
@@ -480,7 +480,7 @@ def run_all_mode(
     classify_bin: str,
     api_key: str | None,
     samples_per_type: int,
-    model: str = "claude-sonnet-4-5-20241022",
+    model: str = "claude-sonnet-4-6-latest",
 ) -> None:
     """Run all modes and combine results."""
     csv_paths = []
