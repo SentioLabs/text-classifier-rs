@@ -1,5 +1,25 @@
 use text_classifier::types::{Classification, ContentSubType, FeatureVector, TextCategory, Tier};
 
+/// Verify that TextCategory, ContentSubType, and thresholds are re-exported
+/// from the crate root (not just from types module).
+#[test]
+fn contract_root_reexports_text_category() {
+    let _: text_classifier::TextCategory = text_classifier::TextCategory::Prose;
+}
+
+#[test]
+fn contract_root_reexports_content_sub_type() {
+    let _: text_classifier::ContentSubType = text_classifier::ContentSubType::Python;
+}
+
+#[test]
+fn contract_root_reexports_thresholds() {
+    assert_eq!(text_classifier::thresholds::PROSE, 0.65);
+    assert_eq!(text_classifier::thresholds::CODE, 0.70);
+    assert_eq!(text_classifier::thresholds::STRUCTURED, 0.60);
+    assert_eq!(text_classifier::thresholds::ARTIFACT, 0.75);
+}
+
 #[test]
 fn contract_text_category_variants() {
     let _: TextCategory = TextCategory::Prose;
