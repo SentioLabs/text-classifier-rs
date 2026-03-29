@@ -122,6 +122,31 @@ def extract_json_array(text: str) -> list:
         except json.JSONDecodeError:
             pass
 
+    # Last resort: repair broken JSON by extracting quoted strings
+    # This handles cases where generated text contains unescaped characters
+    if start != -1 and end != -1:
+        items = []
+        in_string = False
+        escape = False
+        current = []
+        for ch in text[start + 1 : end]:
+            if escape:
+                current.append(ch)
+                escape = False
+            elif ch == "\\":
+                current.append(ch)
+                escape = True
+            elif ch == '"' and not in_string:
+                in_string = True
+                current = []
+            elif ch == '"' and in_string:
+                in_string = False
+                items.append("".join(current))
+            elif in_string:
+                current.append(ch)
+        if items:
+            return items
+
     raise ValueError(f"Could not extract JSON array from response ({len(text)} chars)")
 
 
