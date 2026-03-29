@@ -11,9 +11,9 @@ struct Cli {
     /// Text to classify directly (use -- before text matching a subcommand name)
     text: Option<String>,
 
-    /// Output as JSON instead of human-friendly format
+    /// Output in human-friendly format instead of JSON
     #[arg(long)]
-    json: bool,
+    human: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -291,7 +291,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         None => {
             if let Some(text) = cli.text {
-                classify_inline(&classifier, &text, cli.json)?;
+                classify_inline(&classifier, &text, cli.human)?;
             } else {
                 // Always output JSON for stdin to preserve backward compatibility
                 // (scripts expect `echo "text" | classify | jq` to work)
@@ -365,16 +365,16 @@ fn format_human_friendly(result: &text_classifier::Classification) -> String {
 fn classify_inline(
     classifier: &Classifier,
     text: &str,
-    json_output: bool,
+    human_output: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let result = classifier.classify(text);
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    if json_output {
+    if human_output {
+        writeln!(out, "{}", format_human_friendly(&result))?;
+    } else {
         serde_json::to_writer(&mut out, &result)?;
         writeln!(out)?;
-    } else {
-        writeln!(out, "{}", format_human_friendly(&result))?;
     }
     Ok(())
 }
@@ -1016,15 +1016,15 @@ mod tests {
     fn cli_parses_positional_text() {
         let cli = Cli::parse_from(["classify", "some text here"]);
         assert_eq!(cli.text.as_deref(), Some("some text here"));
-        assert!(!cli.json);
+        assert!(!cli.human);
         assert!(cli.command.is_none());
     }
 
     #[test]
-    fn cli_parses_json_flag_with_text() {
-        let cli = Cli::parse_from(["classify", "--json", "some text"]);
+    fn cli_parses_human_flag_with_text() {
+        let cli = Cli::parse_from(["classify", "--human", "some text"]);
         assert_eq!(cli.text.as_deref(), Some("some text"));
-        assert!(cli.json);
+        assert!(cli.human);
         assert!(cli.command.is_none());
     }
 
@@ -1047,7 +1047,7 @@ mod tests {
     #[test]
     fn cli_no_text_no_subcommand_means_stdin() {
         // When neither text nor subcommand is given, we route to stdin (JSON output).
-        // Verify that cli.json flag doesn't matter for this path — stdin always gets JSON.
+        // Verify that cli.human flag doesn't matter for this path — stdin always gets JSON.
         let cli = Cli::parse_from(["classify"]);
         assert!(cli.text.is_none());
         assert!(cli.command.is_none());

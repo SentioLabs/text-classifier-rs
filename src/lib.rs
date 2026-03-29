@@ -7,8 +7,8 @@ pub mod types;
 
 pub use features::extract_features;
 pub use tier2::ModelClassifier;
-pub use types::{Classification, ContentSubType, FeatureVector, TextCategory, TextType, Tier};
 pub use types::thresholds;
+pub use types::{Classification, ContentSubType, FeatureVector, TextCategory, TextType, Tier};
 
 /// Classify a text string using Tier 1 structural features only.
 ///

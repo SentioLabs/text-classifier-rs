@@ -211,7 +211,10 @@ fn try_code(f: &FeatureVector) -> Option<Classification> {
             category: TextCategory::Code,
             sub_type: None,
             confidence,
-            reason: format!("config pattern (kv={:.2}, sym={:.2})", f.key_value_ratio, f.symbol_ratio),
+            reason: format!(
+                "config pattern (kv={:.2}, sym={:.2})",
+                f.key_value_ratio, f.symbol_ratio
+            ),
             tier: Tier::Structural,
         });
     }

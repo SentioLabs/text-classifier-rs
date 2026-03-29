@@ -1,6 +1,6 @@
-use crate::types::{Classification, FeatureVector, TextCategory, Tier};
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::ContentSubType;
+use crate::types::{Classification, FeatureVector, TextCategory, Tier};
 
 #[cfg(feature = "onnx-model")]
 use std::collections::HashMap;
@@ -123,9 +123,11 @@ impl ModelClassifier {
 
     #[cfg(not(feature = "onnx-model"))]
     pub fn with_model(_model_path: &str) -> Result<Self, String> {
-        Err("text-classifier was compiled without 'onnx-model' feature. \
+        Err(
+            "text-classifier was compiled without 'onnx-model' feature. \
              Rebuild with: cargo build --features onnx-model"
-            .to_string())
+                .to_string(),
+        )
     }
 
     /// Returns true if an ONNX model session is loaded.
@@ -197,7 +199,10 @@ impl ModelClassifier {
         let (sub_idx, _sub_conf) = argmax(&sub_probs);
 
         let cat_label = inv_cat.get(&cat_idx).map(|s| s.as_str()).unwrap_or("skip");
-        let sub_label = inv_sub.get(&sub_idx).map(|s| s.as_str()).unwrap_or("unknown");
+        let sub_label = inv_sub
+            .get(&sub_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
 
         let category = parse_category(cat_label);
         let sub_type = parse_sub_type(sub_label);
