@@ -40,8 +40,12 @@ impl PyClassification {
         format!(
             "Classification(category='{}', sub_type={}, confidence={:.2}, reason='{}', tier='{}')",
             self.category,
-            self.sub_type.as_deref().map_or("None".to_string(), |s| format!("'{s}'")),
-            self.confidence, self.reason, self.tier
+            self.sub_type
+                .as_deref()
+                .map_or("None".to_string(), |s| format!("'{s}'")),
+            self.confidence,
+            self.reason,
+            self.tier
         )
     }
 }
@@ -99,9 +103,16 @@ impl PyClassifier {
     }
 }
 
+#[pyfunction]
+fn classify(text: &str) -> PyClassification {
+    let classifier = RustClassifier::new();
+    classifier.classify(text).into()
+}
+
 #[pymodule]
 fn text_classifier(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyClassifier>()?;
     m.add_class::<PyClassification>()?;
+    m.add_function(wrap_pyfunction!(classify, m)?)?;
     Ok(())
 }

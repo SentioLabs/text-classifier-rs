@@ -8,6 +8,13 @@ use text_classifier::{Classifier, TextCategory, classify, extract_features};
 #[derive(Parser)]
 #[command(name = "classify", about = "Classify text by structural type")]
 struct Cli {
+    /// Text to classify (if omitted, reads from stdin)
+    text: Option<String>,
+
+    /// Output as JSON instead of human-friendly format
+    #[arg(long)]
+    json: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -108,11 +115,7 @@ impl Evaluator {
         if self.predictions.is_empty() {
             return 0.0;
         }
-        let correct = self
-            .predictions
-            .iter()
-            .filter(|(p, a, _)| p == a)
-            .count();
+        let correct = self.predictions.iter().filter(|(p, a, _)| p == a).count();
         correct as f64 / self.predictions.len() as f64
     }
 
@@ -129,8 +132,16 @@ impl Evaluator {
     }
 
     fn tier_counts(&self) -> (usize, usize) {
-        let structural = self.predictions.iter().filter(|(_, _, t)| t == "structural").count();
-        let model = self.predictions.iter().filter(|(_, _, t)| t == "model").count();
+        let structural = self
+            .predictions
+            .iter()
+            .filter(|(_, _, t)| t == "structural")
+            .count();
+        let model = self
+            .predictions
+            .iter()
+            .filter(|(_, _, t)| t == "model")
+            .count();
         (structural, model)
     }
 
@@ -279,8 +290,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         None => {
-            // Default: read from stdin, classify each line
-            classify_stdin(&classifier)?;
+            if let Some(text) = cli.text {
+                classify_inline(&classifier, &text, cli.json)?;
+            } else {
+                classify_stdin(&classifier, cli.json)?;
+            }
         }
         Some(Commands::File {
             input,
@@ -334,7 +348,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn classify_stdin(classifier: &Classifier) -> Result<(), Box<dyn std::error::Error>> {
+fn format_human_friendly(result: &text_classifier::Classification) -> String {
+    let category = result.category.to_string();
+    let label = match &result.sub_type {
+        Some(st) => format!("{}/{}", category, st.label()),
+        None => category,
+    };
+    format!(
+        "{} (confidence: {:.2}, tier: {})",
+        label, result.confidence, result.tier
+    )
+}
+
+fn classify_inline(
+    classifier: &Classifier,
+    text: &str,
+    json_output: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let result = classifier.classify(text);
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    if json_output {
+        serde_json::to_writer(&mut out, &result)?;
+        writeln!(out)?;
+    } else {
+        writeln!(out, "{}", format_human_friendly(&result))?;
+    }
+    Ok(())
+}
+
+fn classify_stdin(
+    classifier: &Classifier,
+    json_output: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut text = String::new();
     io::stdin().lock().read_to_string(&mut text)?;
 
@@ -345,8 +391,12 @@ fn classify_stdin(classifier: &Classifier) -> Result<(), Box<dyn std::error::Err
     let result = classifier.classify(&text);
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    serde_json::to_writer(&mut out, &result)?;
-    writeln!(out)?;
+    if json_output {
+        serde_json::to_writer(&mut out, &result)?;
+        writeln!(out)?;
+    } else {
+        writeln!(out, "{}", format_human_friendly(&result))?;
+    }
     Ok(())
 }
 
@@ -699,6 +749,7 @@ fn validate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use text_classifier::Classification;
 
     #[test]
     fn evaluator_new_is_empty() {
@@ -836,7 +887,10 @@ mod tests {
         let doc: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
         assert!(doc.get("text").is_some());
         assert!(doc.get("label").is_some());
-        assert!(doc.get("features").is_none(), "features should not be present when with_features is false");
+        assert!(
+            doc.get("features").is_none(),
+            "features should not be present when with_features is false"
+        );
     }
 
     #[test]
@@ -864,16 +918,30 @@ mod tests {
         assert!(doc.get("text").is_some());
         assert!(doc.get("label").is_some());
 
-        let features = doc.get("features").expect("features should be present when with_features is true");
+        let features = doc
+            .get("features")
+            .expect("features should be present when with_features is true");
         assert!(features.is_object());
         // Check all 18 feature fields are present
         let expected_fields = [
-            "line_length_cv", "char_entropy", "leading_whitespace_ratio",
-            "tab_density", "sentence_punctuation_rate", "paragraph_break_rate",
-            "alpha_ratio", "line_uniqueness", "short_line_ratio", "symbol_ratio",
-            "delimiter_consistency", "json_brace_depth", "key_value_ratio",
-            "xml_tag_ratio", "log_line_ratio", "comment_ratio",
-            "numeric_field_ratio", "repetitive_structure_score",
+            "line_length_cv",
+            "char_entropy",
+            "leading_whitespace_ratio",
+            "tab_density",
+            "sentence_punctuation_rate",
+            "paragraph_break_rate",
+            "alpha_ratio",
+            "line_uniqueness",
+            "short_line_ratio",
+            "symbol_ratio",
+            "delimiter_consistency",
+            "json_brace_depth",
+            "key_value_ratio",
+            "xml_tag_ratio",
+            "log_line_ratio",
+            "comment_ratio",
+            "numeric_field_ratio",
+            "repetitive_structure_score",
         ];
         for field in &expected_fields {
             assert!(
@@ -898,5 +966,77 @@ mod tests {
         assert!((json["accuracy"].as_f64().unwrap() - 1.0).abs() < f64::EPSILON);
         assert!(json["per_category"].is_array());
         assert!(json["confusion_matrix"].is_object());
+    }
+
+    #[test]
+    fn format_human_friendly_without_sub_type() {
+        let result = Classification {
+            category: TextCategory::Prose,
+            sub_type: None,
+            confidence: 0.95,
+            reason: "high alpha ratio".to_string(),
+            tier: text_classifier::Tier::Structural,
+        };
+        let output = format_human_friendly(&result);
+        assert_eq!(output, "prose (confidence: 0.95, tier: structural)");
+    }
+
+    #[test]
+    fn format_human_friendly_with_sub_type() {
+        let result = Classification {
+            category: TextCategory::Code,
+            sub_type: Some(text_classifier::ContentSubType::Yaml),
+            confidence: 0.85,
+            reason: "config detected".to_string(),
+            tier: text_classifier::Tier::Structural,
+        };
+        let output = format_human_friendly(&result);
+        assert_eq!(output, "code/yaml (confidence: 0.85, tier: structural)");
+    }
+
+    #[test]
+    fn classify_inline_human_output() {
+        let classifier = Classifier::new();
+        let text = "This is a wonderful example of prose text that should be classified as prose by the classifier.";
+        let result = classifier.classify(text);
+        let output = format_human_friendly(&result);
+        // Should contain the category and confidence/tier format
+        assert!(output.contains("confidence:"));
+        assert!(output.contains("tier:"));
+    }
+
+    #[test]
+    fn classify_inline_json_output() {
+        let classifier = Classifier::new();
+        let text = "This is a wonderful example of prose text that should be classified as prose by the classifier.";
+        let result = classifier.classify(text);
+        let json_str = serde_json::to_string(&result).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert!(parsed.get("category").is_some());
+        assert!(parsed.get("confidence").is_some());
+        assert!(parsed.get("tier").is_some());
+    }
+
+    #[test]
+    fn cli_parses_positional_text() {
+        let cli = Cli::parse_from(["classify", "some text here"]);
+        assert_eq!(cli.text.as_deref(), Some("some text here"));
+        assert!(!cli.json);
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn cli_parses_json_flag_with_text() {
+        let cli = Cli::parse_from(["classify", "--json", "some text"]);
+        assert_eq!(cli.text.as_deref(), Some("some text"));
+        assert!(cli.json);
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn cli_subcommand_takes_priority() {
+        // When a subcommand is given, text should not be parsed as positional
+        let cli = Cli::parse_from(["classify", "validate", "--input", "test.jsonl"]);
+        assert!(cli.command.is_some());
     }
 }
