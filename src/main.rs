@@ -210,7 +210,7 @@ fn classify_file(
         if let Some(text) = resolve_field(&doc, text_field) {
             let result = classifier.classify(text);
             doc["_classification"] = serde_json::json!({
-                "text_type": result.text_type,
+                "text_type": result.category,
                 "confidence": result.confidence,
                 "reason": result.reason,
                 "tier": result.tier,
@@ -279,20 +279,20 @@ fn filter_file(
 
                 let result = classifier.classify(text);
                 let is_prose =
-                    result.text_type == TextType::Prose || (result.confidence < min_confidence); // uncertain → let through
+                    result.category == TextType::Prose || (result.confidence < min_confidence); // uncertain → let through
 
                 if is_prose {
                     any_prose = true;
                 }
 
                 *category_counts
-                    .entry(result.text_type.to_string())
+                    .entry(result.category.to_string())
                     .or_insert(0) += 1;
 
                 field_classifications.insert(
                     field_name.to_string(),
                     serde_json::json!({
-                        "text_type": result.text_type,
+                        "text_type": result.category,
                         "confidence": result.confidence,
                         "reason": result.reason,
                         "tier": result.tier,
@@ -409,7 +409,7 @@ fn label_corpus(
 
             let labeled = serde_json::json!({
                 "text": text,
-                "label": result.text_type.to_string(),
+                "label": result.category.to_string(),
                 "confidence": result.confidence,
                 "tier": result.tier.to_string(),
                 "reason": result.reason,

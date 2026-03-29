@@ -42,25 +42,15 @@ pub fn extract_features(text: &str) -> FeatureVector {
         line_uniqueness: compute_line_uniqueness(&lines),
         short_line_ratio: compute_short_line_ratio(&lines, n_lines),
         symbol_ratio: compute_symbol_ratio(sample, total_chars),
+        delimiter_consistency: 0.0,
+        json_brace_depth: 0.0,
+        key_value_ratio: 0.0,
+        xml_tag_ratio: 0.0,
+        log_line_ratio: 0.0,
+        comment_ratio: 0.0,
+        numeric_field_ratio: 0.0,
+        repetitive_structure_score: 0.0,
         line_count: n_lines,
-    }
-}
-
-impl FeatureVector {
-    fn zeroed() -> Self {
-        Self {
-            line_length_cv: 0.0,
-            char_entropy: 0.0,
-            leading_whitespace_ratio: 0.0,
-            tab_density: 0.0,
-            sentence_punctuation_rate: 0.0,
-            paragraph_break_rate: 0.0,
-            alpha_ratio: 0.0,
-            line_uniqueness: 0.0,
-            short_line_ratio: 0.0,
-            symbol_ratio: 0.0,
-            line_count: 0,
-        }
     }
 }
 

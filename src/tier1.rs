@@ -13,7 +13,8 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
     // (We detect this via zero/near-zero sentence punctuation + very low alpha content)
     if features.alpha_ratio == 0.0 && features.sentence_punctuation_rate == 0.0 {
         return Classification {
-            text_type: TextType::Skip,
+            category: TextType::Skip,
+            sub_type: None,
             confidence: 1.0,
             reason: "empty or no content".to_string(),
             tier: Tier::Structural,
@@ -59,7 +60,8 @@ fn try_tabular(f: &FeatureVector) -> Option<Classification> {
     {
         let confidence = 0.7 + 0.3 * (1.0 - f.line_length_cv / 0.15);
         Some(Classification {
-            text_type: TextType::Tabular,
+            category: TextType::Tabular,
+            sub_type: None,
             confidence: confidence.min(1.0),
             reason: format!(
                 "uniform line lengths (cv={:.2}), low sentence structure",
@@ -95,7 +97,8 @@ fn try_code(f: &FeatureVector) -> Option<Classification> {
     if indented {
         let confidence = 0.6 + 0.4 * f.leading_whitespace_ratio;
         Some(Classification {
-            text_type: TextType::Code,
+            category: TextType::Code,
+            sub_type: None,
             confidence: confidence.min(1.0),
             reason: format!(
                 "indentation pattern (ws={:.2}), high symbols (sym={:.2})",
@@ -106,7 +109,8 @@ fn try_code(f: &FeatureVector) -> Option<Classification> {
     } else if config_like {
         let confidence = 0.6 + 0.4 * f.leading_whitespace_ratio;
         Some(Classification {
-            text_type: TextType::Code,
+            category: TextType::Code,
+            sub_type: None,
             confidence: confidence.min(1.0),
             reason: format!(
                 "config/markup pattern (ws={:.2}), no sentence structure",
@@ -117,7 +121,8 @@ fn try_code(f: &FeatureVector) -> Option<Classification> {
     } else if dense {
         let confidence = (0.6 + 0.3 * f.symbol_ratio / 0.25).min(1.0);
         Some(Classification {
-            text_type: TextType::Code,
+            category: TextType::Code,
+            sub_type: None,
             confidence,
             reason: format!(
                 "dense symbols (sym={:.2}), likely minified code",
@@ -128,7 +133,8 @@ fn try_code(f: &FeatureVector) -> Option<Classification> {
     } else if flat {
         let confidence = (0.6 + 0.3 * f.symbol_ratio / 0.15).min(1.0);
         Some(Classification {
-            text_type: TextType::Code,
+            category: TextType::Code,
+            sub_type: None,
             confidence,
             reason: format!(
                 "code symbols (sym={:.2}), no sentence structure",
@@ -150,7 +156,8 @@ fn try_pdf_dump(f: &FeatureVector) -> Option<Classification> {
     {
         let confidence = 0.6 + 0.4 * f.short_line_ratio;
         Some(Classification {
-            text_type: TextType::PdfDump,
+            category: TextType::PdfDump,
+            sub_type: None,
             confidence: confidence.min(1.0),
             reason: format!(
                 "short lines (ratio={:.2}), garbled content",
@@ -170,7 +177,8 @@ fn try_prose(f: &FeatureVector) -> Option<Classification> {
         let punct_score = (f.sentence_punctuation_rate / 0.08).min(1.0);
         let confidence = 0.6 + 0.4 * punct_score;
         Some(Classification {
-            text_type: TextType::Prose,
+            category: TextType::Prose,
+            sub_type: None,
             confidence: confidence.min(1.0),
             reason: format!(
                 "sentence structure (punct={:.3}), high alpha (ratio={:.2})",
@@ -189,14 +197,16 @@ fn fallback_classification(f: &FeatureVector) -> Classification {
     // Lean toward prose if there's some sentence structure
     if f.sentence_punctuation_rate > 0.02 && f.alpha_ratio > 0.55 {
         Classification {
-            text_type: TextType::Prose,
+            category: TextType::Prose,
+            sub_type: None,
             confidence: 0.5,
             reason: "ambiguous — moderate sentence structure".to_string(),
             tier: Tier::Structural,
         }
     } else {
         Classification {
-            text_type: TextType::Skip,
+            category: TextType::Skip,
+            sub_type: None,
             confidence: 0.5,
             reason: "ambiguous — insufficient prose signals".to_string(),
             tier: Tier::Structural,

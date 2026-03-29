@@ -16,7 +16,8 @@ pub use types::{Classification, FeatureVector, TextType, Tier};
 pub fn classify(text: &str) -> Classification {
     if text.trim().is_empty() || tier1::is_too_short(text) {
         return Classification {
-            text_type: TextType::Skip,
+            category: TextType::Skip,
+            sub_type: None,
             confidence: 1.0,
             reason: "too short".to_string(),
             tier: Tier::Structural,
@@ -56,7 +57,8 @@ impl Classifier {
     pub fn classify(&self, text: &str) -> Classification {
         if text.trim().is_empty() || tier1::is_too_short(text) {
             return Classification {
-                text_type: TextType::Skip,
+                category: TextType::Skip,
+                sub_type: None,
                 confidence: 1.0,
                 reason: "too short".to_string(),
                 tier: Tier::Structural,

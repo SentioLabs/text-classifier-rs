@@ -80,7 +80,8 @@ impl ModelClassifier {
             Err(e) => {
                 eprintln!("Model prediction failed: {e}");
                 return Classification {
-                    text_type: TextType::Skip,
+                    category: TextType::Skip,
+                    sub_type: None,
                     confidence: 0.3,
                     reason: "model prediction failed".to_string(),
                     tier: Tier::Model,
@@ -91,14 +92,16 @@ impl ModelClassifier {
         if let Some(prediction) = predictions.first() {
             let text_type = label_to_text_type(&prediction.label);
             Classification {
-                text_type,
+                category: text_type,
+                sub_type: None,
                 confidence: prediction.prob as f32,
                 reason: format!("model prediction: {}", prediction.label),
                 tier: Tier::Model,
             }
         } else {
             Classification {
-                text_type: TextType::Skip,
+                category: TextType::Skip,
+                sub_type: None,
                 confidence: 0.3,
                 reason: "model returned no predictions".to_string(),
                 tier: Tier::Model,
@@ -109,14 +112,16 @@ impl ModelClassifier {
     fn classify_fallback(&self, features: &FeatureVector) -> Classification {
         if features.sentence_punctuation_rate > 0.02 && features.alpha_ratio > 0.55 {
             Classification {
-                text_type: TextType::Prose,
+                category: TextType::Prose,
+                sub_type: None,
                 confidence: 0.5,
                 reason: "no model — fallback: moderate prose signals".to_string(),
                 tier: Tier::Structural,
             }
         } else {
             Classification {
-                text_type: TextType::Skip,
+                category: TextType::Skip,
+                sub_type: None,
                 confidence: 0.5,
                 reason: "no model — fallback: insufficient prose signals".to_string(),
                 tier: Tier::Structural,
