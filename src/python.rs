@@ -8,6 +8,10 @@ use crate::types::Classification;
 #[derive(Clone)]
 struct PyClassification {
     #[pyo3(get)]
+    category: String,
+    #[pyo3(get)]
+    sub_type: Option<String>,
+    #[pyo3(get)]
     text_type: String,
     #[pyo3(get)]
     confidence: f32,
@@ -20,6 +24,8 @@ struct PyClassification {
 impl From<Classification> for PyClassification {
     fn from(c: Classification) -> Self {
         PyClassification {
+            category: c.category.to_string(),
+            sub_type: c.sub_type.map(|s| s.label().to_string()),
             text_type: c.category.to_string(),
             confidence: c.confidence,
             reason: c.reason,
@@ -32,8 +38,10 @@ impl From<Classification> for PyClassification {
 impl PyClassification {
     fn __repr__(&self) -> String {
         format!(
-            "Classification(text_type='{}', confidence={:.2}, reason='{}', tier='{}')",
-            self.text_type, self.confidence, self.reason, self.tier
+            "Classification(category='{}', sub_type={}, confidence={:.2}, reason='{}', tier='{}')",
+            self.category,
+            self.sub_type.as_deref().map_or("None".to_string(), |s| format!("'{s}'")),
+            self.confidence, self.reason, self.tier
         )
     }
 }
@@ -82,6 +90,14 @@ impl PyClassifier {
         dict.set_item("line_uniqueness", f.line_uniqueness)?;
         dict.set_item("short_line_ratio", f.short_line_ratio)?;
         dict.set_item("symbol_ratio", f.symbol_ratio)?;
+        dict.set_item("delimiter_consistency", f.delimiter_consistency)?;
+        dict.set_item("json_brace_depth", f.json_brace_depth)?;
+        dict.set_item("key_value_ratio", f.key_value_ratio)?;
+        dict.set_item("xml_tag_ratio", f.xml_tag_ratio)?;
+        dict.set_item("log_line_ratio", f.log_line_ratio)?;
+        dict.set_item("comment_ratio", f.comment_ratio)?;
+        dict.set_item("numeric_field_ratio", f.numeric_field_ratio)?;
+        dict.set_item("repetitive_structure_score", f.repetitive_structure_score)?;
         dict.set_item("line_count", f.line_count)?;
         Ok(dict)
     }

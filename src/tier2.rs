@@ -1,4 +1,4 @@
-use crate::types::{Classification, FeatureVector, TextType, Tier};
+use crate::types::{Classification, FeatureVector, TextCategory, Tier};
 
 #[cfg(feature = "model")]
 use fasttext::FastText;
@@ -80,7 +80,7 @@ impl ModelClassifier {
             Err(e) => {
                 eprintln!("Model prediction failed: {e}");
                 return Classification {
-                    category: TextType::Skip,
+                    category: TextCategory::Skip,
                     sub_type: None,
                     confidence: 0.3,
                     reason: "model prediction failed".to_string(),
@@ -90,9 +90,9 @@ impl ModelClassifier {
         };
 
         if let Some(prediction) = predictions.first() {
-            let text_type = label_to_text_type(&prediction.label);
+            let category = label_to_category(&prediction.label);
             Classification {
-                category: text_type,
+                category: category,
                 sub_type: None,
                 confidence: prediction.prob as f32,
                 reason: format!("model prediction: {}", prediction.label),
@@ -100,7 +100,7 @@ impl ModelClassifier {
             }
         } else {
             Classification {
-                category: TextType::Skip,
+                category: TextCategory::Skip,
                 sub_type: None,
                 confidence: 0.3,
                 reason: "model returned no predictions".to_string(),
@@ -112,7 +112,7 @@ impl ModelClassifier {
     fn classify_fallback(&self, features: &FeatureVector) -> Classification {
         if features.sentence_punctuation_rate > 0.02 && features.alpha_ratio > 0.55 {
             Classification {
-                category: TextType::Prose,
+                category: TextCategory::Prose,
                 sub_type: None,
                 confidence: 0.5,
                 reason: "no model — fallback: moderate prose signals".to_string(),
@@ -120,7 +120,7 @@ impl ModelClassifier {
             }
         } else {
             Classification {
-                category: TextType::Skip,
+                category: TextCategory::Skip,
                 sub_type: None,
                 confidence: 0.5,
                 reason: "no model — fallback: insufficient prose signals".to_string(),
@@ -131,14 +131,14 @@ impl ModelClassifier {
 }
 
 #[cfg(feature = "model")]
-fn label_to_text_type(label: &str) -> TextType {
+fn label_to_category(label: &str) -> TextCategory {
     // fasttext labels are prefixed with __label__
     let clean = label.strip_prefix("__label__").unwrap_or(label);
     match clean.to_lowercase().as_str() {
-        "prose" => TextType::Prose,
-        "code" => TextType::Code,
-        "tabular" => TextType::Tabular,
-        "pdf_dump" | "pdfdump" => TextType::PdfDump,
-        _ => TextType::Skip,
+        "prose" => TextCategory::Prose,
+        "code" => TextCategory::Code,
+        "tabular" => TextCategory::Structured,
+        "pdf_dump" | "pdfdump" => TextCategory::Artifact,
+        _ => TextCategory::Skip,
     }
 }
