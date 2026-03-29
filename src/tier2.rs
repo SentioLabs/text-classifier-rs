@@ -141,10 +141,7 @@ impl ModelClassifier {
     }
 
     /// Classify using the model, or fall back to feature-based heuristic.
-    ///
-    /// The `_text` parameter is kept for backward compatibility but is not
-    /// used by the ONNX model (which operates on extracted features).
-    pub fn classify(&self, _text: &str, features: &FeatureVector) -> Classification {
+    pub fn classify(&self, features: &FeatureVector) -> Classification {
         #[cfg(feature = "onnx-model")]
         if self.session.is_some() {
             match self.classify_onnx(features) {
@@ -431,7 +428,7 @@ mod tests {
     fn test_fallback_prose() {
         let classifier = ModelClassifier::without_model();
         let features = prose_features();
-        let result = classifier.classify("", &features);
+        let result = classifier.classify(&features);
         assert_eq!(result.category, TextCategory::Prose);
         assert!((result.confidence - 0.5).abs() < f32::EPSILON);
         assert_eq!(result.tier, Tier::Structural);
@@ -441,7 +438,7 @@ mod tests {
     fn test_fallback_skip() {
         let classifier = ModelClassifier::without_model();
         let features = skip_features();
-        let result = classifier.classify("", &features);
+        let result = classifier.classify(&features);
         assert_eq!(result.category, TextCategory::Skip);
         assert!((result.confidence - 0.5).abs() < f32::EPSILON);
     }
@@ -466,7 +463,7 @@ mod tests {
         assert!(classifier.has_model());
 
         let features = prose_features();
-        let result = classifier.classify("some text", &features);
+        let result = classifier.classify(&features);
 
         // Should return a model-tier classification
         assert_eq!(result.tier, Tier::Model);

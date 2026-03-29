@@ -10,10 +10,6 @@ use text_classifier::{Classifier, TextCategory, classify, extract_features};
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
-
-    /// Path to fasttext model file (optional, enables Tier 2)
-    #[arg(long, global = true)]
-    model: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -70,15 +66,6 @@ enum Commands {
         /// Include feature vector in output
         #[arg(long)]
         with_features: bool,
-    },
-    /// Train a fasttext model from labeled data
-    Train {
-        /// Input labeled JSONL file
-        #[arg(long)]
-        input: PathBuf,
-        /// Output model file
-        #[arg(long)]
-        output: PathBuf,
     },
     /// Validate classifier against labeled data
     Validate {
@@ -273,10 +260,7 @@ impl Evaluator {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let classifier = match &cli.model {
-        Some(path) => Classifier::with_model(path.to_str().ok_or("Invalid model path")?)?,
-        None => Classifier::new(),
-    };
+    let classifier = Classifier::new();
 
     match cli.command {
         None => {
@@ -321,11 +305,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             with_features,
         }) => {
             label_corpus(&input, &output, &text_field, with_features)?;
-        }
-        Some(Commands::Train { input, output }) => {
-            eprintln!("Training not yet implemented — use fasttext CLI directly:");
-            eprintln!("  fasttext supervised -input {input:?} -output {output:?}");
-            std::process::exit(1);
         }
         Some(Commands::Validate {
             input,

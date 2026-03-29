@@ -35,18 +35,11 @@ pub struct Classifier {
 }
 
 impl Classifier {
-    /// Create a classifier using Tier 1 only (no model).
+    /// Create a classifier, auto-loading the embedded ONNX model if available.
     pub fn new() -> Self {
         Self {
-            model: ModelClassifier::without_model(),
+            model: ModelClassifier::new(),
         }
-    }
-
-    /// Create a classifier with a fasttext model for Tier 2.
-    pub fn with_model(model_path: &str) -> Result<Self, String> {
-        Ok(Self {
-            model: ModelClassifier::with_model(model_path)?,
-        })
     }
 
     /// Classify a single text string.
@@ -84,7 +77,7 @@ impl Classifier {
         }
 
         // Otherwise, fall through to Tier 2
-        self.model.classify(text, &features)
+        self.model.classify(&features)
     }
 
     /// Classify multiple texts in parallel using rayon.
