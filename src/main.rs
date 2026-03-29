@@ -78,6 +78,9 @@ enum Commands {
         /// Output results as JSON
         #[arg(long)]
         json: bool,
+        /// Show details for each misclassified sample
+        #[arg(long)]
+        verbose: bool,
     },
 }
 
@@ -322,8 +325,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             text_field,
             json,
+            verbose,
         }) => {
-            validate(&classifier, &input, &text_field, json)?;
+            validate(&classifier, &input, &text_field, json, verbose)?;
         }
     }
 
@@ -647,9 +651,11 @@ fn validate(
     input: &PathBuf,
     text_field: &str,
     json_output: bool,
+    verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let reader = open_reader(input)?;
     let mut evaluator = Evaluator::new();
+    let mut sample_num = 0u64;
 
     for line in reader.lines() {
         let line = line?;
@@ -663,8 +669,20 @@ fn validate(
             .ok_or("Missing or non-string 'label' field")?;
 
         if let Some(text) = resolve_field(&doc, text_field) {
+            sample_num += 1;
             let result = classifier.classify(text);
-            evaluator.add(&result.category.to_string(), label, &result.tier.to_string());
+            let predicted = result.category.to_string();
+            evaluator.add(&predicted, label, &result.tier.to_string());
+
+            if verbose && predicted != label {
+                let preview: String = text.chars().take(80).collect();
+                let preview = preview.replace('\n', " ");
+                eprintln!(
+                    "  MISS #{}: expected={}, predicted={}, conf={:.2}, tier={}, reason=\"{}\"",
+                    sample_num, label, predicted, result.confidence, result.tier, result.reason
+                );
+                eprintln!("        text=\"{}...\"", preview);
+            }
         }
     }
 
