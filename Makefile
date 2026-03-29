@@ -113,7 +113,7 @@ python-build: ## Build the Python extension (release mode)
 .PHONY: training-setup generate-data generate-fixtures train validate train-pipeline
 
 training-setup: ## Set up the training Python environment
-	cd training && uv venv && uv pip install -e ".[dev]"
+	cd training && uv sync --group dev
 
 generate-data: ## Generate all training data (fixtures + synthetic + perturbations)
 	cd training && uv run python generate.py --mode all --output data/
