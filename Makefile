@@ -110,16 +110,19 @@ python-build: ## Build the Python extension (release mode)
 
 # ─── Training Pipeline ─────────────────────────────────────────────────────
 
-.PHONY: training-setup generate-data generate-fixtures train validate train-pipeline
+.PHONY: training-setup generate-data generate-fixtures generate-test-set train validate test-model train-pipeline
 
 training-setup: ## Set up the training Python environment
 	cd training && uv sync --group dev
 
-generate-data: ## Generate all training data (fixtures + synthetic + perturbations)
+generate-data: ## Generate all training data (fixtures + synthetic + perturbations + test set)
 	cd training && uv run python generate.py --mode all --output data/
 
 generate-fixtures: ## Generate training data from test fixtures only (no API key needed)
 	cd training && uv run python generate.py --mode fixtures --output data/
+
+generate-test-set: ## Generate labeled test set from fixtures for validation
+	cd training && uv run python generate.py --mode test-set --output data/
 
 train: ## Train the model and export to ONNX
 	cd training && uv run python train.py --data data/combined.csv --output models/
@@ -130,7 +133,10 @@ ifndef INPUT
 endif
 	cargo run --release -- validate --input $(INPUT)
 
-train-pipeline: generate-data train ## Full pipeline: generate data then train
+test-model: generate-test-set ## Validate classifier against fixture test set
+	cargo run --release -- validate --input training/data/test_set.jsonl
+
+train-pipeline: generate-data train test-model ## Full pipeline: generate → train → validate
 
 # ─── Run ────────────────────────────────────────────────────────────────────
 

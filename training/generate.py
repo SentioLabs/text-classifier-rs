@@ -213,7 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "fixtures", "synthetic", "perturb"],
+        choices=["all", "fixtures", "synthetic", "perturb", "test-set"],
         default="all",
         help="Generation mode (default: all)",
     )
@@ -481,6 +481,8 @@ def run_all_mode(
     perturb_path = run_perturb_mode(output_dir)
     csv_paths.append(perturb_path)
 
+    run_test_set_mode(fixtures_dir, output_dir)
+
     combined_path = combine_csvs(csv_paths, output_dir)
     print(f"\nSummary:")
     for path in csv_paths + [combined_path]:
@@ -488,6 +490,45 @@ def run_all_mode(
             with open(path) as f:
                 count = sum(1 for _ in csv.DictReader(f))
             print(f"  {Path(path).name}: {count} rows")
+
+
+# ---------------------------------------------------------------------------
+# Mode: test-set
+# ---------------------------------------------------------------------------
+
+
+def run_test_set_mode(fixtures_dir: str, output_dir: str) -> str:
+    """Generate a labeled JSONL test set from fixture files.
+
+    Writes text + ground-truth labels derived from directory names.
+    This is for use with ``classify validate --input test_set.jsonl``.
+
+    Returns the path to the output JSONL file.
+    """
+    fixtures_path = Path(fixtures_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "test_set.jsonl")
+
+    count = 0
+    with open(output_path, "w") as f:
+        for category_dir in sorted(fixtures_path.iterdir()):
+            if not category_dir.is_dir():
+                continue
+            category = map_directory_to_category(category_dir.name)
+            for txt_file in sorted(category_dir.glob("*.txt")):
+                text = txt_file.read_text(errors="replace")
+                sub_type = derive_sub_type(txt_file.name)
+                record = {
+                    "text": text,
+                    "label": category,
+                    "sub_type": sub_type,
+                }
+                json.dump(record, f)
+                f.write("\n")
+                count += 1
+
+    print(f"Test set: wrote {count} samples to {output_path}")
+    return output_path
 
 
 # ---------------------------------------------------------------------------
@@ -523,6 +564,8 @@ def main():
         run_synthetic_mode(args.output, classify_bin, args.api_key, args.samples_per_type)
     elif args.mode == "perturb":
         run_perturb_mode(args.output)
+    elif args.mode == "test-set":
+        run_test_set_mode(fixtures_dir, args.output)
     elif args.mode == "all":
         run_all_mode(
             fixtures_dir, args.output, classify_bin, args.api_key, args.samples_per_type
