@@ -68,6 +68,14 @@ FEATURE_COLUMNS = [
     "line_uniqueness",
     "short_line_ratio",
     "symbol_ratio",
+    "delimiter_consistency",
+    "json_brace_depth",
+    "key_value_ratio",
+    "xml_tag_ratio",
+    "log_line_ratio",
+    "comment_ratio",
+    "numeric_field_ratio",
+    "repetitive_structure_score",
 ]
 
 # All output columns: features + metadata
@@ -422,12 +430,19 @@ def main():
 
     classify_bin = DEFAULT_CLASSIFY_BIN
     if not Path(classify_bin).exists():
-        print(
-            f"Error: classify binary not found at {classify_bin}. "
-            "Run 'cargo build --release' first.",
-            file=sys.stderr,
+        print("Building classify binary...", file=sys.stderr)
+        result = subprocess.run(
+            ["cargo", "build", "--release"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
         )
-        sys.exit(1)
+        if result.returncode != 0:
+            print(f"Error: cargo build failed:\n{result.stderr}", file=sys.stderr)
+            sys.exit(1)
+        if not Path(classify_bin).exists():
+            print(f"Error: classify binary not found at {classify_bin} after build.", file=sys.stderr)
+            sys.exit(1)
 
     fixtures_dir = DEFAULT_FIXTURES_DIR
 
