@@ -21,3 +21,4 @@ Thumbs.db
 training/data/*.csv
 training/data/*.jsonl
 training/models/*.onnx
+.a.key
