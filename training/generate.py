@@ -331,46 +331,55 @@ def run_synthetic_mode(
     output_path = os.path.join(output_dir, "synthetic.csv")
     client = anthropic.Anthropic(api_key=api_key)
 
+    BATCH_SIZE = 50  # Max samples Claude can fit in one response
+
     rows = []
     type_bar = tqdm(SYNTHETIC_TYPE_PAIRS, desc="Synthetic types", unit="type")
     for category, sub_type in type_bar:
         type_bar.set_postfix_str(f"{category}/{sub_type}")
-        prompt = PROMPT_TEMPLATE.format(
-            n=samples_per_type, category=category, sub_type=sub_type
-        )
-        try:
-            message = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=8192,
-                messages=[
-                    {"role": "user", "content": prompt},
-                    {"role": "assistant", "content": "["},
-                ],
-            )
-            response_text = "[" + message.content[0].text
-            samples = extract_json_array(response_text)
-        except Exception as e:
-            tqdm.write(
-                f"Warning: failed to generate {category}/{sub_type}: {e}"
-            )
-            continue
+        n_batches = max(1, (samples_per_type + BATCH_SIZE - 1) // BATCH_SIZE)
+        type_extracted = 0
 
-        extracted = 0
-        for sample in samples:
-            if not isinstance(sample, str) or not sample.strip():
-                continue
+        for batch_i in range(n_batches):
+            batch_n = min(BATCH_SIZE, samples_per_type - batch_i * BATCH_SIZE)
+            if batch_n <= 0:
+                break
+            prompt = PROMPT_TEMPLATE.format(
+                n=batch_n, category=category, sub_type=sub_type
+            )
             try:
-                features = extract_features_via_cli(sample, classify_bin)
-            except RuntimeError as e:
-                tqdm.write(f"Warning: feature extraction failed: {e}")
+                message = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=8192,
+                    messages=[
+                        {"role": "user", "content": prompt},
+                        {"role": "assistant", "content": "["},
+                    ],
+                )
+                response_text = "[" + message.content[0].text
+                samples = extract_json_array(response_text)
+            except Exception as e:
+                tqdm.write(
+                    f"Warning: failed to generate {category}/{sub_type} batch {batch_i+1}: {e}"
+                )
                 continue
-            row = {col: features.get(col, 0.0) for col in FEATURE_COLUMNS}
-            row["category"] = category
-            row["sub_type"] = sub_type
-            row["line_count"] = features.get("line_count", 0)
-            rows.append(row)
-            extracted += 1
-        tqdm.write(f"  {category}/{sub_type}: {extracted}/{len(samples)} samples extracted")
+
+            for sample in samples:
+                if not isinstance(sample, str) or not sample.strip():
+                    continue
+                try:
+                    features = extract_features_via_cli(sample, classify_bin)
+                except RuntimeError as e:
+                    tqdm.write(f"Warning: feature extraction failed: {e}")
+                    continue
+                row = {col: features.get(col, 0.0) for col in FEATURE_COLUMNS}
+                row["category"] = category
+                row["sub_type"] = sub_type
+                row["line_count"] = features.get("line_count", 0)
+                rows.append(row)
+                type_extracted += 1
+
+        tqdm.write(f"  {category}/{sub_type}: {type_extracted}/{samples_per_type} samples extracted")
 
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=OUTPUT_COLUMNS)
