@@ -7,7 +7,8 @@ pub mod types;
 
 pub use features::extract_features;
 pub use tier2::ModelClassifier;
-pub use types::{Classification, FeatureVector, TextType, Tier};
+pub use types::{Classification, ContentSubType, FeatureVector, TextCategory, TextType, Tier};
+pub use types::thresholds;
 
 /// Classify a text string using Tier 1 structural features only.
 ///
@@ -51,7 +52,7 @@ impl Classifier {
     /// Classify a single text string.
     ///
     /// 1. Short text (< 5 words) -> Skip
-    /// 2. Tier 1 structural features -> if confidence >= 0.7, return
+    /// 2. Tier 1 structural features -> if confidence >= per-type threshold, return
     /// 3. Tier 2 model (if loaded) -> return model decision
     /// 4. No model -> return low-confidence fallback
     pub fn classify(&self, text: &str) -> Classification {
@@ -68,8 +69,17 @@ impl Classifier {
         let features = features::extract_features(text);
         let tier1_result = tier1::classify_tier1(&features);
 
-        // If Tier 1 is confident, use it
-        if tier1_result.confidence >= tier1::MIN_CONFIDENCE {
+        // If Tier 1 is confident (per-type threshold), use it
+        let threshold = match tier1_result.category {
+            TextCategory::Prose => thresholds::PROSE,
+            TextCategory::Code => thresholds::CODE,
+            TextCategory::Structured => thresholds::STRUCTURED,
+            TextCategory::Artifact => thresholds::ARTIFACT,
+            TextCategory::Tabular => thresholds::STRUCTURED,
+            TextCategory::PdfDump => thresholds::ARTIFACT,
+            TextCategory::Skip => 0.0, // Skip always accepted
+        };
+        if tier1_result.confidence >= threshold {
             return tier1_result;
         }
 
