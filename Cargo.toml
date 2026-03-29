@@ -35,6 +35,9 @@ model = ["fasttext"]
 name = "text_classifier"
 crate-type = ["lib", "cdylib"]
 
+[dev-dependencies]
+tempfile = "3"
+
 [[bin]]
 name = "classify"
 path = "src/main.rs"

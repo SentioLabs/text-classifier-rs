@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use text_classifier::tier1::MIN_CONFIDENCE;
-use text_classifier::{Classifier, TextCategory, classify};
+use text_classifier::{Classifier, TextCategory, classify, extract_features};
 
 #[derive(Parser)]
 #[command(name = "classify", about = "Classify text by structural type")]
@@ -67,6 +67,9 @@ enum Commands {
         /// Field to classify
         #[arg(long, default_value = "text")]
         text_field: String,
+        /// Include feature vector in output
+        #[arg(long)]
+        with_features: bool,
     },
     /// Train a fasttext model from labeled data
     Train {
@@ -315,8 +318,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             output,
             text_field,
+            with_features,
         }) => {
-            label_corpus(&input, &output, &text_field)?;
+            label_corpus(&input, &output, &text_field, with_features)?;
         }
         Some(Commands::Train { input, output }) => {
             eprintln!("Training not yet implemented — use fasttext CLI directly:");
@@ -573,6 +577,7 @@ fn label_corpus(
     input: &PathBuf,
     output: &PathBuf,
     text_field: &str,
+    with_features: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let reader = open_reader(input)?;
     let mut out = io::BufWriter::new(std::fs::File::create(output)?);
@@ -597,7 +602,7 @@ fn label_corpus(
                 ambiguous += 1;
             }
 
-            let labeled = serde_json::json!({
+            let mut labeled = serde_json::json!({
                 "text": text,
                 "label": result.category.to_string(),
                 "sub_type": result.sub_type.map(|s| s.to_string()),
@@ -605,6 +610,30 @@ fn label_corpus(
                 "tier": result.tier.to_string(),
                 "reason": result.reason,
             });
+
+            if with_features {
+                let features = extract_features(text);
+                labeled["features"] = serde_json::json!({
+                    "line_length_cv": features.line_length_cv,
+                    "char_entropy": features.char_entropy,
+                    "leading_whitespace_ratio": features.leading_whitespace_ratio,
+                    "tab_density": features.tab_density,
+                    "sentence_punctuation_rate": features.sentence_punctuation_rate,
+                    "paragraph_break_rate": features.paragraph_break_rate,
+                    "alpha_ratio": features.alpha_ratio,
+                    "line_uniqueness": features.line_uniqueness,
+                    "short_line_ratio": features.short_line_ratio,
+                    "symbol_ratio": features.symbol_ratio,
+                    "delimiter_consistency": features.delimiter_consistency,
+                    "json_brace_depth": features.json_brace_depth,
+                    "key_value_ratio": features.key_value_ratio,
+                    "xml_tag_ratio": features.xml_tag_ratio,
+                    "log_line_ratio": features.log_line_ratio,
+                    "comment_ratio": features.comment_ratio,
+                    "numeric_field_ratio": features.numeric_field_ratio,
+                    "repetitive_structure_score": features.repetitive_structure_score,
+                });
+            }
 
             serde_json::to_writer(&mut out, &labeled)?;
             writeln!(out)?;
@@ -772,6 +801,81 @@ mod tests {
         assert_eq!(matrix[0], vec![1, 1]);
         // actual=prose (idx 1): predicted code=1, predicted prose=2
         assert_eq!(matrix[1], vec![1, 2]);
+    }
+
+    #[test]
+    fn label_corpus_without_features() {
+        let dir = tempfile::tempdir().unwrap();
+        let input_path = dir.path().join("input.jsonl");
+        let output_path = dir.path().join("output.jsonl");
+
+        std::fs::write(
+            &input_path,
+            r#"{"text": "This is a simple prose sentence for testing purposes."}"#,
+        )
+        .unwrap();
+
+        label_corpus(
+            &input_path.to_path_buf(),
+            &output_path.to_path_buf(),
+            "text",
+            false,
+        )
+        .unwrap();
+
+        let output = std::fs::read_to_string(&output_path).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+        assert!(doc.get("text").is_some());
+        assert!(doc.get("label").is_some());
+        assert!(doc.get("features").is_none(), "features should not be present when with_features is false");
+    }
+
+    #[test]
+    fn label_corpus_with_features() {
+        let dir = tempfile::tempdir().unwrap();
+        let input_path = dir.path().join("input.jsonl");
+        let output_path = dir.path().join("output.jsonl");
+
+        std::fs::write(
+            &input_path,
+            r#"{"text": "This is a simple prose sentence for testing purposes."}"#,
+        )
+        .unwrap();
+
+        label_corpus(
+            &input_path.to_path_buf(),
+            &output_path.to_path_buf(),
+            "text",
+            true,
+        )
+        .unwrap();
+
+        let output = std::fs::read_to_string(&output_path).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+        assert!(doc.get("text").is_some());
+        assert!(doc.get("label").is_some());
+
+        let features = doc.get("features").expect("features should be present when with_features is true");
+        assert!(features.is_object());
+        // Check all 18 feature fields are present
+        let expected_fields = [
+            "line_length_cv", "char_entropy", "leading_whitespace_ratio",
+            "tab_density", "sentence_punctuation_rate", "paragraph_break_rate",
+            "alpha_ratio", "line_uniqueness", "short_line_ratio", "symbol_ratio",
+            "delimiter_consistency", "json_brace_depth", "key_value_ratio",
+            "xml_tag_ratio", "log_line_ratio", "comment_ratio",
+            "numeric_field_ratio", "repetitive_structure_score",
+        ];
+        for field in &expected_fields {
+            assert!(
+                features.get(field).is_some(),
+                "features missing field: {field}"
+            );
+            assert!(
+                features[field].is_number(),
+                "feature {field} should be a number"
+            );
+        }
     }
 
     #[test]
