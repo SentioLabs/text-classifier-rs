@@ -303,7 +303,11 @@ Generate {n} diverse examples of {sub_type} text content (category: {category}).
 Each example should be a realistic text sample (5-40 lines) that a classifier \
 would identify as "{category}" with sub-type "{sub_type}".
 
-Vary the style, complexity, and content. Respond with ONLY a JSON array of strings."""
+Vary the style, complexity, and content.
+
+You MUST respond with ONLY a valid JSON array of strings. No markdown fences, \
+no explanation, no preamble. The first character of your response must be [ and \
+the last character must be ]."""
 
 
 def run_synthetic_mode(
@@ -359,10 +363,9 @@ def run_synthetic_mode(
                     max_tokens=8192,
                     messages=[
                         {"role": "user", "content": prompt},
-                        {"role": "assistant", "content": "["},
                     ],
                 )
-                response_text = "[" + message.content[0].text
+                response_text = message.content[0].text
                 samples = extract_json_array(response_text)
             except Exception as e:
                 tqdm.write(
