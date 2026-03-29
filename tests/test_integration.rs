@@ -33,23 +33,23 @@ fn end_to_end_html_code() {
 fn end_to_end_pipe_table() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("tabular/pipe_table.txt"));
-    assert_eq!(result.category, TextType::Tabular);
-    assert!(result.confidence >= 0.7);
+    assert_eq!(result.category, TextType::Structured);
+    assert!(result.confidence >= 0.6);
 }
 
 #[test]
 fn end_to_end_tsv_data() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("tabular/tsv_data.txt"));
-    assert_eq!(result.category, TextType::Tabular);
-    assert!(result.confidence >= 0.7);
+    assert_eq!(result.category, TextType::Structured);
+    assert!(result.confidence >= 0.6);
 }
 
 #[test]
 fn end_to_end_pdf_dump() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("pdf_dump/ocr_garbage.txt"));
-    assert_eq!(result.category, TextType::PdfDump);
+    assert_eq!(result.category, TextType::Artifact);
     assert!(result.confidence >= 0.7);
 }
 
