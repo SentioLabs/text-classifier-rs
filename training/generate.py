@@ -13,10 +13,13 @@ import csv
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -85,6 +88,41 @@ OUTPUT_COLUMNS = FEATURE_COLUMNS + ["category", "sub_type", "line_count"]
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def extract_json_array(text: str) -> list:
+    """Extract a JSON array from text that may be wrapped in markdown fences."""
+    # Try direct parse first
+    text = text.strip()
+    try:
+        result = json.loads(text)
+        if isinstance(result, list):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
+    match = re.search(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
+    if match:
+        try:
+            result = json.loads(match.group(1).strip())
+            if isinstance(result, list):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    # Try to find the first [ ... ] in the text
+    start = text.find("[")
+    end = text.rfind("]")
+    if start != -1 and end != -1 and end > start:
+        try:
+            result = json.loads(text[start : end + 1])
+            if isinstance(result, list):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    raise ValueError(f"Could not extract JSON array from response ({len(text)} chars)")
 
 
 def map_directory_to_category(dirname: str) -> str:
@@ -191,24 +229,29 @@ def run_fixtures_mode(
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, "fixtures.csv")
 
-    rows = []
+    # Collect all fixture files first for progress bar
+    all_files = []
     for category_dir in sorted(fixtures_path.iterdir()):
         if not category_dir.is_dir():
             continue
         category = map_directory_to_category(category_dir.name)
         for txt_file in sorted(category_dir.glob("*.txt")):
-            sub_type = derive_sub_type(txt_file.name)
-            text = txt_file.read_text(errors="replace")
-            try:
-                features = extract_features_via_cli(text, classify_bin)
-            except RuntimeError as e:
-                print(f"Warning: skipping {txt_file}: {e}", file=sys.stderr)
-                continue
-            row = {col: features.get(col, 0.0) for col in FEATURE_COLUMNS}
-            row["category"] = category
-            row["sub_type"] = sub_type
-            row["line_count"] = features.get("line_count", 0)
-            rows.append(row)
+            all_files.append((category, txt_file))
+
+    rows = []
+    for category, txt_file in tqdm(all_files, desc="Extracting fixtures", unit="file"):
+        sub_type = derive_sub_type(txt_file.name)
+        text = txt_file.read_text(errors="replace")
+        try:
+            features = extract_features_via_cli(text, classify_bin)
+        except RuntimeError as e:
+            tqdm.write(f"Warning: skipping {txt_file}: {e}")
+            continue
+        row = {col: features.get(col, 0.0) for col in FEATURE_COLUMNS}
+        row["category"] = category
+        row["sub_type"] = sub_type
+        row["line_count"] = features.get("line_count", 0)
+        rows.append(row)
 
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=OUTPUT_COLUMNS)
@@ -267,11 +310,12 @@ def run_synthetic_mode(
     client = anthropic.Anthropic(api_key=api_key)
 
     rows = []
-    for category, sub_type in SYNTHETIC_TYPE_PAIRS:
+    type_bar = tqdm(SYNTHETIC_TYPE_PAIRS, desc="Synthetic types", unit="type")
+    for category, sub_type in type_bar:
+        type_bar.set_postfix_str(f"{category}/{sub_type}")
         prompt = PROMPT_TEMPLATE.format(
             n=samples_per_type, category=category, sub_type=sub_type
         )
-        print(f"Generating {samples_per_type} samples for {category}/{sub_type}...")
         try:
             message = client.messages.create(
                 model="claude-haiku-4-5-20251001",
@@ -279,27 +323,29 @@ def run_synthetic_mode(
                 messages=[{"role": "user", "content": prompt}],
             )
             response_text = message.content[0].text
-            samples = json.loads(response_text)
+            samples = extract_json_array(response_text)
         except Exception as e:
-            print(
-                f"Warning: failed to generate {category}/{sub_type}: {e}",
-                file=sys.stderr,
+            tqdm.write(
+                f"Warning: failed to generate {category}/{sub_type}: {e}"
             )
             continue
 
+        extracted = 0
         for sample in samples:
             if not isinstance(sample, str) or not sample.strip():
                 continue
             try:
                 features = extract_features_via_cli(sample, classify_bin)
             except RuntimeError as e:
-                print(f"Warning: feature extraction failed: {e}", file=sys.stderr)
+                tqdm.write(f"Warning: feature extraction failed: {e}")
                 continue
             row = {col: features.get(col, 0.0) for col in FEATURE_COLUMNS}
             row["category"] = category
             row["sub_type"] = sub_type
             row["line_count"] = features.get("line_count", 0)
             rows.append(row)
+            extracted += 1
+        tqdm.write(f"  {category}/{sub_type}: {extracted}/{len(samples)} samples extracted")
 
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=OUTPUT_COLUMNS)
@@ -333,7 +379,7 @@ def run_perturb_mode(
         fixture_rows = list(reader)
 
     perturbed_rows = []
-    for row in fixture_rows:
+    for row in tqdm(fixture_rows, desc="Perturbing fixtures", unit="row"):
         n = random.randint(10, 15)
         for _ in range(n):
             new_row = {}
