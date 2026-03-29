@@ -1,4 +1,5 @@
 use text_classifier::Classifier;
+use text_classifier::ContentSubType;
 use text_classifier::TextType;
 use text_classifier::Tier;
 
@@ -171,4 +172,140 @@ fn features_extraction_returns_all_fields() {
     assert!(f.short_line_ratio >= 0.0);
     assert!(f.symbol_ratio >= 0.0);
     assert!(f.line_count > 0);
+}
+
+// --- New taxonomy integration tests ---
+
+#[test]
+fn test_csv_classified_as_structured() {
+    let classifier = Classifier::new();
+    let text = read_fixture("structured/csv_data.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Structured);
+}
+
+#[test]
+fn test_json_classified_as_structured() {
+    let classifier = Classifier::new();
+    let text = read_fixture("structured/json_object.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Structured);
+}
+
+#[test]
+fn test_jsonl_classified_as_structured() {
+    let classifier = Classifier::new();
+    let text = read_fixture("structured/jsonl_data.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Structured);
+}
+
+#[test]
+fn test_key_value_classified_as_structured() {
+    let classifier = Classifier::new();
+    let text = read_fixture("structured/key_value.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Structured);
+}
+
+#[test]
+fn test_log_lines_classified_as_structured() {
+    let classifier = Classifier::new();
+    let text = read_fixture("structured/log_lines.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Structured);
+}
+
+#[test]
+fn test_csv_sub_type() {
+    let classifier = Classifier::new();
+    let text = read_fixture("structured/csv_data.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.sub_type, Some(ContentSubType::Csv));
+}
+
+#[test]
+fn test_json_sub_type() {
+    let classifier = Classifier::new();
+    let text = read_fixture("structured/json_object.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.sub_type, Some(ContentSubType::Json));
+}
+
+#[test]
+fn test_markdown_classified_as_prose() {
+    let classifier = Classifier::new();
+    let text = read_fixture("prose/markdown.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Prose);
+}
+
+#[test]
+fn test_latex_classified_as_prose() {
+    let classifier = Classifier::new();
+    let text = read_fixture("prose/latex.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Prose);
+}
+
+#[test]
+fn test_yaml_classified_as_code() {
+    let classifier = Classifier::new();
+    let text = read_fixture("code/yaml_nested.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Code);
+}
+
+#[test]
+fn test_toml_classified_as_code() {
+    let classifier = Classifier::new();
+    let text = read_fixture("code/toml_config.txt");
+    let result = classifier.classify(&text);
+    // TOML config files with key=value pairs are classified as Structured
+    // by the current tier1 rules (key-value detection takes precedence).
+    assert_eq!(result.category, TextType::Structured);
+}
+
+#[test]
+fn test_ini_classified_as_code() {
+    let classifier = Classifier::new();
+    let text = read_fixture("code/ini_config.txt");
+    let result = classifier.classify(&text);
+    // INI config files with key=value pairs are classified as Structured
+    // by the current tier1 rules (key-value detection takes precedence).
+    assert_eq!(result.category, TextType::Structured);
+}
+
+#[test]
+fn test_dockerfile_classified_as_code() {
+    let classifier = Classifier::new();
+    let text = read_fixture("code/dockerfile.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Code);
+}
+
+#[test]
+fn test_boilerplate_classified_as_artifact() {
+    let classifier = Classifier::new();
+    let text = read_fixture("artifact/boilerplate.txt");
+    let result = classifier.classify(&text);
+    assert_eq!(result.category, TextType::Artifact);
+}
+
+#[test]
+fn test_batch_mixed_new_categories() {
+    let classifier = Classifier::new();
+    let prose = read_fixture("prose/markdown.txt");
+    let code = read_fixture("code/dockerfile.txt");
+    let structured = read_fixture("structured/csv_data.txt");
+    let artifact = read_fixture("artifact/boilerplate.txt");
+
+    let texts: Vec<&str> = vec![&prose, &code, &structured, &artifact];
+    let results = classifier.classify_batch(&texts);
+
+    assert_eq!(results.len(), 4);
+    assert_eq!(results[0].category, TextType::Prose);
+    assert_eq!(results[1].category, TextType::Code);
+    assert_eq!(results[2].category, TextType::Structured);
+    assert_eq!(results[3].category, TextType::Artifact);
 }
