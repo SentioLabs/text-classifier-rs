@@ -268,15 +268,12 @@ def run_fixtures_mode(
 
 
 PROMPT_TEMPLATE = """\
-Generate {n} diverse examples of {category}/{sub_type} text.
+Generate {n} diverse examples of {sub_type} text content (category: {category}).
 
-Each example should be a realistic text sample (at least 5 lines, up to 40 lines) \
-that would be classified as "{category}" content with sub-type "{sub_type}".
+Each example should be a realistic text sample (5-40 lines) that a classifier \
+would identify as "{category}" with sub-type "{sub_type}".
 
-Vary the style, complexity, and content across examples. Return the result as a \
-JSON array of strings, where each string is one complete text sample.
-
-Return ONLY the JSON array, no other text."""
+Vary the style, complexity, and content. Respond with ONLY a JSON array of strings."""
 
 
 def run_synthetic_mode(
@@ -319,10 +316,13 @@ def run_synthetic_mode(
         try:
             message = client.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=4096,
-                messages=[{"role": "user", "content": prompt}],
+                max_tokens=8192,
+                messages=[
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": "["},
+                ],
             )
-            response_text = message.content[0].text
+            response_text = "[" + message.content[0].text
             samples = extract_json_array(response_text)
         except Exception as e:
             tqdm.write(
