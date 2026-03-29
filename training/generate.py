@@ -233,6 +233,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.environ.get("ANTHROPIC_API_KEY"),
         help="Anthropic API key (default: $ANTHROPIC_API_KEY)",
     )
+    parser.add_argument(
+        "--model",
+        default="claude-sonnet-4-6-20250514",
+        help="Claude model for synthetic generation (default: claude-sonnet-4-6-20250514)",
+    )
     return parser
 
 
@@ -306,6 +311,7 @@ def run_synthetic_mode(
     classify_bin: str = DEFAULT_CLASSIFY_BIN,
     api_key: str | None = None,
     samples_per_type: int = 50,
+    model: str = "claude-sonnet-4-6-20250514",
 ) -> str | None:
     """Generate synthetic text via Claude API and extract features.
 
@@ -349,7 +355,7 @@ def run_synthetic_mode(
             )
             try:
                 message = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                    model=model,
                     max_tokens=8192,
                     messages=[
                         {"role": "user", "content": prompt},
@@ -474,6 +480,7 @@ def run_all_mode(
     classify_bin: str,
     api_key: str | None,
     samples_per_type: int,
+    model: str = "claude-sonnet-4-6-20250514",
 ) -> None:
     """Run all modes and combine results."""
     csv_paths = []
@@ -482,7 +489,7 @@ def run_all_mode(
     csv_paths.append(fixtures_path)
 
     synthetic_path = run_synthetic_mode(
-        output_dir, classify_bin, api_key, samples_per_type
+        output_dir, classify_bin, api_key, samples_per_type, model
     )
     if synthetic_path:
         csv_paths.append(synthetic_path)
@@ -570,14 +577,14 @@ def main():
     if args.mode == "fixtures":
         run_fixtures_mode(fixtures_dir, args.output, classify_bin)
     elif args.mode == "synthetic":
-        run_synthetic_mode(args.output, classify_bin, args.api_key, args.samples_per_type)
+        run_synthetic_mode(args.output, classify_bin, args.api_key, args.samples_per_type, args.model)
     elif args.mode == "perturb":
         run_perturb_mode(args.output)
     elif args.mode == "test-set":
         run_test_set_mode(fixtures_dir, args.output)
     elif args.mode == "all":
         run_all_mode(
-            fixtures_dir, args.output, classify_bin, args.api_key, args.samples_per_type
+            fixtures_dir, args.output, classify_bin, args.api_key, args.samples_per_type, args.model
         )
 
 
