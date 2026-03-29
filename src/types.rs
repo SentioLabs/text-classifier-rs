@@ -248,6 +248,22 @@ pub struct FeatureVector {
     /// Number of lines in the sampled text. Used by rules that need
     /// a minimum sample size (e.g. tabular detection).
     pub line_count: usize,
+    /// Consistency of delimiter counts across lines (CSV/TSV detection).
+    pub delimiter_consistency: f32,
+    /// Fraction of JSON brace/bracket characters in text.
+    pub json_brace_depth: f32,
+    /// Fraction of lines with key-value patterns (key: value or key=value).
+    pub key_value_ratio: f32,
+    /// Fraction of lines containing XML/HTML tags.
+    pub xml_tag_ratio: f32,
+    /// Fraction of lines starting with timestamp-like patterns.
+    pub log_line_ratio: f32,
+    /// Fraction of lines that are comments (# // /* -- %).
+    pub comment_ratio: f32,
+    /// Fraction of whitespace-delimited tokens that parse as numbers.
+    pub numeric_field_ratio: f32,
+    /// How many lines share the most common "shape" (token count + delimiters).
+    pub repetitive_structure_score: f32,
 }
 
 impl FeatureVector {
