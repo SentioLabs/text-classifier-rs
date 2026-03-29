@@ -1,0 +1,55 @@
+# Getting Started with the Inventory API
+
+Welcome to the **Inventory API** documentation. This guide walks you through
+setting up your development environment and making your first API calls.
+
+## Prerequisites
+
+Before you begin, make sure you have the following installed:
+
+- **Node.js** version 18 or later
+- A running instance of *PostgreSQL* 15+
+- An API key from the [developer portal](https://developers.example.com/keys)
+
+## Authentication
+
+All API requests require a valid bearer token. You can obtain one by sending
+your API key to the authentication endpoint. Tokens expire after **24 hours**
+and must be refreshed using the refresh token provided in the initial response.
+
+For more details on token lifecycle management, see the
+[authentication guide](https://docs.example.com/auth).
+
+## Quick Start
+
+First, install the client library using your preferred package manager:
+
+```bash
+npm install @example/inventory-client
+```
+
+Then initialize the client in your application:
+
+```javascript
+const client = new InventoryClient({
+  apiKey: process.env.INVENTORY_API_KEY,
+  baseUrl: "https://api.example.com/v2",
+});
+```
+
+## Making Your First Request
+
+Once authenticated, you can retrieve a list of products from your inventory.
+The response includes pagination metadata, so you can iterate through large
+result sets efficiently. Each product object contains its current stock level,
+warehouse location, and pricing information.
+
+If you encounter a `429 Too Many Requests` response, the API enforces a rate
+limit of **100 requests per minute** per API key. Implement exponential backoff
+in your retry logic to handle this gracefully.
+
+## Next Steps
+
+- Read the [full API reference](https://docs.example.com/api) for all endpoints
+- Explore the [webhook integration guide](https://docs.example.com/webhooks)
+- Join our [community forum](https://community.example.com) for support
