@@ -1,0 +1,13 @@
+# Training data (regenerated, not committed)
+data/*.csv
+data/*.jsonl
+data/*.json
+
+# Model artifacts (large binaries)
+models/*.onnx
+models/metrics.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
