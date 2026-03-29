@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use text_classifier::tier1::MIN_CONFIDENCE;
-use text_classifier::{Classifier, TextType, classify};
+use text_classifier::{Classifier, TextCategory, classify};
 
 #[derive(Parser)]
 #[command(name = "classify", about = "Classify text by structural type")]
@@ -210,7 +210,8 @@ fn classify_file(
         if let Some(text) = resolve_field(&doc, text_field) {
             let result = classifier.classify(text);
             doc["_classification"] = serde_json::json!({
-                "text_type": result.category,
+                "category": result.category,
+                "sub_type": result.sub_type,
                 "confidence": result.confidence,
                 "reason": result.reason,
                 "tier": result.tier,
@@ -268,18 +269,18 @@ fn filter_file(
                 if text.len() < 50 {
                     any_prose = true;
                     *category_counts
-                        .entry(TextType::Prose.to_string())
+                        .entry(TextCategory::Prose.to_string())
                         .or_insert(0) += 1;
                     field_classifications.insert(
                         field_name.to_string(),
-                        serde_json::json!({"text_type": "prose", "confidence": 1.0, "reason": "short field"}),
+                        serde_json::json!({"category": "prose", "sub_type": null, "confidence": 1.0, "reason": "short field"}),
                     );
                     continue;
                 }
 
                 let result = classifier.classify(text);
                 let is_prose =
-                    result.category == TextType::Prose || (result.confidence < min_confidence); // uncertain → let through
+                    result.category == TextCategory::Prose || (result.confidence < min_confidence); // uncertain → let through
 
                 if is_prose {
                     any_prose = true;
@@ -292,7 +293,8 @@ fn filter_file(
                 field_classifications.insert(
                     field_name.to_string(),
                     serde_json::json!({
-                        "text_type": result.category,
+                        "category": result.category,
+                        "sub_type": result.sub_type,
                         "confidence": result.confidence,
                         "reason": result.reason,
                         "tier": result.tier,
@@ -343,7 +345,7 @@ fn extract_features_file(
     // CSV header
     writeln!(
         out,
-        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio,line_count"
+        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio,delimiter_consistency,json_brace_depth,key_value_ratio,xml_tag_ratio,log_line_ratio,comment_ratio,numeric_field_ratio,repetitive_structure_score,line_count"
     )?;
 
     let mut count = 0;
@@ -358,7 +360,7 @@ fn extract_features_file(
             let f = classifier.extract_features(text);
             writeln!(
                 out,
-                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{}",
+                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{}",
                 f.line_length_cv,
                 f.char_entropy,
                 f.leading_whitespace_ratio,
@@ -369,6 +371,14 @@ fn extract_features_file(
                 f.line_uniqueness,
                 f.short_line_ratio,
                 f.symbol_ratio,
+                f.delimiter_consistency,
+                f.json_brace_depth,
+                f.key_value_ratio,
+                f.xml_tag_ratio,
+                f.log_line_ratio,
+                f.comment_ratio,
+                f.numeric_field_ratio,
+                f.repetitive_structure_score,
                 f.line_count
             )?;
             count += 1;
@@ -410,6 +420,7 @@ fn label_corpus(
             let labeled = serde_json::json!({
                 "text": text,
                 "label": result.category.to_string(),
+                "sub_type": result.sub_type.map(|s| s.to_string()),
                 "confidence": result.confidence,
                 "tier": result.tier.to_string(),
                 "reason": result.reason,
