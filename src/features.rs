@@ -42,15 +42,6 @@ pub fn extract_features(text: &str) -> FeatureVector {
         line_uniqueness: compute_line_uniqueness(&lines),
         short_line_ratio: compute_short_line_ratio(&lines, n_lines),
         symbol_ratio: compute_symbol_ratio(sample, total_chars),
-        delimiter_consistency: 0.0,
-        json_brace_depth: 0.0,
-        key_value_ratio: 0.0,
-        xml_tag_ratio: 0.0,
-        log_line_ratio: 0.0,
-        comment_ratio: 0.0,
-        numeric_field_ratio: 0.0,
-        repetitive_structure_score: 0.0,
-        line_count: n_lines,
         delimiter_consistency: compute_delimiter_consistency(&lines),
         json_brace_depth: compute_json_brace_depth(sample, total_chars),
         key_value_ratio: compute_key_value_ratio(&lines, n_lines),
@@ -59,6 +50,7 @@ pub fn extract_features(text: &str) -> FeatureVector {
         comment_ratio: compute_comment_ratio(&lines, n_lines),
         numeric_field_ratio: compute_numeric_field_ratio(sample),
         repetitive_structure_score: compute_repetitive_structure_score(&lines),
+        line_count: n_lines,
     }
 }
 
