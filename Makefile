@@ -1,5 +1,6 @@
 .PHONY: build build-release test test-single fmt fmt-check clippy lint check clean \
 	python-setup python-build \
+	training-setup generate-data generate-fixtures train validate train-pipeline \
 	install run review \
 	release-build release-local release-list release-show release-download release-delete release-pr help
 
@@ -113,6 +114,30 @@ python-setup: ## Create venv and install maturin
 
 python-build: ## Build the Python extension (release mode)
 	. .venv/bin/activate && maturin develop --release
+
+#
+# Training Pipeline
+#
+
+training-setup: ## Set up the training Python environment
+	cd training && uv venv && uv pip install -e ".[dev]"
+
+generate-data: ## Generate training data (fixtures + synthetic + perturbations)
+	cd training && uv run python generate.py --mode all --output data/
+
+generate-fixtures: ## Generate training data from test fixtures only (no API key needed)
+	cd training && uv run python generate.py --mode fixtures --output data/
+
+train: ## Train the model and export to ONNX
+	cd training && uv run python train.py --data data/combined.csv --output models/
+
+validate: ## Validate classifier against a labeled test set (usage: make validate INPUT=test.jsonl)
+ifndef INPUT
+	$(error INPUT is required. Usage: make validate INPUT=test.jsonl)
+endif
+	cargo run --release -- validate --input $(INPUT)
+
+train-pipeline: generate-data train ## Full training pipeline: generate → train
 
 #
 # Run
