@@ -197,8 +197,8 @@ fn compute_short_line_ratio(lines: &[&str], n_lines: usize) -> f32 {
     short as f32 / n_lines as f32
 }
 
-/// Fraction of non-alphanumeric chars, excluding common punctuation.
-/// Common punctuation excluded: space, newline, tab, . , ; : ! ? - ' "
+/// Fraction of non-alphanumeric chars, excluding common punctuation and
+/// Unicode decorative characters (box-drawing, block elements, symbols).
 /// Code/garbled text > 0.15. Prose < 0.05.
 fn compute_symbol_ratio(text: &str, total_chars: f32) -> f32 {
     let symbols = text
@@ -209,6 +209,14 @@ fn compute_symbol_ratio(text: &str, total_chars: f32) -> f32 {
                     c,
                     ' ' | '\n' | '\t' | '\r' | '.' | ',' | ';' | ':' | '!' | '?' | '-' | '\'' | '"'
                 )
+                // Exclude Unicode decorative characters commonly found in
+                // formatted documents, OCR output, and ASCII art:
+                // Box Drawing (U+2500-257F), Block Elements (U+2580-259F),
+                // Geometric Shapes (U+25A0-25FF), Misc Symbols (U+2600-26FF),
+                // Dingbats (U+2700-27BF), Arrows (U+2190-21FF)
+                && !matches!(*c as u32, 0x2190..=0x21FF | 0x2500..=0x259F | 0x25A0..=0x27BF)
+                // Also exclude common typographic symbols: bullets, dashes, quotes
+                && !matches!(c, '–' | '—' | '•' | '°' | '©' | '®' | '™' | '…' | '×' | '÷')
         })
         .count();
 

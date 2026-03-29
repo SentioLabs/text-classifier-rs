@@ -81,6 +81,18 @@ fn try_structured(f: &FeatureVector) -> Option<Classification> {
         return None;
     }
 
+    // Guard: high key-value ratio with comments suggests config files (.env, INI, TOML) → Code
+    // Config files have comments (# lines) that pure structured data doesn't
+    if f.key_value_ratio > 0.5 && f.comment_ratio > 0.05 {
+        return None;
+    }
+
+    // Guard: very high key-value ratio with symbols → config file with URLs/paths, not plain data
+    // .env files have KEY=value with connection strings containing :// @ etc.
+    if f.key_value_ratio > 0.7 && f.symbol_ratio > 0.08 && f.sentence_punctuation_rate < 0.01 {
+        return None;
+    }
+
     // Delimiter-consistent tabular data (CSV, TSV, pipe-delimited)
     if f.delimiter_consistency > 0.6 && f.line_count >= 3 {
         let confidence = 0.6 + 0.4 * f.delimiter_consistency;
@@ -173,6 +185,33 @@ fn try_code(f: &FeatureVector) -> Option<Classification> {
                 "config/markup pattern (kv={:.2}, ws={:.2})",
                 f.key_value_ratio, f.leading_whitespace_ratio
             ),
+            tier: Tier::Structural,
+        });
+    }
+
+    // Path: Flat config files (.env, INI without sections) — key-value with comments
+    if f.key_value_ratio > 0.5 && f.comment_ratio > 0.05 && f.sentence_punctuation_rate < 0.02 {
+        let confidence = (0.6 + 0.3 * f.key_value_ratio).min(1.0);
+        return Some(Classification {
+            category: TextCategory::Code,
+            sub_type: None,
+            confidence,
+            reason: format!(
+                "config pattern (kv={:.2}, comments={:.2})",
+                f.key_value_ratio, f.comment_ratio
+            ),
+            tier: Tier::Structural,
+        });
+    }
+
+    // Path: Very high key-value ratio with symbols → config file with URLs/paths
+    if f.key_value_ratio > 0.7 && f.symbol_ratio > 0.08 && f.sentence_punctuation_rate < 0.01 {
+        let confidence = (0.6 + 0.3 * f.key_value_ratio).min(1.0);
+        return Some(Classification {
+            category: TextCategory::Code,
+            sub_type: None,
+            confidence,
+            reason: format!("config pattern (kv={:.2}, sym={:.2})", f.key_value_ratio, f.symbol_ratio),
             tier: Tier::Structural,
         });
     }
