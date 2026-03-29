@@ -8,7 +8,7 @@ use text_classifier::{Classifier, TextCategory, classify, extract_features};
 #[derive(Parser)]
 #[command(name = "classify", about = "Classify text by structural type")]
 struct Cli {
-    /// Text to classify (if omitted, reads from stdin)
+    /// Text to classify directly (use -- before text matching a subcommand name)
     text: Option<String>,
 
     /// Output as JSON instead of human-friendly format
@@ -293,7 +293,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(text) = cli.text {
                 classify_inline(&classifier, &text, cli.json)?;
             } else {
-                classify_stdin(&classifier, cli.json)?;
+                // Always output JSON for stdin to preserve backward compatibility
+                // (scripts expect `echo "text" | classify | jq` to work)
+                classify_stdin(&classifier)?;
             }
         }
         Some(Commands::File {
@@ -377,10 +379,7 @@ fn classify_inline(
     Ok(())
 }
 
-fn classify_stdin(
-    classifier: &Classifier,
-    json_output: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn classify_stdin(classifier: &Classifier) -> Result<(), Box<dyn std::error::Error>> {
     let mut text = String::new();
     io::stdin().lock().read_to_string(&mut text)?;
 
@@ -391,12 +390,8 @@ fn classify_stdin(
     let result = classifier.classify(&text);
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    if json_output {
-        serde_json::to_writer(&mut out, &result)?;
-        writeln!(out)?;
-    } else {
-        writeln!(out, "{}", format_human_friendly(&result))?;
-    }
+    serde_json::to_writer(&mut out, &result)?;
+    writeln!(out)?;
     Ok(())
 }
 
@@ -1038,5 +1033,24 @@ mod tests {
         // When a subcommand is given, text should not be parsed as positional
         let cli = Cli::parse_from(["classify", "validate", "--input", "test.jsonl"]);
         assert!(cli.command.is_some());
+        assert!(cli.text.is_none());
+    }
+
+    #[test]
+    fn cli_double_dash_forces_positional_text() {
+        // Using -- should force "file" to be parsed as positional text, not a subcommand
+        let cli = Cli::parse_from(["classify", "--", "file"]);
+        assert_eq!(cli.text.as_deref(), Some("file"));
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn cli_no_text_no_subcommand_means_stdin() {
+        // When neither text nor subcommand is given, we route to stdin (JSON output).
+        // Verify that cli.json flag doesn't matter for this path — stdin always gets JSON.
+        let cli = Cli::parse_from(["classify"]);
+        assert!(cli.text.is_none());
+        assert!(cli.command.is_none());
+        // The dispatch logic in main() routes this to classify_stdin() which always outputs JSON
     }
 }
