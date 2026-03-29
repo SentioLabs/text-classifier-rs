@@ -116,7 +116,7 @@ training-setup: ## Set up the training Python environment
 	cd training && uv sync --group dev
 
 generate-data: ## Generate all training data (fixtures + synthetic + perturbations + test set)
-	cd training && uv run python generate.py --mode all --output data/
+	cd training && uv run python generate.py --mode all --output data/ --samples-per-type 200
 
 generate-fixtures: ## Generate training data from test fixtures only (no API key needed)
 	cd training && uv run python generate.py --mode fixtures --output data/
