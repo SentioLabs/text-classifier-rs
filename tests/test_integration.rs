@@ -9,7 +9,7 @@ fn read_fixture(path: &str) -> String {
 fn end_to_end_prose() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("prose/simple.txt"));
-    assert_eq!(result.text_type, TextType::Prose);
+    assert_eq!(result.category, TextType::Prose);
     assert!(result.confidence >= 0.7);
 }
 
@@ -17,7 +17,7 @@ fn end_to_end_prose() {
 fn end_to_end_python_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/python.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextType::Code);
     assert!(result.confidence >= 0.7);
 }
 
@@ -25,7 +25,7 @@ fn end_to_end_python_code() {
 fn end_to_end_html_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/html.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextType::Code);
     assert!(result.confidence >= 0.7);
 }
 
@@ -33,7 +33,7 @@ fn end_to_end_html_code() {
 fn end_to_end_pipe_table() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("tabular/pipe_table.txt"));
-    assert_eq!(result.text_type, TextType::Tabular);
+    assert_eq!(result.category, TextType::Tabular);
     assert!(result.confidence >= 0.7);
 }
 
@@ -41,7 +41,7 @@ fn end_to_end_pipe_table() {
 fn end_to_end_tsv_data() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("tabular/tsv_data.txt"));
-    assert_eq!(result.text_type, TextType::Tabular);
+    assert_eq!(result.category, TextType::Tabular);
     assert!(result.confidence >= 0.7);
 }
 
@@ -49,7 +49,7 @@ fn end_to_end_tsv_data() {
 fn end_to_end_pdf_dump() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("pdf_dump/ocr_garbage.txt"));
-    assert_eq!(result.text_type, TextType::PdfDump);
+    assert_eq!(result.category, TextType::PdfDump);
     assert!(result.confidence >= 0.7);
 }
 
@@ -57,7 +57,7 @@ fn end_to_end_pdf_dump() {
 fn short_text_is_skip() {
     let clf = Classifier::new();
     let result = clf.classify("hello");
-    assert_eq!(result.text_type, TextType::Skip);
+    assert_eq!(result.category, TextType::Skip);
     assert_eq!(result.confidence, 1.0);
 }
 
@@ -65,7 +65,7 @@ fn short_text_is_skip() {
 fn empty_text_is_skip() {
     let clf = Classifier::new();
     let result = clf.classify("");
-    assert_eq!(result.text_type, TextType::Skip);
+    assert_eq!(result.category, TextType::Skip);
 }
 
 #[test]
@@ -79,14 +79,14 @@ fn batch_classification_works() {
     let results = clf.classify_batch(&texts);
     assert_eq!(results.len(), 3);
     // Third should be skip (too short)
-    assert_eq!(results[2].text_type, TextType::Skip);
+    assert_eq!(results[2].category, TextType::Skip);
 }
 
 #[test]
 fn end_to_end_javascript_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/javascript.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextType::Code);
     assert!(result.confidence >= 0.7);
 }
 
@@ -94,7 +94,7 @@ fn end_to_end_javascript_code() {
 fn end_to_end_rust_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/rust.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextType::Code);
     assert!(result.confidence >= 0.7);
 }
 
@@ -102,7 +102,7 @@ fn end_to_end_rust_code() {
 fn end_to_end_sql_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/sql.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextType::Code);
     assert!(result.confidence >= 0.7);
 }
 
@@ -110,7 +110,7 @@ fn end_to_end_sql_code() {
 fn end_to_end_shell_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/shell.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextType::Code);
     assert!(result.confidence >= 0.7);
 }
 
@@ -118,7 +118,7 @@ fn end_to_end_shell_code() {
 fn end_to_end_yaml_config() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/yaml_config.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextType::Code);
     assert!(result.confidence >= 0.7);
 }
 
@@ -126,7 +126,7 @@ fn end_to_end_yaml_config() {
 fn end_to_end_minified_js() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/minified_js.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextType::Code);
     assert!(result.confidence >= 0.7);
 }
 

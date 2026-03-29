@@ -20,7 +20,7 @@ struct PyClassification {
 impl From<Classification> for PyClassification {
     fn from(c: Classification) -> Self {
         PyClassification {
-            text_type: c.text_type.to_string(),
+            text_type: c.category.to_string(),
             confidence: c.confidence,
             reason: c.reason,
             tier: c.tier.to_string(),
