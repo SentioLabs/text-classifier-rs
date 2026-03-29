@@ -215,7 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "fixtures", "synthetic", "perturb", "test-set"],
+        choices=["all", "fixtures", "synthetic", "perturb", "test-set", "ambiguous-test-set"],
         default="all",
         help="Generation mode (default: all)",
     )
@@ -554,6 +554,151 @@ def run_test_set_mode(fixtures_dir: str, output_dir: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Mode: ambiguous-test-set
+# ---------------------------------------------------------------------------
+
+AMBIGUOUS_PROMPT_TEMPLATE = """\
+Generate {n} text samples that are deliberately AMBIGUOUS between the categories \
+"{cat_a}" and "{cat_b}".
+
+Each sample should be realistic text (5-30 lines) that could plausibly be classified \
+as either category. The ground truth label is "{label}" but the text should have \
+strong features of both categories.
+
+Examples of ambiguity between these categories:
+{examples}
+
+Vary the style and content. Each sample should be ambiguous in a DIFFERENT way.
+
+You MUST respond with ONLY a valid JSON array of strings. No markdown fences, \
+no explanation. First character must be [ and last must be ]."""
+
+AMBIGUOUS_PAIRS = [
+    {
+        "cat_a": "code",
+        "cat_b": "structured",
+        "label": "code",
+        "examples": "- TOML/INI config files (key=value but are config code)\n"
+                    "- YAML with data-like content\n"
+                    "- .env files with connection strings",
+    },
+    {
+        "cat_a": "code",
+        "cat_b": "prose",
+        "label": "code",
+        "examples": "- Python with extensive docstrings\n"
+                    "- Shell scripts with long comment blocks\n"
+                    "- SQL with detailed inline comments",
+    },
+    {
+        "cat_a": "prose",
+        "cat_b": "code",
+        "label": "prose",
+        "examples": "- Technical documentation about code\n"
+                    "- API reference with code-like terms\n"
+                    "- README files describing functions",
+    },
+    {
+        "cat_a": "prose",
+        "cat_b": "structured",
+        "label": "prose",
+        "examples": "- Markdown with tables and lists\n"
+                    "- Technical writing with key-value descriptions\n"
+                    "- Reports with tabular data embedded in text",
+    },
+    {
+        "cat_a": "structured",
+        "cat_b": "code",
+        "label": "structured",
+        "examples": "- JSON with code-like field names\n"
+                    "- CSV with URL columns and special characters\n"
+                    "- Log files with structured + freeform fields",
+    },
+    {
+        "cat_a": "artifact",
+        "cat_b": "structured",
+        "label": "artifact",
+        "examples": "- OCR'd tables with garbled text\n"
+                    "- PDF-extracted invoices with broken formatting\n"
+                    "- Scanned forms with partial structure",
+    },
+]
+
+
+def run_ambiguous_test_set_mode(
+    output_dir: str,
+    api_key: str | None = None,
+    model: str = "claude-sonnet-4-20250514",
+    samples_per_pair: int = 17,
+) -> str:
+    """Generate ambiguous test samples via Claude API.
+
+    Creates samples that sit on the boundary between two categories.
+    Returns path to the output JSONL file.
+    """
+    if not api_key:
+        print(
+            "Error: ANTHROPIC_API_KEY required for ambiguous test set generation.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        import anthropic
+    except ImportError:
+        print("Error: anthropic package required.", file=sys.stderr)
+        sys.exit(1)
+
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "ambiguous_test_set.jsonl")
+    client = anthropic.Anthropic(api_key=api_key)
+
+    count = 0
+    with open(output_path, "w") as f:
+        for pair in tqdm(AMBIGUOUS_PAIRS, desc="Generating ambiguous pairs", unit="pair"):
+            prompt = AMBIGUOUS_PROMPT_TEMPLATE.format(
+                n=samples_per_pair,
+                cat_a=pair["cat_a"],
+                cat_b=pair["cat_b"],
+                label=pair["label"],
+                examples=pair["examples"],
+            )
+            try:
+                message = client.messages.create(
+                    model=model,
+                    max_tokens=8192,
+                    messages=[
+                        {"role": "user", "content": prompt},
+                        {"role": "assistant", "content": "["},
+                    ],
+                )
+                response_text = "[" + message.content[0].text
+                samples = extract_json_array(response_text)
+            except Exception as e:
+                tqdm.write(
+                    f"Warning: failed to generate {pair['cat_a']}/{pair['cat_b']}: {e}"
+                )
+                continue
+
+            for sample in samples:
+                if not isinstance(sample, str) or not sample.strip():
+                    continue
+                record = {
+                    "text": sample,
+                    "label": pair["label"],
+                    "ambiguous_with": pair["cat_a"] if pair["label"] == pair["cat_b"] else pair["cat_b"],
+                }
+                json.dump(record, f)
+                f.write("\n")
+                count += 1
+
+            tqdm.write(f"  {pair['cat_a']} vs {pair['cat_b']} (label={pair['label']}): {len(samples)} samples")
+
+    print(f"Ambiguous test set: wrote {count} samples to {output_path}")
+    return output_path
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -588,6 +733,8 @@ def main():
         run_perturb_mode(args.output)
     elif args.mode == "test-set":
         run_test_set_mode(fixtures_dir, args.output)
+    elif args.mode == "ambiguous-test-set":
+        run_ambiguous_test_set_mode(args.output, args.api_key, args.model)
     elif args.mode == "all":
         run_all_mode(
             fixtures_dir, args.output, classify_bin, args.api_key, args.samples_per_type, args.model

@@ -82,7 +82,7 @@ enum Commands {
 }
 
 struct Evaluator {
-    predictions: Vec<(String, String)>,
+    predictions: Vec<(String, String, String)>, // (predicted, actual, tier)
 }
 
 impl Evaluator {
@@ -92,9 +92,9 @@ impl Evaluator {
         }
     }
 
-    fn add(&mut self, predicted: &str, actual: &str) {
+    fn add(&mut self, predicted: &str, actual: &str, tier: &str) {
         self.predictions
-            .push((predicted.to_string(), actual.to_string()));
+            .push((predicted.to_string(), actual.to_string(), tier.to_string()));
     }
 
     fn total(&self) -> usize {
@@ -108,7 +108,7 @@ impl Evaluator {
         let correct = self
             .predictions
             .iter()
-            .filter(|(p, a)| p == a)
+            .filter(|(p, a, _)| p == a)
             .count();
         correct as f64 / self.predictions.len() as f64
     }
@@ -117,7 +117,7 @@ impl Evaluator {
         let mut cats: Vec<String> = self
             .predictions
             .iter()
-            .map(|(_, a)| a.clone())
+            .map(|(_, a, _)| a.clone())
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
@@ -125,21 +125,27 @@ impl Evaluator {
         cats
     }
 
+    fn tier_counts(&self) -> (usize, usize) {
+        let structural = self.predictions.iter().filter(|(_, _, t)| t == "structural").count();
+        let model = self.predictions.iter().filter(|(_, _, t)| t == "model").count();
+        (structural, model)
+    }
+
     fn precision_recall_f1(&self, category: &str) -> (f64, f64, f64, usize) {
         let true_positives = self
             .predictions
             .iter()
-            .filter(|(p, a)| p == category && a == category)
+            .filter(|(p, a, _)| p == category && a == category)
             .count();
         let predicted_positive = self
             .predictions
             .iter()
-            .filter(|(p, _)| p == category)
+            .filter(|(p, _, _)| p == category)
             .count();
         let actual_positive = self
             .predictions
             .iter()
-            .filter(|(_, a)| a == category)
+            .filter(|(_, a, _)| a == category)
             .count();
 
         let precision = if predicted_positive > 0 {
@@ -166,7 +172,7 @@ impl Evaluator {
         let n = labels.len();
         let mut matrix = vec![vec![0usize; n]; n];
 
-        for (predicted, actual) in &self.predictions {
+        for (predicted, actual, _) in &self.predictions {
             let actual_idx = labels.iter().position(|l| l == actual).unwrap();
             let predicted_idx = labels.iter().position(|l| l == predicted).unwrap_or(n);
             if predicted_idx < n {
@@ -178,9 +184,12 @@ impl Evaluator {
     }
 
     fn print_report(&self) {
+        let (structural, model) = self.tier_counts();
         eprintln!("── Validation Summary ──");
         eprintln!("  Total samples:     {}", self.total());
         eprintln!("  Overall accuracy:  {:.3}", self.accuracy());
+        eprintln!("  Tier 1 (rules):    {}", structural);
+        eprintln!("  Tier 2 (model):    {}", model);
         eprintln!();
         eprintln!("── Per-Category ──────────────────────────────────");
         eprintln!(
@@ -245,9 +254,12 @@ impl Evaluator {
 
         let (labels, matrix) = self.confusion_matrix();
 
+        let (structural, model) = self.tier_counts();
         serde_json::json!({
             "total": self.total(),
             "accuracy": self.accuracy(),
+            "tier_1_count": structural,
+            "tier_2_count": model,
             "per_category": per_category,
             "confusion_matrix": {
                 "labels": labels,
@@ -652,7 +664,7 @@ fn validate(
 
         if let Some(text) = resolve_field(&doc, text_field) {
             let result = classifier.classify(text);
-            evaluator.add(&result.category.to_string(), label);
+            evaluator.add(&result.category.to_string(), label, &result.tier.to_string());
         }
     }
 
@@ -679,35 +691,35 @@ mod tests {
     #[test]
     fn evaluator_add_increments_total() {
         let mut eval = Evaluator::new();
-        eval.add("prose", "prose");
-        eval.add("code", "prose");
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "prose", "structural");
         assert_eq!(eval.total(), 2);
     }
 
     #[test]
     fn evaluator_accuracy_all_correct() {
         let mut eval = Evaluator::new();
-        eval.add("prose", "prose");
-        eval.add("code", "code");
-        eval.add("tabular", "tabular");
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "code", "structural");
+        eval.add("tabular", "tabular", "structural");
         assert!((eval.accuracy() - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn evaluator_accuracy_none_correct() {
         let mut eval = Evaluator::new();
-        eval.add("code", "prose");
-        eval.add("prose", "code");
+        eval.add("code", "prose", "structural");
+        eval.add("prose", "code", "structural");
         assert!((eval.accuracy() - 0.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn evaluator_accuracy_partial() {
         let mut eval = Evaluator::new();
-        eval.add("prose", "prose");
-        eval.add("code", "prose");
-        eval.add("code", "code");
-        eval.add("prose", "code");
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "prose", "structural");
+        eval.add("code", "code", "structural");
+        eval.add("prose", "code", "structural");
         assert!((eval.accuracy() - 0.5).abs() < f64::EPSILON);
     }
 
@@ -720,9 +732,9 @@ mod tests {
     #[test]
     fn evaluator_categories_sorted() {
         let mut eval = Evaluator::new();
-        eval.add("prose", "code");
-        eval.add("code", "prose");
-        eval.add("tabular", "tabular");
+        eval.add("prose", "code", "structural");
+        eval.add("code", "prose", "structural");
+        eval.add("tabular", "tabular", "structural");
         let cats = eval.categories();
         assert_eq!(cats, vec!["code", "prose", "tabular"]);
     }
@@ -731,12 +743,12 @@ mod tests {
     fn evaluator_precision_recall_f1() {
         let mut eval = Evaluator::new();
         // 3 actual prose, 2 predicted correctly, 1 mislabeled as code
-        eval.add("prose", "prose");
-        eval.add("prose", "prose");
-        eval.add("code", "prose");
+        eval.add("prose", "prose", "structural");
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "prose", "structural");
         // 2 actual code, 1 predicted correctly, 1 mislabeled as prose
-        eval.add("code", "code");
-        eval.add("prose", "code");
+        eval.add("code", "code", "structural");
+        eval.add("prose", "code", "structural");
 
         let (prec, recall, f1, count) = eval.precision_recall_f1("prose");
         // Predicted prose: 3 (2 correct + 1 was actually code) → precision = 2/3
@@ -751,7 +763,7 @@ mod tests {
     #[test]
     fn evaluator_precision_recall_f1_no_predictions() {
         let mut eval = Evaluator::new();
-        eval.add("code", "prose");
+        eval.add("code", "prose", "structural");
         // No predictions for "prose" category — precision 0, recall 0
         // Wait, "code" was predicted, "prose" was actual.
         // precision_recall_f1("prose"): predicted prose = 0, actual prose = 1
@@ -767,11 +779,11 @@ mod tests {
     #[test]
     fn evaluator_confusion_matrix() {
         let mut eval = Evaluator::new();
-        eval.add("prose", "prose");
-        eval.add("prose", "prose");
-        eval.add("code", "prose");
-        eval.add("code", "code");
-        eval.add("prose", "code");
+        eval.add("prose", "prose", "structural");
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "prose", "structural");
+        eval.add("code", "code", "structural");
+        eval.add("prose", "code", "structural");
 
         let (labels, matrix) = eval.confusion_matrix();
         assert_eq!(labels, vec!["code", "prose"]);
@@ -860,8 +872,8 @@ mod tests {
     #[test]
     fn evaluator_to_json_structure() {
         let mut eval = Evaluator::new();
-        eval.add("prose", "prose");
-        eval.add("code", "code");
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "code", "structural");
 
         let json = eval.to_json();
         assert_eq!(json["total"], 2);

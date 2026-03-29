@@ -110,7 +110,7 @@ python-build: ## Build the Python extension (release mode)
 
 # ─── Training Pipeline ─────────────────────────────────────────────────────
 
-.PHONY: training-setup generate-data generate-fixtures generate-test-set train validate test-model train-pipeline build-onnx update-model
+.PHONY: training-setup generate-data generate-fixtures generate-test-set generate-ambiguous train validate test-model test-model-ambiguous train-pipeline build-onnx update-model
 
 training-setup: ## Set up the training Python environment
 	cd training && uv sync --group dev
@@ -133,8 +133,14 @@ ifndef INPUT
 endif
 	cargo run --release -- validate --input $(INPUT)
 
+generate-ambiguous: ## Generate 100 ambiguous boundary-case test samples (requires API key)
+	cd training && uv run python generate.py --mode ambiguous-test-set --output data/
+
 test-model: generate-test-set ## Validate classifier with ONNX model against fixture test set
 	cargo run --release --features onnx-model -- validate --input training/data/test_set.jsonl
+
+test-model-ambiguous: generate-ambiguous ## Validate classifier against ambiguous test samples
+	cargo run --release --features onnx-model -- validate --input training/data/ambiguous_test_set.jsonl
 
 train-pipeline: generate-data train update-model test-model ## Full pipeline: generate → train → embed → validate
 
