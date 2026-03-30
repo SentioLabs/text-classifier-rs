@@ -7,10 +7,22 @@ tasks:
       - python generate_openrouter.py --output data/pilot_samples.jsonl --total-samples 500 --pilot
       - python validate_pilot.py --input data/pilot_samples.jsonl
 
-  train:generate:
-    desc: Generate 60K samples via OpenRouter (full model mix)
+  train:sample-real:
+    desc: Sample ~25K real files from The Stack v1 (14 languages)
     cmds:
-      - python generate_openrouter.py --output data/raw_samples.jsonl --total-samples 60000
+      - python sample_the_stack.py --output data/real_samples.jsonl --per-language 1800
+
+  train:generate-synthetic:
+    desc: Generate ~35K synthetic samples via OpenRouter (full model mix)
+    cmds:
+      - python generate_openrouter.py --output data/synthetic_samples.jsonl --total-samples 35000
+
+  train:generate:
+    desc: Generate full dataset (real + synthetic, ~60K total)
+    cmds:
+      - task train:sample-real
+      - task train:generate-synthetic
+      - cat data/real_samples.jsonl data/synthetic_samples.jsonl > data/raw_samples.jsonl
 
   train:split:
     desc: Split raw samples into 10K eval + 50K training
