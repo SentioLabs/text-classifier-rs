@@ -404,8 +404,8 @@ def _call_api_with_retry(
                 extra_body={
                     "provider": {
                         "data_collection": "deny",
-                        "zdr": True,
                         "allow_fallbacks": True,
+                        "ignore": ["azure"],
                         "sort": "price",
                     },
                 },
