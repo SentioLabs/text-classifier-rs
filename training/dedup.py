@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["faiss-cpu", "sentence-transformers", "pandas", "numpy"]
+# ///
 """FAISS two-layer deduplication pipeline.
 
 Layer 1: Feature-space dedup using L2 distance on structural features.

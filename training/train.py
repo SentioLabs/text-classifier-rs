@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["torch", "pandas", "numpy", "onnx", "onnxruntime"]
+# ///
 """Train a dual-head feedforward neural network on structural text features.
 
 Reads CSV files produced by generate.py and exports the trained model to ONNX

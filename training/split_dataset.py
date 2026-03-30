@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """Split a raw JSONL dataset into eval and training sets.
 
 Produces three output files:

@@ -1,21 +1,27 @@
 version: '3'
 
 tasks:
+  train:setup:
+    desc: Create venv and install dependencies
+    cmds:
+      - uv venv .venv
+      - uv pip install --python .venv/bin/python openai datasets sentence-transformers faiss-cpu pandas numpy torch onnx onnxruntime
+
   train:pilot:
     desc: Generate 500 pilot samples and validate diversity
     cmds:
-      - python generate_openrouter.py --output data/pilot_samples.jsonl --total-samples 500 --pilot
-      - python validate_pilot.py --input data/pilot_samples.jsonl
+      - uv run generate_openrouter.py --output data/pilot_samples.jsonl --total-samples 500 --pilot
+      - uv run validate_pilot.py --input data/pilot_samples.jsonl
 
   train:sample-real:
     desc: Sample ~25K real files from The Stack v1 (14 languages)
     cmds:
-      - python sample_the_stack.py --output data/real_samples.jsonl --per-language 1800
+      - uv run sample_the_stack.py --output data/real_samples.jsonl --per-language 1800
 
   train:generate-synthetic:
     desc: Generate ~35K synthetic samples via OpenRouter (full model mix)
     cmds:
-      - python generate_openrouter.py --output data/synthetic_samples.jsonl --total-samples 35000
+      - uv run generate_openrouter.py --output data/synthetic_samples.jsonl --total-samples 35000
 
   train:generate:
     desc: Generate full dataset (real + synthetic, ~60K total)
@@ -27,17 +33,17 @@ tasks:
   train:split:
     desc: Split raw samples into 10K eval + 50K training
     cmds:
-      - python split_dataset.py --input data/raw_samples.jsonl --eval-output ../eval/clear.jsonl --eval-boundary-output ../eval/boundary.jsonl --train-output data/golden_raw.csv
+      - uv run split_dataset.py --input data/raw_samples.jsonl --eval-output ../eval/clear.jsonl --eval-boundary-output ../eval/boundary.jsonl --train-output data/golden_raw.csv
 
   train:dedup:
     desc: FAISS dedup on training split
     cmds:
-      - python dedup.py --input data/golden_raw.csv --output data/golden_train.csv
+      - uv run dedup.py --input data/golden_raw.csv --output data/golden_train.csv
 
   train:train:
     desc: Train model on deduped golden data
     cmds:
-      - python train.py --input data/golden_train.csv --output output/
+      - uv run train.py --input data/golden_train.csv --output output/
 
   train:update-model:
     desc: Copy trained model to src/ for embedding

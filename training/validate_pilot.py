@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """Pilot validation script for auditing generated sample batches.
 
 Checks model diversity, template coverage, and classifier performance

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["datasets"]
+# ///
 """Sample real code/text from bigcode/the-stack (v1) for training data.
 
 Downloads and filters real code samples from The Stack v1 dataset for 14

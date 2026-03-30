@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["openai"]
+# ///
 """Multi-model OpenRouter generation script for synthetic training data.
 
 Uses the OpenRouter API (OpenAI-compatible) to generate diverse synthetic text
