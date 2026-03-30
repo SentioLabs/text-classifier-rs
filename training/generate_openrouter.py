@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["openai"]
+# dependencies = ["openai", "tqdm"]
 # ///
 """Multi-model OpenRouter generation script for synthetic training data.
 
@@ -23,6 +23,8 @@ import os
 import random
 import sys
 import time
+
+from tqdm import tqdm
 
 try:
     import openai
@@ -422,7 +424,9 @@ def generate_samples(
     template_cycle = itertools.cycle(templates)
     bucket_cycle = itertools.cycle(bucket_names)
 
+    pbar = tqdm(total=count, desc=f"  {sub_type}", unit="sample", leave=False)
     collected = 0
+    empty_streak = 0
     while collected < count:
         model_id = _select_model(models)
         domain = next(domain_cycle)
@@ -440,7 +444,15 @@ def generate_samples(
             {"role": "user", "content": prompt},
         ]
 
+        pbar.set_postfix(model=model_id.split("/")[-1], domain=domain[:12])
         raw_samples = _call_api_with_retry(client, model_id, messages, temperature)
+
+        if not raw_samples:
+            empty_streak += 1
+            if empty_streak >= 3:
+                break
+            continue
+        empty_streak = 0
 
         for raw in raw_samples:
             if collected >= count:
@@ -465,11 +477,9 @@ def generate_samples(
             if validate_sample(sample):
                 results.append(sample)
                 collected += 1
+                pbar.update(1)
 
-        # Safety: break if API keeps returning empty
-        if not raw_samples:
-            break
-
+    pbar.close()
     return results
 
 
@@ -491,9 +501,11 @@ def generate_boundary_samples(
     domain_cycle = itertools.cycle(DOMAIN_SEEDS)
     bucket_cycle = itertools.cycle(bucket_names)
 
+    pbar = tqdm(total=count, desc=f"  {cat_a}/{cat_b}", unit="sample", leave=False)
     for label in [cat_a, cat_b]:
         other = cat_b if label == cat_a else cat_a
         collected = 0
+        empty_streak = 0
         while collected < per_direction:
             domain = next(domain_cycle)
             bucket = next(bucket_cycle)
@@ -517,7 +529,15 @@ def generate_boundary_samples(
                 {"role": "user", "content": prompt},
             ]
 
+            pbar.set_postfix(label=label, model=model_id.split("/")[-1])
             raw_samples = _call_api_with_retry(client, model_id, messages, temperature)
+
+            if not raw_samples:
+                empty_streak += 1
+                if empty_streak >= 3:
+                    break
+                continue
+            empty_streak = 0
 
             for raw in raw_samples:
                 if collected >= per_direction:
@@ -542,10 +562,9 @@ def generate_boundary_samples(
                 if validate_sample(sample):
                     results.append(sample)
                     collected += 1
+                    pbar.update(1)
 
-            if not raw_samples:
-                break
-
+    pbar.close()
     return results
 
 
@@ -658,23 +677,19 @@ def main(argv: list[str] | None = None) -> None:
     generated = existing_count
 
     # Generate clear samples per sub-type
-    for sub_type, config in SUB_TYPE_CONFIG.items():
+    print(f"\nGenerating clear samples ({per_sub_type}/sub-type, {len(SUB_TYPE_CONFIG)} sub-types):")
+    for sub_type, config in tqdm(SUB_TYPE_CONFIG.items(), desc="Sub-types", unit="type"):
         samples = generate_samples(sub_type, per_sub_type, config, client)
         all_samples.extend(samples)
         generated += len(samples)
 
-        if generated % 500 == 0 or len(all_samples) % 500 == 0:
-            print(f"Progress: {generated} samples generated")
-
     # Generate boundary samples
     boundary_per_pair = max(1, (total - len(all_samples) - existing_count) // len(BOUNDARY_PAIRS))
-    for pair in BOUNDARY_PAIRS:
+    print(f"\nGenerating boundary samples ({boundary_per_pair}/pair, {len(BOUNDARY_PAIRS)} pairs):")
+    for pair in tqdm(BOUNDARY_PAIRS, desc="Pairs", unit="pair"):
         samples = generate_boundary_samples(pair, boundary_per_pair, client)
         all_samples.extend(samples)
         generated += len(samples)
-
-        if generated % 500 == 0:
-            print(f"Progress: {generated} samples generated")
 
     # Write output
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
