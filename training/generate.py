@@ -10,7 +10,9 @@ Modes:
 
 import argparse
 import csv
+import itertools
 import json
+import math
 import os
 import random
 import re
@@ -36,6 +38,108 @@ DIRECTORY_TO_CATEGORY = {
     "tabular": "structured",
     "pdf_dump": "artifact",
 }
+
+# Shared constant (verbatim from T0: Foundation)
+VALID_CATEGORIES = {"prose", "code", "structured", "artifact"}
+
+# All 33 ContentSubType variants grouped by category (mirrors types.rs)
+GOLDEN_SUB_TYPES = {
+    "prose": [
+        "plain", "markdown", "rst", "latex",
+    ],
+    "code": [
+        # Languages
+        "python", "javascript", "typescript", "rust", "go", "java", "sql", "shell", "css",
+        # Config
+        "yaml", "toml", "ini", "dockerfile", "makefile",
+        # Markup
+        "html", "xml", "sgml",
+    ],
+    "structured": [
+        # Tabular
+        "csv", "tsv", "pipe_table", "fixed_width",
+        # Data
+        "json", "jsonl", "key_value", "log_lines",
+    ],
+    "artifact": [
+        "pdf_dump", "ocr_garbage", "boilerplate",
+    ],
+}
+
+# 50+ domain seeds for variety
+GOLDEN_DOMAIN_SEEDS = [
+    "astronomy", "finance", "healthcare", "devops", "gaming",
+    "machine learning", "cybersecurity", "education", "agriculture",
+    "automotive", "aviation", "biology", "chemistry", "climate science",
+    "cryptocurrency", "data engineering", "e-commerce", "electronics",
+    "energy", "environmental science", "fashion", "food science",
+    "genetics", "geography", "government", "insurance", "journalism",
+    "law", "linguistics", "logistics", "manufacturing", "marine biology",
+    "marketing", "mathematics", "meteorology", "military", "music",
+    "nanotechnology", "neuroscience", "nuclear physics", "oceanography",
+    "pharmacology", "philosophy", "photography", "political science",
+    "psychology", "real estate", "robotics", "sociology", "sports",
+    "telecommunications", "urban planning", "veterinary medicine",
+]
+
+# Length buckets: (min_lines, max_lines)
+GOLDEN_LENGTH_BUCKETS = {
+    "short": (3, 10),
+    "medium": (20, 50),
+    "long": (100, 200),
+}
+
+# Boundary pairs for golden training data (reuses existing AMBIGUOUS_PAIRS pattern)
+GOLDEN_BOUNDARY_PAIRS = [
+    {
+        "cat_a": "code",
+        "cat_b": "structured",
+        "label": "code",
+        "examples": "- TOML/INI config files (key=value but are config code)\n"
+                    "- YAML with data-like content\n"
+                    "- .env files with connection strings",
+    },
+    {
+        "cat_a": "code",
+        "cat_b": "prose",
+        "label": "code",
+        "examples": "- Python with extensive docstrings\n"
+                    "- Shell scripts with long comment blocks\n"
+                    "- SQL with detailed inline comments",
+    },
+    {
+        "cat_a": "prose",
+        "cat_b": "code",
+        "label": "prose",
+        "examples": "- Technical documentation about code\n"
+                    "- API reference with code-like terms\n"
+                    "- README files describing functions",
+    },
+    {
+        "cat_a": "prose",
+        "cat_b": "structured",
+        "label": "prose",
+        "examples": "- Markdown with tables and lists\n"
+                    "- Technical writing with key-value descriptions\n"
+                    "- Reports with tabular data embedded in text",
+    },
+    {
+        "cat_a": "structured",
+        "cat_b": "code",
+        "label": "structured",
+        "examples": "- JSON with code-like field names\n"
+                    "- CSV with URL columns and special characters\n"
+                    "- Log files with structured + freeform fields",
+    },
+    {
+        "cat_a": "artifact",
+        "cat_b": "structured",
+        "label": "artifact",
+        "examples": "- OCR'd tables with garbled text\n"
+                    "- PDF-extracted invoices with broken formatting\n"
+                    "- Scanned forms with partial structure",
+    },
+]
 
 # (category, sub_type) pairs for synthetic generation
 SYNTHETIC_TYPE_PAIRS = [
@@ -215,7 +319,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "fixtures", "synthetic", "perturb", "test-set", "ambiguous-test-set"],
+        choices=["all", "fixtures", "synthetic", "perturb", "test-set", "ambiguous-test-set", "golden-train"],
         default="all",
         help="Generation mode (default: all)",
     )
@@ -239,6 +343,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         default="claude-sonnet-4-20250514",
         help="Claude model for synthetic generation (default: claude-sonnet-4-20250514)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Print what would be generated without calling the API (golden-train mode only).",
     )
     return parser
 
@@ -699,6 +809,328 @@ def run_ambiguous_test_set_mode(
 
 
 # ---------------------------------------------------------------------------
+# Mode: golden-train
+# ---------------------------------------------------------------------------
+
+
+GOLDEN_CLEAR_PROMPT_TEMPLATE = """\
+Generate {n} diverse examples of {sub_type} text content (category: {category}) \
+about {domain}.
+
+Each example should be a realistic text sample ({lo}-{hi} lines) that a classifier \
+would unambiguously identify as "{category}" with sub-type "{sub_type}".
+
+Vary the style, complexity, and content within the domain of {domain}.
+
+You MUST respond with ONLY a valid JSON array of strings. No markdown fences, \
+no explanation, no preamble. The first character of your response must be [ and \
+the last character must be ]."""
+
+
+GOLDEN_BOUNDARY_PROMPT_TEMPLATE = """\
+Generate {n} text samples about {domain} that are genuinely AMBIGUOUS between \
+the categories "{cat_a}" and "{cat_b}".
+
+Each sample should be realistic text ({lo}-{hi} lines) that could plausibly be \
+classified as either category. The ground truth label is "{label}" but the text \
+should have strong features of both categories.
+
+Examples of ambiguity between these categories:
+{examples}
+
+Vary the style and content. Each sample should be ambiguous in a DIFFERENT way.
+
+You MUST respond with ONLY a valid JSON array of strings. No markdown fences, \
+no explanation. First character must be [ and last must be ]."""
+
+
+GOLDEN_BATCH_SIZE = 20
+
+
+def generate_golden_clear(
+    category: str,
+    sub_types: list[str],
+    count: int,
+    domain_seeds: list[str],
+    length_buckets: dict[str, tuple[int, int]],
+    client=None,
+    model: str = "claude-sonnet-4-20250514",
+) -> list[dict]:
+    """Generate unambiguous training samples for a category.
+
+    For each sub-type under the category, generates ``count / len(sub_types)``
+    samples. Rotates domain seeds (each batch of 20 gets a different domain)
+    and cycles through length buckets.
+
+    Returns a list of dicts with keys: text, category, sub_type, source.
+    """
+    if client is None:
+        import anthropic
+        client = anthropic.Anthropic()
+
+    results: list[dict] = []
+    bucket_names = list(length_buckets.keys())
+    per_sub_type = max(1, count // len(sub_types))
+
+    for sub_type in sub_types:
+        seed_cycle = itertools.cycle(domain_seeds)
+        bucket_cycle = itertools.cycle(bucket_names)
+        collected = 0
+
+        while collected < per_sub_type:
+            remaining = per_sub_type - collected
+            batch_n = min(GOLDEN_BATCH_SIZE, remaining)
+            domain = next(seed_cycle)
+            bucket = next(bucket_cycle)
+            lo, hi = length_buckets[bucket]
+
+            prompt = GOLDEN_CLEAR_PROMPT_TEMPLATE.format(
+                n=batch_n,
+                category=category,
+                sub_type=sub_type,
+                domain=domain,
+                lo=lo,
+                hi=hi,
+            )
+            try:
+                message = client.messages.create(
+                    model=model,
+                    max_tokens=8192,
+                    temperature=0.95,
+                    messages=[
+                        {"role": "user", "content": prompt},
+                        {"role": "assistant", "content": "["},
+                    ],
+                )
+                response_text = "[" + message.content[0].text
+                samples = extract_json_array(response_text)
+            except Exception as e:
+                tqdm.write(
+                    f"Warning: failed to generate {category}/{sub_type}: {e}"
+                )
+                break
+
+            for sample in samples:
+                if collected >= per_sub_type:
+                    break
+                if not isinstance(sample, str) or not sample.strip():
+                    continue
+                results.append({
+                    "text": sample,
+                    "category": category,
+                    "sub_type": sub_type,
+                    "source": "golden_clear",
+                })
+                collected += 1
+
+    return results
+
+
+def generate_golden_boundary(
+    pair: dict,
+    count: int,
+    domain_seeds: list[str],
+    length_buckets: dict[str, tuple[int, int]],
+    client=None,
+    model: str = "claude-sonnet-4-20250514",
+) -> list[dict]:
+    """Generate boundary training samples for a category pair.
+
+    Labels come from the prompt, not the classifier. Rotates domain seeds
+    and length buckets for variety.
+
+    Returns a list of dicts with keys: text, category, sub_type, source.
+    """
+    if client is None:
+        import anthropic
+        client = anthropic.Anthropic()
+
+    results: list[dict] = []
+    bucket_names = list(length_buckets.keys())
+    seed_cycle = itertools.cycle(domain_seeds)
+    bucket_cycle = itertools.cycle(bucket_names)
+    collected = 0
+
+    while collected < count:
+        remaining = count - collected
+        batch_n = min(GOLDEN_BATCH_SIZE, remaining)
+        domain = next(seed_cycle)
+        bucket = next(bucket_cycle)
+        lo, hi = length_buckets[bucket]
+
+        prompt = GOLDEN_BOUNDARY_PROMPT_TEMPLATE.format(
+            n=batch_n,
+            cat_a=pair["cat_a"],
+            cat_b=pair["cat_b"],
+            label=pair["label"],
+            examples=pair["examples"],
+            domain=domain,
+            lo=lo,
+            hi=hi,
+        )
+        try:
+            message = client.messages.create(
+                model=model,
+                max_tokens=8192,
+                temperature=0.95,
+                messages=[
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": "["},
+                ],
+            )
+            response_text = "[" + message.content[0].text
+            samples = extract_json_array(response_text)
+        except Exception as e:
+            tqdm.write(
+                f"Warning: failed to generate boundary {pair['cat_a']}/{pair['cat_b']}: {e}"
+            )
+            break
+
+        for sample in samples:
+            if collected >= count:
+                break
+            if not isinstance(sample, str) or not sample.strip():
+                continue
+            results.append({
+                "text": sample,
+                "category": pair["label"],
+                "sub_type": f"boundary_{pair['cat_a']}_{pair['cat_b']}",
+                "source": "golden_boundary",
+            })
+            collected += 1
+
+    return results
+
+
+def run_golden_train_mode(
+    output_dir: str,
+    samples_per_type: int = 200,
+    api_key: str | None = None,
+    model: str = "claude-sonnet-4-20250514",
+    dry_run: bool = False,
+) -> str | None:
+    """Run golden-train generation mode.
+
+    Generates clear samples (per sub-type) and boundary samples (per pair),
+    writing results to ``golden_raw.csv``.
+
+    Args:
+        output_dir: Directory to write the output CSV.
+        samples_per_type: Number of samples per sub-type for clear generation.
+        api_key: Anthropic API key. Falls back to ANTHROPIC_API_KEY env var.
+        model: Claude model to use.
+        dry_run: If True, print summary without calling the API.
+
+    Returns:
+        Path to the output CSV, or None if dry run.
+    """
+    if dry_run:
+        _run_golden_train_dry(output_dir, samples_per_type)
+        return None
+
+    if not api_key:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print(
+            "Error: ANTHROPIC_API_KEY required for golden-train generation.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        import anthropic
+    except ImportError:
+        print("Error: anthropic package required.", file=sys.stderr)
+        sys.exit(1)
+
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "golden_raw.csv")
+    client = anthropic.Anthropic(api_key=api_key)
+
+    all_rows: list[dict] = []
+
+    # Generate clear samples
+    for category in sorted(VALID_CATEGORIES):
+        sub_types = GOLDEN_SUB_TYPES[category]
+        print(f"Generating {samples_per_type * len(sub_types)} clear samples for '{category}' "
+              f"({samples_per_type} x {len(sub_types)} sub-types)...")
+        samples = generate_golden_clear(
+            category=category,
+            sub_types=sub_types,
+            count=samples_per_type * len(sub_types),
+            domain_seeds=GOLDEN_DOMAIN_SEEDS,
+            length_buckets=GOLDEN_LENGTH_BUCKETS,
+            client=client,
+            model=model,
+        )
+        all_rows.extend(samples)
+        print(f"  Done: {len(samples)} clear samples for '{category}'")
+
+    # Generate boundary samples
+    boundary_per_pair = 4000
+    for pair in GOLDEN_BOUNDARY_PAIRS:
+        pair_label = f"{pair['cat_a']}_vs_{pair['cat_b']}"
+        print(f"Generating {boundary_per_pair} boundary samples for '{pair_label}'...")
+        samples = generate_golden_boundary(
+            pair=pair,
+            count=boundary_per_pair,
+            domain_seeds=GOLDEN_DOMAIN_SEEDS,
+            length_buckets=GOLDEN_LENGTH_BUCKETS,
+            client=client,
+            model=model,
+        )
+        all_rows.extend(samples)
+        print(f"  Done: {len(samples)} boundary samples for '{pair_label}'")
+
+    # Write CSV
+    golden_columns = ["text", "category", "sub_type", "source"]
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=golden_columns)
+        writer.writeheader()
+        writer.writerows(all_rows)
+
+    print(f"Golden train: wrote {len(all_rows)} rows to {output_path}")
+    return output_path
+
+
+def _run_golden_train_dry(output_dir: str, samples_per_type: int) -> None:
+    """Print a summary of what golden-train would generate."""
+    print("=== DRY RUN (golden-train) ===")
+    print(f"Output directory: {output_dir}")
+    print()
+
+    print("Clear samples:")
+    total_clear = 0
+    for category in sorted(VALID_CATEGORIES):
+        sub_types = GOLDEN_SUB_TYPES[category]
+        cat_total = samples_per_type * len(sub_types)
+        total_clear += cat_total
+        batches = math.ceil(cat_total / GOLDEN_BATCH_SIZE)
+        print(f"  - {category}: {len(sub_types)} sub-types x {samples_per_type} = "
+              f"{cat_total} samples ({batches} API calls)")
+        for st in sub_types:
+            per_st = max(1, cat_total // len(sub_types))
+            print(f"      {st}: {per_st} samples")
+    print(f"  Total clear: {total_clear}")
+    print()
+
+    print("Boundary samples:")
+    boundary_per_pair = 4000
+    total_boundary = boundary_per_pair * len(GOLDEN_BOUNDARY_PAIRS)
+    for pair in GOLDEN_BOUNDARY_PAIRS:
+        batches = math.ceil(boundary_per_pair / GOLDEN_BATCH_SIZE)
+        print(f"  - {pair['cat_a']} vs {pair['cat_b']} (label={pair['label']}): "
+              f"{boundary_per_pair} samples ({batches} API calls)")
+    print(f"  Total boundary: {total_boundary}")
+    print()
+
+    print(f"Grand total: {total_clear + total_boundary} samples")
+    print(f"Domain seeds: {len(GOLDEN_DOMAIN_SEEDS)} topics")
+    print(f"Length buckets: {', '.join(GOLDEN_LENGTH_BUCKETS.keys())}")
+    print("=== END DRY RUN ===")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -735,6 +1167,14 @@ def main():
         run_test_set_mode(fixtures_dir, args.output)
     elif args.mode == "ambiguous-test-set":
         run_ambiguous_test_set_mode(args.output, args.api_key, args.model)
+    elif args.mode == "golden-train":
+        run_golden_train_mode(
+            output_dir=args.output,
+            samples_per_type=args.samples_per_type,
+            api_key=args.api_key,
+            model=args.model,
+            dry_run=args.dry_run,
+        )
     elif args.mode == "all":
         run_all_mode(
             fixtures_dir, args.output, classify_bin, args.api_key, args.samples_per_type, args.model

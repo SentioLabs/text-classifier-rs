@@ -289,3 +289,273 @@ class TestArgParsing:
         assert args.output == "/tmp/out"
         assert args.samples_per_type == 10
         assert args.api_key == "test-key"
+
+    def test_golden_train_mode_accepted(self):
+        from generate import build_parser
+
+        parser = build_parser()
+        args = parser.parse_args([
+            "--mode", "golden-train",
+            "--output", "/tmp/out",
+            "--samples-per-type", "1",
+            "--dry-run",
+        ])
+        assert args.mode == "golden-train"
+        assert args.dry_run is True
+
+    def test_dry_run_defaults_to_false(self):
+        from generate import build_parser
+
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.dry_run is False
+
+
+# ---------------------------------------------------------------------------
+# Tests for golden-train constants
+# ---------------------------------------------------------------------------
+
+
+class TestGoldenTrainConstants:
+    def test_valid_categories_defined(self):
+        from generate import VALID_CATEGORIES
+
+        assert VALID_CATEGORIES == {"prose", "code", "structured", "artifact"}
+
+    def test_golden_sub_types_covers_all_categories(self):
+        from generate import GOLDEN_SUB_TYPES, VALID_CATEGORIES
+
+        for cat in VALID_CATEGORIES:
+            assert cat in GOLDEN_SUB_TYPES, f"Missing category {cat} in GOLDEN_SUB_TYPES"
+            assert len(GOLDEN_SUB_TYPES[cat]) > 0, f"No sub-types for {cat}"
+
+    def test_golden_sub_types_total_count(self):
+        """All trainable ContentSubType variants should be present (32 total,
+        excluding skip/fallback types: TooShort, Empty, Ambiguous, Unknown)."""
+        from generate import GOLDEN_SUB_TYPES
+
+        total = sum(len(v) for v in GOLDEN_SUB_TYPES.values())
+        assert total == 32
+
+    def test_golden_domain_seeds_has_50_plus(self):
+        from generate import GOLDEN_DOMAIN_SEEDS
+
+        assert len(GOLDEN_DOMAIN_SEEDS) >= 50
+
+    def test_golden_length_buckets_defined(self):
+        from generate import GOLDEN_LENGTH_BUCKETS
+
+        assert "short" in GOLDEN_LENGTH_BUCKETS
+        assert "medium" in GOLDEN_LENGTH_BUCKETS
+        assert "long" in GOLDEN_LENGTH_BUCKETS
+        assert GOLDEN_LENGTH_BUCKETS["short"] == (3, 10)
+        assert GOLDEN_LENGTH_BUCKETS["medium"] == (20, 50)
+        assert GOLDEN_LENGTH_BUCKETS["long"] == (100, 200)
+
+    def test_golden_boundary_pairs_defined(self):
+        from generate import GOLDEN_BOUNDARY_PAIRS
+
+        assert len(GOLDEN_BOUNDARY_PAIRS) == 6
+        # Each pair should have cat_a, cat_b, label, examples
+        for pair in GOLDEN_BOUNDARY_PAIRS:
+            assert "cat_a" in pair
+            assert "cat_b" in pair
+            assert "label" in pair
+            assert "examples" in pair
+
+
+# ---------------------------------------------------------------------------
+# Tests for golden-train dry run
+# ---------------------------------------------------------------------------
+
+
+class TestGoldenTrainDryRun:
+    def test_dry_run_prints_summary(self, capsys):
+        from generate import run_golden_train_mode
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_golden_train_mode(
+                output_dir=tmpdir,
+                samples_per_type=1,
+                dry_run=True,
+            )
+            captured = capsys.readouterr()
+            assert "DRY RUN" in captured.out
+            assert "prose" in captured.out
+            assert "code" in captured.out
+            assert "structured" in captured.out
+            assert "artifact" in captured.out
+
+    def test_dry_run_does_not_create_csv(self):
+        from generate import run_golden_train_mode
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_golden_train_mode(
+                output_dir=tmpdir,
+                samples_per_type=1,
+                dry_run=True,
+            )
+            csv_path = os.path.join(tmpdir, "golden_raw.csv")
+            assert not os.path.exists(csv_path)
+
+    def test_dry_run_shows_sample_counts(self, capsys):
+        from generate import run_golden_train_mode
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_golden_train_mode(
+                output_dir=tmpdir,
+                samples_per_type=200,
+                dry_run=True,
+            )
+            captured = capsys.readouterr()
+            # Should show per-sub-type counts and boundary pair counts
+            assert "clear" in captured.out.lower() or "Clear" in captured.out
+            assert "boundary" in captured.out.lower() or "Boundary" in captured.out
+
+    def test_dry_run_shows_domain_seed_count(self, capsys):
+        from generate import run_golden_train_mode
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_golden_train_mode(
+                output_dir=tmpdir,
+                samples_per_type=1,
+                dry_run=True,
+            )
+            captured = capsys.readouterr()
+            assert "domain" in captured.out.lower() or "Domain" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Tests for generate_golden_clear function
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateGoldenClear:
+    def test_function_signature(self):
+        from generate import generate_golden_clear
+        import inspect
+
+        sig = inspect.signature(generate_golden_clear)
+        params = list(sig.parameters.keys())
+        assert "category" in params
+        assert "sub_types" in params
+        assert "count" in params
+        assert "domain_seeds" in params
+        assert "length_buckets" in params
+
+    def test_returns_list_of_dicts(self):
+        """With a mock client, should return sample dicts."""
+        from generate import generate_golden_clear, GOLDEN_LENGTH_BUCKETS
+
+        # Mock the anthropic client
+        mock_client = mock.MagicMock()
+        mock_response = mock.MagicMock()
+        mock_response.content = [mock.MagicMock()]
+        mock_response.content[0].text = '"Sample text for testing.\\nLine 2."]'
+        mock_client.messages.create.return_value = mock_response
+
+        results = generate_golden_clear(
+            category="prose",
+            sub_types=["plain"],
+            count=1,
+            domain_seeds=["astronomy"],
+            length_buckets=GOLDEN_LENGTH_BUCKETS,
+            client=mock_client,
+        )
+        assert isinstance(results, list)
+        assert len(results) >= 1
+        assert "text" in results[0]
+        assert "category" in results[0]
+        assert "sub_type" in results[0]
+        assert "source" in results[0]
+        assert results[0]["category"] == "prose"
+        assert results[0]["source"] == "golden_clear"
+
+    def test_distributes_across_sub_types(self):
+        """Count should be distributed across sub-types."""
+        from generate import generate_golden_clear, GOLDEN_LENGTH_BUCKETS
+
+        mock_client = mock.MagicMock()
+        mock_response = mock.MagicMock()
+        mock_response.content = [mock.MagicMock()]
+        mock_response.content[0].text = '"Sample text."]'
+        mock_client.messages.create.return_value = mock_response
+
+        results = generate_golden_clear(
+            category="prose",
+            sub_types=["plain", "markdown"],
+            count=4,
+            domain_seeds=["astronomy"],
+            length_buckets=GOLDEN_LENGTH_BUCKETS,
+            client=mock_client,
+        )
+        # Should have called the API for both sub-types
+        calls = mock_client.messages.create.call_args_list
+        prompts = [str(c) for c in calls]
+        assert any("plain" in p for p in prompts)
+        assert any("markdown" in p for p in prompts)
+
+
+# ---------------------------------------------------------------------------
+# Tests for generate_golden_boundary function
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateGoldenBoundary:
+    def test_function_signature(self):
+        from generate import generate_golden_boundary
+        import inspect
+
+        sig = inspect.signature(generate_golden_boundary)
+        params = list(sig.parameters.keys())
+        assert "pair" in params
+        assert "count" in params
+        assert "domain_seeds" in params
+        assert "length_buckets" in params
+
+    def test_returns_list_of_dicts(self):
+        from generate import generate_golden_boundary, GOLDEN_LENGTH_BUCKETS
+
+        mock_client = mock.MagicMock()
+        mock_response = mock.MagicMock()
+        mock_response.content = [mock.MagicMock()]
+        mock_response.content[0].text = '"Ambiguous boundary text."]'
+        mock_client.messages.create.return_value = mock_response
+
+        pair = {"cat_a": "prose", "cat_b": "code", "label": "prose", "examples": "mixed content"}
+        results = generate_golden_boundary(
+            pair=pair,
+            count=1,
+            domain_seeds=["astronomy"],
+            length_buckets=GOLDEN_LENGTH_BUCKETS,
+            client=mock_client,
+        )
+        assert isinstance(results, list)
+        assert len(results) >= 1
+        assert "text" in results[0]
+        assert "category" in results[0]
+        assert "source" in results[0]
+        assert results[0]["source"] == "golden_boundary"
+
+
+# ---------------------------------------------------------------------------
+# Tests for golden-train CLI integration
+# ---------------------------------------------------------------------------
+
+
+class TestGoldenTrainCLI:
+    def test_main_routes_golden_train(self):
+        """Verify that --mode golden-train routes to run_golden_train_mode."""
+        from generate import build_parser
+
+        parser = build_parser()
+        args = parser.parse_args([
+            "--mode", "golden-train",
+            "--output", "/tmp/test_golden",
+            "--samples-per-type", "1",
+            "--dry-run",
+        ])
+        assert args.mode == "golden-train"
+        assert args.output == "/tmp/test_golden"
+        assert args.samples_per_type == 1
+        assert args.dry_run is True
