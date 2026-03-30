@@ -75,18 +75,53 @@ ALL_MODELS: list[str] = PRIMARY_MODELS + SECONDARY_MODELS + EDGE_CASE_MODELS
 # ---------------------------------------------------------------------------
 
 DOMAIN_SEEDS: list[str] = [
-    "astronomy", "finance", "healthcare", "devops", "gaming",
-    "machine learning", "cybersecurity", "education", "agriculture",
-    "automotive", "aviation", "biology", "chemistry", "climate science",
-    "cryptocurrency", "data engineering", "e-commerce", "electronics",
-    "energy", "environmental science", "fashion", "food science",
-    "genetics", "geography", "government", "insurance", "journalism",
-    "law", "linguistics", "logistics", "manufacturing", "marine biology",
-    "marketing", "mathematics", "meteorology", "military", "music",
-    "nanotechnology", "neuroscience", "nuclear physics", "oceanography",
-    "pharmacology", "philosophy", "photography", "political science",
-    "psychology", "real estate", "robotics", "sociology", "sports",
-    "telecommunications", "urban planning", "veterinary medicine",
+    # Sciences & academia
+    "astronomy", "biology", "chemistry", "climate science", "genetics",
+    "marine biology", "mathematics", "meteorology", "neuroscience",
+    "nuclear physics", "oceanography", "pharmacology", "physics",
+    # Medicine & health
+    "healthcare", "medical imaging", "clinical trials", "epidemiology",
+    # Software & tech verticals
+    "web development", "mobile apps", "microservices", "REST APIs",
+    "database design", "frontend frameworks", "backend systems",
+    "distributed systems", "cloud infrastructure", "serverless",
+    "machine learning", "data engineering", "data pipelines",
+    "search engines", "recommendation systems", "computer vision",
+    # DevOps & infrastructure
+    "devops", "CI/CD pipelines", "container orchestration",
+    "monitoring and alerting", "DNS and networking", "load balancing",
+    "infrastructure as code", "site reliability engineering",
+    # Security
+    "cybersecurity", "authentication systems", "encryption",
+    "penetration testing", "compliance auditing",
+    # Business & enterprise
+    "finance", "accounting", "payroll systems", "inventory management",
+    "CRM systems", "ERP integration", "invoicing", "HR management",
+    "insurance", "real estate", "supply chain",
+    # Consumer & lifestyle
+    "e-commerce", "social media", "fitness tracking", "recipe management",
+    "travel planning", "personal finance", "streaming media",
+    "gaming", "music production", "photography",
+    # Data formats & reporting
+    "log analysis", "CSV report generation", "API response formatting",
+    "database migrations", "ETL pipelines", "data warehousing",
+    # Creative & content
+    "journalism", "technical writing", "fiction writing",
+    "screenwriting", "game design documentation", "API documentation",
+    # Legal & compliance
+    "GDPR compliance", "HIPAA regulations", "terms of service",
+    "privacy policies", "audit logging", "legal contracts",
+    # Education
+    "education", "online courses", "exam systems", "grading platforms",
+    # Industry & manufacturing
+    "manufacturing", "robotics", "automotive", "aviation",
+    "agriculture", "energy", "telecommunications",
+    # Misc
+    "cryptocurrency", "urban planning", "logistics",
+    "environmental science", "fashion", "food science",
+    "linguistics", "marketing", "philosophy", "political science",
+    "psychology", "sociology", "sports", "veterinary medicine",
+    "electronics", "nanotechnology", "military", "government",
 ]
 
 # ---------------------------------------------------------------------------
