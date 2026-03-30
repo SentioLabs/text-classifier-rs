@@ -401,6 +401,13 @@ def _call_api_with_retry(
                 model=model,
                 messages=messages,
                 temperature=temperature,
+                extra_body={
+                    "provider": {
+                        "data_collection": "deny",
+                        "allow_fallbacks": True,
+                        "sort": "price",
+                    },
+                },
             )
             content = response.choices[0].message.content.strip()
             # Strip markdown fences if present
