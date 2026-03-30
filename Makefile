@@ -2,8 +2,6 @@
 	python-setup python-build \
 	install run review \
 	release-build release-local release-list release-show release-download release-delete release-pr \
-	generate-golden-eval generate-golden-train dedup golden-pipeline \
-	validate-golden validate-golden-clear validate-golden-boundary \
 	help
 
 # Build metadata
@@ -215,30 +213,6 @@ endif
 
 release-pr: ## Show the current release-please PR (if any)
 	@gh pr list --label "autorelease: pending" --json number,title,url --template '{{range .}}#{{.number}} {{.title}}{{"\n"}}  {{.url}}{{"\n"}}{{else}}No pending release PR{{"\n"}}{{end}}'
-
-#
-# Golden Eval & Training
-#
-
-generate-golden-eval: ## Generate golden evaluation sets (clear + boundary)
-	python training/generate_eval.py --mode all --output-dir eval/
-
-generate-golden-train: ## Generate raw golden training data
-	python training/generate.py --mode golden-train --output-dir training/data/
-
-dedup: ## Deduplicate golden training data
-	python training/dedup.py --input training/data/golden_raw.csv --output training/data/golden_train.csv
-
-golden-pipeline: generate-golden-train dedup train update-model validate-golden ## Full golden pipeline: generate → dedup → train → update → validate
-
-validate-golden: validate-golden-clear validate-golden-boundary ## Validate model against both golden eval sets
-	@echo "=== Golden validation complete ==="
-
-validate-golden-clear: ## Validate model against clear eval set
-	cargo run --release -- validate --input eval/clear.jsonl --model model.bin
-
-validate-golden-boundary: ## Validate model against boundary eval set
-	cargo run --release -- validate --input eval/boundary.jsonl --model model.bin
 
 # Help target for self-documentation
 help: ## Display this help

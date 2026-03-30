@@ -1,0 +1,51 @@
+version: '3'
+
+tasks:
+  train:pilot:
+    desc: Generate 500 pilot samples and validate diversity
+    cmds:
+      - python generate_openrouter.py --output data/pilot_samples.jsonl --total-samples 500 --pilot
+      - python validate_pilot.py --input data/pilot_samples.jsonl
+
+  train:generate:
+    desc: Generate 60K samples via OpenRouter (full model mix)
+    cmds:
+      - python generate_openrouter.py --output data/raw_samples.jsonl --total-samples 60000
+
+  train:split:
+    desc: Split raw samples into 10K eval + 50K training
+    cmds:
+      - python split_dataset.py --input data/raw_samples.jsonl --eval-output ../eval/clear.jsonl --eval-boundary-output ../eval/boundary.jsonl --train-output data/golden_raw.csv
+
+  train:dedup:
+    desc: FAISS dedup on training split
+    cmds:
+      - python dedup.py --input data/golden_raw.csv --output data/golden_train.csv
+
+  train:train:
+    desc: Train model on deduped golden data
+    cmds:
+      - python train.py --input data/golden_train.csv --output output/
+
+  train:update-model:
+    desc: Copy trained model to src/ for embedding
+    cmds:
+      - cp output/model.onnx ../src/model.onnx
+      - cp output/model_config.json ../src/model_config.json
+
+  train:validate:
+    desc: Validate against both golden eval sets
+    cmds:
+      - cd .. && cargo build --release --features onnx-model
+      - cd .. && ./target/release/classify validate --input eval/clear.jsonl --json
+      - cd .. && ./target/release/classify validate --input eval/boundary.jsonl --json
+
+  train:pipeline:
+    desc: Full pipeline -- generate -> split -> dedup -> train -> embed -> validate
+    cmds:
+      - task train:generate
+      - task train:split
+      - task train:dedup
+      - task train:train
+      - task train:update-model
+      - task train:validate
