@@ -112,6 +112,15 @@ class TestSubTypeConfig:
             assert "models" in config, f"{sub_type} missing 'models'"
             assert "prompt_templates" in config, f"{sub_type} missing 'prompt_templates'"
             assert "temperature_range" in config, f"{sub_type} missing 'temperature_range'"
+            assert "domains" in config, f"{sub_type} missing 'domains'"
+
+    def test_domains_are_nonempty_lists(self):
+        from generate_openrouter import SUB_TYPE_CONFIG
+
+        for sub_type, config in SUB_TYPE_CONFIG.items():
+            domains = config["domains"]
+            assert isinstance(domains, list), f"{sub_type} domains is not a list"
+            assert len(domains) >= 1, f"{sub_type} has empty domains list"
 
     def test_models_have_5_to_7_entries(self):
         from generate_openrouter import SUB_TYPE_CONFIG
@@ -353,6 +362,96 @@ class TestDryRun:
 # ---------------------------------------------------------------------------
 # Retry / backoff tests
 # ---------------------------------------------------------------------------
+
+
+class TestWeightedModels:
+    def test_returns_normalised_weights(self):
+        from generate_openrouter import _weighted_models
+
+        models = _weighted_models(["a", "b"], ["c"])
+        total = sum(w for _, w in models)
+        assert abs(total - 1.0) < 1e-9
+
+    def test_no_model_exceeds_15_percent_cap(self):
+        from generate_openrouter import _weighted_models
+
+        models = _weighted_models(["a", "b", "c", "d"], ["e", "f", "g"])
+        for model_id, weight in models:
+            assert weight <= 0.16, f"{model_id} exceeds 15% cap: {weight}"
+
+    def test_primary_and_secondary_both_present(self):
+        from generate_openrouter import _weighted_models
+
+        models = _weighted_models(["a", "b"], ["c", "d"])
+        ids = [m for m, _ in models]
+        assert "a" in ids and "b" in ids and "c" in ids and "d" in ids
+
+
+class TestSelectModel:
+    def test_returns_model_from_list(self):
+        from generate_openrouter import _select_model
+
+        models = [("model-a", 0.5), ("model-b", 0.5)]
+        result = _select_model(models)
+        assert result in ["model-a", "model-b"]
+
+    def test_respects_weights_over_many_calls(self):
+        """A model with weight 0 should never be selected."""
+        from generate_openrouter import _select_model
+
+        models = [("always", 1.0), ("never", 0.0)]
+        results = {_select_model(models) for _ in range(50)}
+        assert "never" not in results
+
+
+class TestJSONLOutput:
+    def test_main_writes_jsonl_output(self):
+        """main() in non-dry-run mode should write JSONL with provenance."""
+        from generate_openrouter import main
+
+        client_mock = MagicMock()
+        response = MagicMock()
+        choice = MagicMock()
+        choice.message.content = json.dumps([{"text": "Generated sample."}])
+        response.choices = [choice]
+        client_mock.chat.completions.create.return_value = response
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = os.path.join(tmpdir, "test_output.jsonl")
+            with patch("generate_openrouter._create_client", return_value=client_mock):
+                main(["--output", output, "--total-samples", "10"])
+            assert os.path.exists(output)
+            with open(output) as f:
+                lines = [line.strip() for line in f if line.strip()]
+            assert len(lines) >= 1
+            sample = json.loads(lines[0])
+            assert "text" in sample
+            assert "model" in sample
+            assert "temperature" in sample
+
+    def test_resume_appends_to_existing(self):
+        """--resume should append to an existing file."""
+        from generate_openrouter import main
+
+        client_mock = MagicMock()
+        response = MagicMock()
+        choice = MagicMock()
+        choice.message.content = json.dumps([{"text": "Resumed sample."}])
+        response.choices = [choice]
+        client_mock.chat.completions.create.return_value = response
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = os.path.join(tmpdir, "resume_test.jsonl")
+            # Write an existing sample
+            with open(output, "w") as f:
+                f.write(json.dumps({"text": "existing", "expected_category": "prose"}) + "\n")
+            with patch("generate_openrouter._create_client", return_value=client_mock):
+                main(["--output", output, "--total-samples", "10", "--resume"])
+            with open(output) as f:
+                lines = [line.strip() for line in f if line.strip()]
+            # Should have the original line plus new ones
+            assert len(lines) >= 2
+            assert json.loads(lines[0])["text"] == "existing"
 
 
 class TestRetryLogic:

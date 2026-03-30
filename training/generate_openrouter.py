@@ -311,6 +311,7 @@ def _build_sub_type_config() -> dict[str, dict]:
                 "models": model_pools[category],
                 "prompt_templates": prompt_list,
                 "temperature_range": temp_ranges[category],
+                "domains": list(DOMAIN_SEEDS),
             }
 
     return config
