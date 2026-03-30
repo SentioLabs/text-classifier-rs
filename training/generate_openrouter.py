@@ -45,19 +45,21 @@ PRIMARY_MODELS: list[str] = [
     "openai/gpt-5",
     "openai/gpt-5.4",
     "qwen/qwen3-235b-a22b",
-    "deepseek/deepseek-chat-v3-0324",
-    "mistralai/mistral-large-2411",
+    "deepseek/deepseek-v3.2",
+    "mistralai/mistral-large-2512",
     "meta-llama/llama-3.3-70b-instruct",
 ]
 
 SECONDARY_MODELS: list[str] = [
-    "x-ai/grok-3-beta",
-    "deepseek/deepseek-r1",
-    "google/gemini-2.0-flash-001",
-    "cohere/command-r-plus-08-2024",
-    "mistralai/codestral-2501",
+    "x-ai/grok-4-fast",
+    "deepseek/deepseek-r1-0528",
+    "google/gemini-2.5-flash",
+    "cohere/command-a",
+    "mistralai/codestral-2508",
     "google/gemma-3-27b-it",
     "qwen/qwen3-30b-a3b",
+    "qwen/qwen3-coder",
+    "meta-llama/llama-4-maverick",
 ]
 
 EDGE_CASE_MODELS: list[str] = [
@@ -266,22 +268,22 @@ def _build_sub_type_config() -> dict[str, dict]:
 
     # Model pools per category (5-7 models, weighted, no single model > 15%)
     _code_models = _weighted_models(
-        ["anthropic/claude-sonnet-4.6", "openai/gpt-5.4", "deepseek/deepseek-chat-v3-0324",
-         "mistralai/codestral-2501"],
-        ["meta-llama/llama-3.3-70b-instruct", "qwen/qwen3-235b-a22b", "google/gemini-2.0-flash-001"],
+        ["anthropic/claude-sonnet-4.6", "openai/gpt-5.4", "deepseek/deepseek-v3.2",
+         "mistralai/codestral-2508"],
+        ["meta-llama/llama-3.3-70b-instruct", "qwen/qwen3-235b-a22b", "google/gemini-2.5-flash"],
     )
     _prose_models = _weighted_models(
         ["anthropic/claude-sonnet-4.6", "openai/gpt-5", "openai/gpt-5.4",
-         "mistralai/mistral-large-2411"],
-        ["x-ai/grok-3-beta", "cohere/command-r-plus-08-2024", "google/gemma-3-27b-it"],
+         "mistralai/mistral-large-2512"],
+        ["x-ai/grok-4-fast", "cohere/command-a", "google/gemma-3-27b-it"],
     )
     _structured_models = _weighted_models(
-        ["openai/gpt-5.4", "deepseek/deepseek-chat-v3-0324", "qwen/qwen3-235b-a22b",
+        ["openai/gpt-5.4", "deepseek/deepseek-v3.2", "qwen/qwen3-235b-a22b",
          "anthropic/claude-sonnet-4.6"],
-        ["google/gemini-2.0-flash-001", "meta-llama/llama-3.3-70b-instruct", "mistralai/mistral-large-2411"],
+        ["google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct", "mistralai/mistral-large-2512"],
     )
     _artifact_models = _weighted_models(
-        ["openai/gpt-5", "anthropic/claude-sonnet-4.6", "deepseek/deepseek-r1",
+        ["openai/gpt-5", "anthropic/claude-sonnet-4.6", "deepseek/deepseek-r1-0528",
          "openai/gpt-5.4"],
         ["microsoft/phi-4", "meta-llama/llama-3.1-8b-instruct", "openai/gpt-5.4-nano"],
     )

@@ -26,21 +26,23 @@ class TestModelRosters:
         assert "openai/gpt-5" in PRIMARY_MODELS
         assert "openai/gpt-5.4" in PRIMARY_MODELS
         assert "qwen/qwen3-235b-a22b" in PRIMARY_MODELS
-        assert "deepseek/deepseek-chat-v3-0324" in PRIMARY_MODELS
-        assert "mistralai/mistral-large-2411" in PRIMARY_MODELS
+        assert "deepseek/deepseek-v3.2" in PRIMARY_MODELS
+        assert "mistralai/mistral-large-2512" in PRIMARY_MODELS
         assert "meta-llama/llama-3.3-70b-instruct" in PRIMARY_MODELS
 
     def test_secondary_models_defined(self):
         from generate_openrouter import SECONDARY_MODELS
 
-        assert len(SECONDARY_MODELS) == 7
-        assert "x-ai/grok-3-beta" in SECONDARY_MODELS
-        assert "deepseek/deepseek-r1" in SECONDARY_MODELS
-        assert "google/gemini-2.0-flash-001" in SECONDARY_MODELS
-        assert "cohere/command-r-plus-08-2024" in SECONDARY_MODELS
-        assert "mistralai/codestral-2501" in SECONDARY_MODELS
+        assert len(SECONDARY_MODELS) == 9
+        assert "x-ai/grok-4-fast" in SECONDARY_MODELS
+        assert "deepseek/deepseek-r1-0528" in SECONDARY_MODELS
+        assert "google/gemini-2.5-flash" in SECONDARY_MODELS
+        assert "cohere/command-a" in SECONDARY_MODELS
+        assert "mistralai/codestral-2508" in SECONDARY_MODELS
         assert "google/gemma-3-27b-it" in SECONDARY_MODELS
         assert "qwen/qwen3-30b-a3b" in SECONDARY_MODELS
+        assert "qwen/qwen3-coder" in SECONDARY_MODELS
+        assert "meta-llama/llama-4-maverick" in SECONDARY_MODELS
 
     def test_edge_case_models_defined(self):
         from generate_openrouter import EDGE_CASE_MODELS
