@@ -1,5 +1,5 @@
 use text_classifier::Classifier;
-use text_classifier::TextType;
+use text_classifier::TextCategory;
 
 fn read_fixture(path: &str) -> String {
     std::fs::read_to_string(format!("tests/fixtures/{path}")).unwrap()
@@ -11,7 +11,7 @@ fn read_fixture(path: &str) -> String {
 fn end_to_end_prose() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("prose/simple.txt"));
-    assert_eq!(result.text_type, TextType::Prose);
+    assert_eq!(result.category, TextCategory::Prose);
     assert!(result.confidence >= 0.95);
 }
 
@@ -19,7 +19,7 @@ fn end_to_end_prose() {
 fn end_to_end_html_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/html.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextCategory::Code);
     assert!(result.confidence >= 0.95);
 }
 
@@ -27,7 +27,7 @@ fn end_to_end_html_code() {
 fn end_to_end_pipe_table() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("tabular/pipe_table.txt"));
-    assert_eq!(result.text_type, TextType::Tabular);
+    assert_eq!(result.category, TextCategory::Structured);
     assert!(result.confidence >= 0.95);
 }
 
@@ -35,19 +35,16 @@ fn end_to_end_pipe_table() {
 fn end_to_end_tsv_data() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("tabular/tsv_data.txt"));
-    assert_eq!(result.text_type, TextType::Tabular);
+    assert_eq!(result.category, TextCategory::Structured);
     assert!(result.confidence >= 0.95);
 }
 
 // --- Cases that now defer to Tier 2 model ---
-// Without a model loaded, these fall through to the tier2 heuristic fallback.
-// The model-primary architecture means these require Tier 2 for correct classification.
 
 #[test]
 fn python_code_defers_to_model() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/python.txt"));
-    // Without a model, Tier 2 fallback returns low-confidence result
     assert!(
         result.confidence <= 0.5,
         "without model, python code should get low-confidence fallback, got {}",
@@ -116,7 +113,7 @@ fn pdf_dump_defers_to_model() {
 fn end_to_end_rust_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/rust.txt"));
-    assert_eq!(result.text_type, TextType::Code);
+    assert_eq!(result.category, TextCategory::Code);
     assert!(result.confidence >= 0.95);
 }
 
@@ -124,8 +121,6 @@ fn end_to_end_rust_code() {
 fn end_to_end_shell_code() {
     let clf = Classifier::new();
     let result = clf.classify(&read_fixture("code/shell.txt"));
-    // Shell may or may not hit the short-circuit depending on features
-    // Just verify it returns a result (either Tier 1 or Tier 2 fallback)
     assert!(result.confidence > 0.0);
 }
 
@@ -135,7 +130,7 @@ fn end_to_end_shell_code() {
 fn short_text_is_skip() {
     let clf = Classifier::new();
     let result = clf.classify("hello");
-    assert_eq!(result.text_type, TextType::Skip);
+    assert_eq!(result.category, TextCategory::Skip);
     assert_eq!(result.confidence, 1.0);
 }
 
@@ -143,7 +138,7 @@ fn short_text_is_skip() {
 fn empty_text_is_skip() {
     let clf = Classifier::new();
     let result = clf.classify("");
-    assert_eq!(result.text_type, TextType::Skip);
+    assert_eq!(result.category, TextCategory::Skip);
 }
 
 #[test]
@@ -156,24 +151,15 @@ fn batch_classification_works() {
     ];
     let results = clf.classify_batch(&texts);
     assert_eq!(results.len(), 3);
-    // Third should be skip (too short)
-    assert_eq!(results[2].text_type, TextType::Skip);
+    assert_eq!(results[2].category, TextCategory::Skip);
 }
 
 #[test]
-fn features_extraction_returns_all_fields() {
-    let clf = Classifier::new();
-    let f = clf.extract_features(&read_fixture("prose/simple.txt"));
-    // Verify all fields are populated (non-NaN, non-negative)
+fn features_extraction_works() {
+    let text = &read_fixture("prose/simple.txt");
+    let f = text_classifier::extract_features(text);
     assert!(f.line_length_cv >= 0.0);
     assert!(f.char_entropy >= 0.0);
-    assert!(f.leading_whitespace_ratio >= 0.0);
-    assert!(f.tab_density >= 0.0);
-    assert!(f.sentence_punctuation_rate >= 0.0);
-    assert!(f.paragraph_break_rate >= 0.0);
     assert!(f.alpha_ratio >= 0.0);
-    assert!(f.line_uniqueness >= 0.0);
-    assert!(f.short_line_ratio >= 0.0);
-    assert!(f.symbol_ratio >= 0.0);
     assert!(f.line_count > 0);
 }

@@ -1,4 +1,4 @@
-use crate::types::{Classification, FeatureVector, TextType, Tier};
+use crate::types::{Classification, FeatureVector, TextCategory, Tier};
 
 /// Minimum confidence to accept a Tier 1 classification.
 /// Set high so only unambiguous short-circuits are accepted;
@@ -14,7 +14,8 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
     // Short-circuit: empty / no content
     if features.alpha_ratio == 0.0 && features.sentence_punctuation_rate == 0.0 {
         return Classification {
-            text_type: TextType::Skip,
+            category: TextCategory::Skip,
+            sub_type: None,
             confidence: 1.0,
             reason: "empty or no content".to_string(),
             tier: Tier::Structural,
@@ -28,7 +29,8 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
         && (features.tab_density > 0.03 || features.sentence_punctuation_rate < 0.01)
     {
         return Classification {
-            text_type: TextType::Tabular,
+            category: TextCategory::Structured,
+            sub_type: None,
             confidence: 0.98,
             reason: format!(
                 "uniform line lengths (cv={:.2}), tabular structure",
@@ -44,7 +46,8 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
         && features.sentence_punctuation_rate < 0.02
     {
         return Classification {
-            text_type: TextType::Code,
+            category: TextCategory::Code,
+            sub_type: None,
             confidence: 0.98,
             reason: format!(
                 "markup pattern (ws={:.2}, sym={:.2})",
@@ -61,7 +64,8 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
         && features.leading_whitespace_ratio < 0.1
     {
         return Classification {
-            text_type: TextType::Prose,
+            category: TextCategory::Prose,
+            sub_type: None,
             confidence: 0.95,
             reason: format!(
                 "sentence structure (punct={:.3}), high alpha (ratio={:.2})",
@@ -73,7 +77,8 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
 
     // Default fallback: low confidence to trigger Tier 2
     Classification {
-        text_type: TextType::Skip,
+        category: TextCategory::Skip,
+        sub_type: None,
         confidence: 0.40,
         reason: "ambiguous — deferring to model".to_string(),
         tier: Tier::Structural,

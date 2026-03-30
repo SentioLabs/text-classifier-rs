@@ -7,7 +7,9 @@ pub mod types;
 
 pub use features::extract_features;
 pub use tier2::ModelClassifier;
-pub use types::{Classification, FeatureVector, TextType, Tier};
+pub use types::{
+    thresholds, Classification, ContentSubType, FeatureVector, TextCategory, TextType, Tier,
+};
 
 /// Classify a text string using Tier 1 structural features only.
 ///
@@ -16,7 +18,8 @@ pub use types::{Classification, FeatureVector, TextType, Tier};
 pub fn classify(text: &str) -> Classification {
     if text.trim().is_empty() || tier1::is_too_short(text) {
         return Classification {
-            text_type: TextType::Skip,
+            category: TextCategory::Skip,
+            sub_type: None,
             confidence: 1.0,
             reason: "too short".to_string(),
             tier: Tier::Structural,
@@ -56,7 +59,8 @@ impl Classifier {
     pub fn classify(&self, text: &str) -> Classification {
         if text.trim().is_empty() || tier1::is_too_short(text) {
             return Classification {
-                text_type: TextType::Skip,
+                category: TextCategory::Skip,
+                sub_type: None,
                 confidence: 1.0,
                 reason: "too short".to_string(),
                 tier: Tier::Structural,
@@ -73,7 +77,7 @@ impl Classifier {
         }
 
         // Otherwise, fall through to Tier 2
-        self.model.classify(text, &features)
+        self.model.classify(&features)
     }
 
     /// Classify multiple texts in parallel using rayon.
