@@ -356,8 +356,58 @@ _api_stats: dict[str, dict[str, int]] = {}
 def _record_stat(model: str, outcome: str) -> None:
     """Record an API call outcome for end-of-run summary."""
     if model not in _api_stats:
-        _api_stats[model] = {"success": 0, "empty_response": 0, "parse_error": 0, "api_error": 0}
+        _api_stats[model] = {"success": 0, "empty_response": 0, "parse_error": 0, "api_error": 0, "raw_wrapped": 0}
     _api_stats[model][outcome] = _api_stats[model].get(outcome, 0) + 1
+
+
+def _parse_json_response(content: str) -> list | None:
+    """Try multiple strategies to extract a JSON array from a model response.
+
+    Returns a list of dicts on success, or None if no JSON array can be found
+    (indicating the model returned raw content that should be wrapped as-is).
+    """
+    # Strategy 1: Direct parse
+    try:
+        result = json.loads(content)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict) and "text" in result:
+            return [result]
+        return result  # let caller handle non-list
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: Find JSON array in the response (models often add prose around it)
+    start = content.find("[")
+    if start != -1:
+        # Find the matching closing bracket
+        depth = 0
+        for i in range(start, len(content)):
+            if content[i] == "[":
+                depth += 1
+            elif content[i] == "]":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        result = json.loads(content[start:i + 1])
+                        if isinstance(result, list):
+                            return result
+                    except json.JSONDecodeError:
+                        break
+
+    # Strategy 3: Try to parse with JSONDecoder (handles trailing content)
+    try:
+        decoder = json.JSONDecoder()
+        result, _ = decoder.raw_decode(content)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict) and "text" in result:
+            return [result]
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # No JSON found — return None to signal raw content wrapping
+    return None
 
 
 def print_api_stats() -> None:
@@ -370,15 +420,18 @@ def print_api_stats() -> None:
     for model in sorted(_api_stats):
         s = _api_stats[model]
         total = sum(s.values())
-        success_pct = (s["success"] / total * 100) if total else 0
-        parts = [f"success={s['success']}"]
-        if s["empty_response"]:
+        ok = s.get("success", 0) + s.get("raw_wrapped", 0)
+        success_pct = (ok / total * 100) if total else 0
+        parts = [f"success={s.get('success', 0)}"]
+        if s.get("raw_wrapped"):
+            parts.append(f"raw_wrapped={s['raw_wrapped']}")
+        if s.get("empty_response"):
             parts.append(f"empty={s['empty_response']}")
-        if s["parse_error"]:
+        if s.get("parse_error"):
             parts.append(f"parse_err={s['parse_error']}")
-        if s["api_error"]:
+        if s.get("api_error"):
             parts.append(f"api_err={s['api_error']}")
-        print(f"  {model}: {', '.join(parts)} ({success_pct:.0f}% success rate)")
+        print(f"  {model}: {', '.join(parts)} ({success_pct:.0f}% yield)")
     print("=" * 72)
 
 
@@ -425,7 +478,13 @@ def _call_api_with_retry(
                 print(f"  [WARN] {model}: empty response content", file=sys.stderr)
                 return []
 
-            samples = json.loads(content)
+            samples = _parse_json_response(content)
+            if samples is None:
+                # Last resort: model returned raw content instead of JSON —
+                # wrap the entire response as a single sample
+                _record_stat(model, "raw_wrapped")
+                return [{"text": content}]
+
             if not isinstance(samples, list):
                 _record_stat(model, "parse_error")
                 print(
@@ -440,7 +499,6 @@ def _call_api_with_retry(
 
         except json.JSONDecodeError as e:
             _record_stat(model, "parse_error")
-            # Show first 200 chars of what we tried to parse
             snippet = content[:200] if 'content' in dir() else '(no content)'
             print(
                 f"  [WARN] {model}: JSON parse error on attempt {attempt + 1}/{max_retries}: {e}. "
