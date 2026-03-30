@@ -242,7 +242,7 @@ def run_classifier_audit(
     # Compute per-sub-type accuracy and flag issues
     per_sub_type: dict[str, dict] = {}
     flags: list[str] = []
-    for st in sorted(sub_type_total):
+    for st in sorted(sub_type_total, key=lambda x: x or ""):
         total = sub_type_total[st]
         correct = sub_type_correct[st]
         accuracy = correct / total if total > 0 else 0.0
@@ -266,7 +266,7 @@ def print_audit_samples(samples: list[dict], n: int = 50) -> None:
         by_sub_type[s.get("sub_type", "unknown")].append(s)
 
     selected: list[dict] = []
-    sub_types = sorted(by_sub_type.keys())
+    sub_types = sorted(by_sub_type.keys(), key=lambda x: x or "")
 
     # First pass: pick 1-2 per sub-type, up to n
     per_type = max(1, min(2, n // max(len(sub_types), 1)))
@@ -370,7 +370,7 @@ def main() -> None:
         print(f"\n{'=' * 72}")
         print("  CLASSIFIER AUDIT")
         print(f"{'=' * 72}")
-        for st, acc_info in sorted(audit["per_sub_type_accuracy"].items()):
+        for st, acc_info in sorted(audit["per_sub_type_accuracy"].items(), key=lambda x: x[0] or ""):
             print(
                 f"  {st}: {acc_info['accuracy']:.1%} "
                 f"({acc_info['correct']}/{acc_info['total']})"
