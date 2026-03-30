@@ -18,7 +18,6 @@ import os
 import random
 import subprocess
 import sys
-import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -206,16 +205,9 @@ def run_classifier_audit(
         expected = sample.get("expected_category", "")
         sub_type = sample.get("sub_type", "unknown")
 
-        # Write text to a temp file and classify it
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as tmp:
-            tmp.write(text)
-            tmp_path = tmp.name
-
         try:
             result = subprocess.run(
-                [classify_bin, "file", tmp_path],
+                [classify_bin, "--", text],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -223,16 +215,13 @@ def run_classifier_audit(
             if result.returncode != 0:
                 predicted = "error"
             else:
-                # Parse output — expect JSON with "category" field
                 try:
-                    output = json.loads(result.stdout.strip().splitlines()[-1])
+                    output = json.loads(result.stdout.strip())
                     predicted = output.get("category", "unknown")
                 except (json.JSONDecodeError, IndexError):
                     predicted = "unknown"
         except (subprocess.TimeoutExpired, OSError):
             predicted = "error"
-        finally:
-            os.unlink(tmp_path)
 
         confusion[expected][predicted] += 1
         sub_type_total[sub_type] += 1

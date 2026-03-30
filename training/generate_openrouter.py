@@ -699,7 +699,7 @@ def generate_boundary_samples(
             # Pick a model from primary pool
             model_id = random.choice(PRIMARY_MODELS)
 
-            batch_size = min(5, per_direction - collected)
+            batch_size = min(10, per_direction - collected)
             prompt = (
                 f"Generate {batch_size} distinct text samples about {domain} that are ambiguous between "
                 f"'{cat_a}' and '{cat_b}', but should be labeled as '{label}'.\n"
@@ -841,7 +841,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    total = 500 if args.pilot else args.total_samples
+    total = 2000 if args.pilot else args.total_samples
 
     if args.dry_run:
         _print_plan(total, args.pilot)
