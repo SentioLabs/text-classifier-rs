@@ -152,27 +152,34 @@ BOUNDARY_PAIRS: list[tuple[str, str]] = [
 # Helper: build weighted model lists for sub-types
 # ---------------------------------------------------------------------------
 
-def _weighted_models(primary: list[str], secondary: list[str] | None = None) -> list[tuple[str, float]]:
+def _weighted_models(
+    primary: list[str],
+    secondary: list[str] | None = None,
+    primary_share: float = 0.70,
+) -> list[tuple[str, float]]:
     """Build a weighted model list with <=15% cap per model.
 
-    Primary models get equal share; secondary models (if given) get smaller
-    shares. Total weight normalises so no single model exceeds 15%.
+    Primary models share primary_share of the total weight (default 70%).
+    Secondary models share the remainder (default 30%).
+    This allows cost optimization by putting cheaper models in primary.
     """
     models: list[tuple[str, float]] = []
     n_primary = len(primary)
     n_secondary = len(secondary) if secondary else 0
-    total = n_primary + n_secondary
 
-    # Equal weighting across all models to respect 15% cap
+    per_primary = primary_share / n_primary if n_primary else 0
+    per_secondary = (1.0 - primary_share) / n_secondary if n_secondary else 0
+
     for m in primary:
-        models.append((m, 1.0))
+        models.append((m, per_primary))
     if secondary:
         for m in secondary:
-            models.append((m, 1.0))
+            models.append((m, per_secondary))
 
-    # Normalise and verify cap
+    # Normalise (should already sum to 1.0 but be safe)
     total_weight = sum(w for _, w in models)
-    models = [(m, w / total_weight) for m, w in models]
+    if total_weight > 0:
+        models = [(m, w / total_weight) for m, w in models]
     return models
 
 
@@ -302,26 +309,30 @@ def _build_sub_type_config() -> dict[str, dict]:
         "artifact": ["pdf_dump", "ocr_garbage", "boilerplate", "skip"],
     }
 
-    # Model pools per category (5-7 models, weighted, no single model > 15%)
+    # Model pools per category: cheap models (70%), frontier accent (30%)
+    # Cheap: DeepSeek, Llama, Qwen, Codestral, Gemma (~$0.10-0.50/M tokens)
+    # Frontier: Claude, GPT-5, Grok, Mistral Large (~$3-15/M tokens)
     _code_models = _weighted_models(
-        ["anthropic/claude-sonnet-4.6", "openai/gpt-5.4", "deepseek/deepseek-v3.2",
-         "mistralai/codestral-2508"],
-        ["meta-llama/llama-3.3-70b-instruct", "qwen/qwen3-235b-a22b", "google/gemini-2.5-flash"],
+        ["deepseek/deepseek-v3.2", "meta-llama/llama-3.3-70b-instruct",
+         "qwen/qwen3-235b-a22b", "mistralai/codestral-2508", "google/gemini-2.5-flash"],
+        ["anthropic/claude-sonnet-4.6", "openai/gpt-5.4"],
     )
     _prose_models = _weighted_models(
-        ["anthropic/claude-sonnet-4.6", "openai/gpt-5", "openai/gpt-5.4",
-         "mistralai/mistral-large-2512"],
-        ["x-ai/grok-4-fast", "cohere/command-a", "google/gemma-3-27b-it"],
+        ["meta-llama/llama-3.3-70b-instruct", "google/gemma-3-27b-it",
+         "qwen/qwen3-235b-a22b", "cohere/command-a", "mistralai/mistral-large-2512"],
+        ["anthropic/claude-sonnet-4.6", "openai/gpt-5"],
     )
     _structured_models = _weighted_models(
-        ["openai/gpt-5.4", "deepseek/deepseek-v3.2", "qwen/qwen3-235b-a22b",
-         "anthropic/claude-sonnet-4.6"],
-        ["google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct", "mistralai/mistral-large-2512"],
+        ["deepseek/deepseek-v3.2", "qwen/qwen3-235b-a22b",
+         "meta-llama/llama-3.3-70b-instruct", "google/gemini-2.5-flash",
+         "mistralai/codestral-2508"],
+        ["anthropic/claude-sonnet-4.6", "openai/gpt-5.4"],
     )
     _artifact_models = _weighted_models(
-        ["openai/gpt-5", "anthropic/claude-sonnet-4.6", "deepseek/deepseek-r1-0528",
-         "openai/gpt-5.4"],
-        ["microsoft/phi-4", "meta-llama/llama-3.1-8b-instruct", "openai/gpt-5.4-nano"],
+        ["meta-llama/llama-3.1-8b-instruct", "microsoft/phi-4",
+         "openai/gpt-5.4-nano", "deepseek/deepseek-v3.2",
+         "meta-llama/llama-3.3-70b-instruct"],
+        ["anthropic/claude-sonnet-4.6", "openai/gpt-5"],
     )
 
     model_pools = {

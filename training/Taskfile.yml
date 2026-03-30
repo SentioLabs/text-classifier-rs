@@ -8,23 +8,23 @@ tasks:
       - uv pip install --python .venv/bin/python openai datasets sentence-transformers faiss-cpu pandas numpy torch onnx onnxruntime
 
   train:pilot:
-    desc: Generate 500 pilot samples and validate diversity
+    desc: Generate ~2K pilot samples and validate diversity
     cmds:
-      - uv run generate_openrouter.py --output data/pilot_samples.jsonl --total-samples 500 --pilot
+      - uv run generate_openrouter.py --output data/pilot_samples.jsonl --total-samples 2000 --pilot
       - uv run validate_pilot.py --input data/pilot_samples.jsonl
 
   train:sample-real:
-    desc: Sample ~25K real files from The Stack v1 (14 languages)
+    desc: Sample ~30K real files from The Stack v1 (14 languages)
     cmds:
-      - uv run sample_the_stack.py --output data/real_samples.jsonl --per-language 1800
+      - uv run sample_the_stack.py --output data/real_samples.jsonl --per-language 2100
 
   train:generate-synthetic:
-    desc: Generate ~35K synthetic samples via OpenRouter (full model mix)
+    desc: Generate ~30K synthetic samples via OpenRouter (cost-optimized model mix)
     cmds:
-      - uv run generate_openrouter.py --output data/synthetic_samples.jsonl --total-samples 35000
+      - uv run generate_openrouter.py --output data/synthetic_samples.jsonl --total-samples 30000
 
   train:generate:
-    desc: Generate full dataset (real + synthetic, ~60K total)
+    desc: Generate full dataset (30K real + 30K synthetic = ~60K total)
     cmds:
       - task train:sample-real
       - task train:generate-synthetic

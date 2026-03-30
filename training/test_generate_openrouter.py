@@ -377,7 +377,7 @@ class TestWeightedModels:
     def test_no_model_exceeds_15_percent_cap(self):
         from generate_openrouter import _weighted_models
 
-        models = _weighted_models(["a", "b", "c", "d"], ["e", "f", "g"])
+        models = _weighted_models(["a", "b", "c", "d", "e"], ["f", "g"])
         for model_id, weight in models:
             assert weight <= 0.16, f"{model_id} exceeds 15% cap: {weight}"
 

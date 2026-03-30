@@ -170,7 +170,7 @@ def sample_language(
 
 def sample_all(
     output_path: str,
-    per_language: int = 1800,
+    per_language: int = 2100,
     seed: int = 42,
     languages: list[str] | None = None,
 ) -> None:
@@ -232,7 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--per-language",
         type=int,
         default=1800,
-        help="Samples per language (default: 1800)",
+        help="Samples per language (default: 2100)",
     )
     parser.add_argument(
         "--seed",
