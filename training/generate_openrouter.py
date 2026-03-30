@@ -349,6 +349,39 @@ def _create_client():
 # API call with exponential backoff
 # ---------------------------------------------------------------------------
 
+# Global stats for tracking API call outcomes
+_api_stats: dict[str, dict[str, int]] = {}
+
+
+def _record_stat(model: str, outcome: str) -> None:
+    """Record an API call outcome for end-of-run summary."""
+    if model not in _api_stats:
+        _api_stats[model] = {"success": 0, "empty_response": 0, "parse_error": 0, "api_error": 0}
+    _api_stats[model][outcome] = _api_stats[model].get(outcome, 0) + 1
+
+
+def print_api_stats() -> None:
+    """Print a summary of API call outcomes per model."""
+    if not _api_stats:
+        return
+    print("\n" + "=" * 72)
+    print("  API CALL STATS (per model)")
+    print("=" * 72)
+    for model in sorted(_api_stats):
+        s = _api_stats[model]
+        total = sum(s.values())
+        success_pct = (s["success"] / total * 100) if total else 0
+        parts = [f"success={s['success']}"]
+        if s["empty_response"]:
+            parts.append(f"empty={s['empty_response']}")
+        if s["parse_error"]:
+            parts.append(f"parse_err={s['parse_error']}")
+        if s["api_error"]:
+            parts.append(f"api_err={s['api_error']}")
+        print(f"  {model}: {', '.join(parts)} ({success_pct:.0f}% success rate)")
+    print("=" * 72)
+
+
 def _call_api_with_retry(
     client,
     model: str,
@@ -359,7 +392,9 @@ def _call_api_with_retry(
     """Call the chat API with exponential backoff on errors.
 
     Returns parsed list of sample dicts, or empty list on failure.
+    Logs errors to stderr and tracks stats per model.
     """
+    last_error = None
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
@@ -376,15 +411,53 @@ def _call_api_with_retry(
                     if not (i == 0 or (i == len(lines) - 1 and line.strip() == "```"))
                 ]
                 content = "\n".join(lines)
+
+            if not content:
+                _record_stat(model, "empty_response")
+                print(f"  [WARN] {model}: empty response content", file=sys.stderr)
+                return []
+
             samples = json.loads(content)
             if not isinstance(samples, list):
+                _record_stat(model, "parse_error")
+                print(
+                    f"  [WARN] {model}: response is {type(samples).__name__}, not list. "
+                    f"First 100 chars: {content[:100]}",
+                    file=sys.stderr,
+                )
                 return []
+
+            _record_stat(model, "success")
             return samples
-        except Exception:
+
+        except json.JSONDecodeError as e:
+            _record_stat(model, "parse_error")
+            # Show first 200 chars of what we tried to parse
+            snippet = content[:200] if 'content' in dir() else '(no content)'
+            print(
+                f"  [WARN] {model}: JSON parse error on attempt {attempt + 1}/{max_retries}: {e}. "
+                f"Response: {snippet}",
+                file=sys.stderr,
+            )
+            last_error = e
+
+        except Exception as e:
+            last_error = e
             if attempt < max_retries - 1:
-                wait = 2 ** attempt * 0.1  # 0.1s, 0.2s, 0.4s in tests
+                wait = 2 ** attempt * 0.5  # 0.5s, 1s, 2s
+                print(
+                    f"  [WARN] {model}: API error on attempt {attempt + 1}/{max_retries}: {e}. "
+                    f"Retrying in {wait:.1f}s...",
+                    file=sys.stderr,
+                )
                 time.sleep(wait)
             continue
+
+    _record_stat(model, "api_error")
+    print(
+        f"  [ERROR] {model}: all {max_retries} retries exhausted. Last error: {last_error}",
+        file=sys.stderr,
+    )
     return []
 
 
@@ -702,6 +775,9 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"Wrote {len(all_samples)} samples to {args.output}")
     print(f"Total: {generated}")
+
+    # Print API call stats summary
+    print_api_stats()
 
 
 if __name__ == "__main__":
