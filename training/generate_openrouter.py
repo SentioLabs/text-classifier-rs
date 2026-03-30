@@ -598,7 +598,13 @@ def generate_samples(
         for raw in raw_samples:
             if collected >= count:
                 break
-            text = raw.get("text", "")
+            # Handle both {"text": "..."} dicts and bare strings
+            if isinstance(raw, str):
+                text = raw
+            elif isinstance(raw, dict):
+                text = raw.get("text", "")
+            else:
+                continue
             if not isinstance(text, str) or not text.strip():
                 continue
 
@@ -683,7 +689,12 @@ def generate_boundary_samples(
             for raw in raw_samples:
                 if collected >= per_direction:
                     break
-                text = raw.get("text", "")
+                if isinstance(raw, str):
+                    text = raw
+                elif isinstance(raw, dict):
+                    text = raw.get("text", "")
+                else:
+                    continue
                 if not isinstance(text, str) or not text.strip():
                     continue
 
