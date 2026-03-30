@@ -14,6 +14,7 @@ from eval_schema import (
     PROVENANCE_FIELDS,
     VALID_BOUNDARY_PAIRS,
     VALID_CATEGORIES,
+    VALID_LENGTH_BUCKETS,
     diversity_report,
     validate_file,
     validate_provenance,
@@ -179,6 +180,9 @@ class TestProvenanceFields:
             "sub_type",
         }
 
+    def test_valid_length_buckets_constant(self):
+        assert VALID_LENGTH_BUCKETS == {"short", "medium", "long"}
+
 
 # ---------------------------------------------------------------------------
 # validate_provenance
@@ -253,6 +257,12 @@ class TestValidateProvenance:
     def test_temperature_not_numeric(self):
         sample = self._valid_provenance()
         sample["temperature"] = "hot"
+        assert validate_provenance(sample) is False
+
+    def test_temperature_bool_rejected(self):
+        """bool is a subclass of int in Python but should be rejected."""
+        sample = self._valid_provenance()
+        sample["temperature"] = True
         assert validate_provenance(sample) is False
 
     def test_invalid_length_bucket(self):
@@ -350,6 +360,20 @@ class TestDiversityReport:
         report = diversity_report(fpath)
         assert report["total_samples"] == 0
         assert report["per_sub_type"] == {}
+
+    def test_samples_without_sub_type_counted_but_not_grouped(self, tmp_path):
+        """Samples missing sub_type still count toward total but have no group."""
+        fpath = str(tmp_path / "no_sub.jsonl")
+        self._write_jsonl(
+            [
+                {"text": "hello", "expected_category": "prose", "model": "gpt-4"},
+                self._make_sample(sub_type="article"),
+            ],
+            fpath,
+        )
+        report = diversity_report(fpath)
+        assert report["total_samples"] == 2
+        assert list(report["per_sub_type"].keys()) == ["article"]
 
 
 # ---------------------------------------------------------------------------
