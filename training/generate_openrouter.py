@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import concurrent.futures
 import itertools
 import json
 import math
@@ -611,9 +612,10 @@ def generate_samples(
         lo, hi = LENGTH_BUCKETS[bucket]
         temperature = round(random.uniform(temp_lo, temp_hi), 2)
 
+        batch_size = min(10, count - collected)
         prompt = template.format(domain=domain, task=_SUB_TYPE_TASKS.get(sub_type, sub_type))
-        prompt += f"\nGenerate text that is {lo}-{hi} lines long."
-        prompt += f"\nReturn a JSON array of objects with a single 'text' field."
+        prompt += f"\nGenerate {batch_size} distinct examples, each {lo}-{hi} lines long."
+        prompt += f"\nReturn a JSON array of {batch_size} objects, each with a single 'text' field."
 
         messages = [
             {"role": "system", "content": "You are a dataset generation assistant. Return only valid JSON arrays."},
@@ -697,13 +699,14 @@ def generate_boundary_samples(
             # Pick a model from primary pool
             model_id = random.choice(PRIMARY_MODELS)
 
+            batch_size = min(5, per_direction - collected)
             prompt = (
-                f"Generate text about {domain} that is ambiguous between "
+                f"Generate {batch_size} distinct text samples about {domain} that are ambiguous between "
                 f"'{cat_a}' and '{cat_b}', but should be labeled as '{label}'.\n"
-                f"The text should be {lo}-{hi} lines long.\n"
-                f"It should have characteristics of both {cat_a} and {cat_b}, "
-                f"but on balance belongs to '{label}' rather than '{other}'.\n\n"
-                f"Return a JSON array of objects with a single 'text' field."
+                f"Each text should be {lo}-{hi} lines long.\n"
+                f"They should have characteristics of both {cat_a} and {cat_b}, "
+                f"but on balance belong to '{label}' rather than '{other}'.\n\n"
+                f"Return a JSON array of {batch_size} objects, each with a single 'text' field."
             )
 
             messages = [
@@ -862,21 +865,39 @@ def main(argv: list[str] | None = None) -> None:
 
     all_samples: list[dict] = []
     generated = existing_count
+    max_workers = 4  # concurrent API calls
 
-    # Generate clear samples per sub-type
-    print(f"\nGenerating clear samples ({per_sub_type}/sub-type, {len(SUB_TYPE_CONFIG)} sub-types):")
-    for sub_type, config in tqdm(SUB_TYPE_CONFIG.items(), desc="Sub-types", unit="type"):
-        samples = generate_samples(sub_type, per_sub_type, config, client)
-        all_samples.extend(samples)
-        generated += len(samples)
+    # Generate clear samples per sub-type (parallel)
+    print(f"\nGenerating clear samples ({per_sub_type}/sub-type, {len(SUB_TYPE_CONFIG)} sub-types, {max_workers} workers):")
+    sub_type_items = list(SUB_TYPE_CONFIG.items())
+    pbar = tqdm(total=len(sub_type_items), desc="Sub-types", unit="type")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(generate_samples, st, per_sub_type, cfg, client): st
+            for st, cfg in sub_type_items
+        }
+        for future in concurrent.futures.as_completed(futures):
+            samples = future.result()
+            all_samples.extend(samples)
+            generated += len(samples)
+            pbar.update(1)
+    pbar.close()
 
-    # Generate boundary samples
+    # Generate boundary samples (parallel)
     boundary_per_pair = max(1, (total - len(all_samples) - existing_count) // len(BOUNDARY_PAIRS))
-    print(f"\nGenerating boundary samples ({boundary_per_pair}/pair, {len(BOUNDARY_PAIRS)} pairs):")
-    for pair in tqdm(BOUNDARY_PAIRS, desc="Pairs", unit="pair"):
-        samples = generate_boundary_samples(pair, boundary_per_pair, client)
-        all_samples.extend(samples)
-        generated += len(samples)
+    print(f"\nGenerating boundary samples ({boundary_per_pair}/pair, {len(BOUNDARY_PAIRS)} pairs, {max_workers} workers):")
+    pbar = tqdm(total=len(BOUNDARY_PAIRS), desc="Pairs", unit="pair")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(generate_boundary_samples, pair, boundary_per_pair, client): pair
+            for pair in BOUNDARY_PAIRS
+        }
+        for future in concurrent.futures.as_completed(futures):
+            samples = future.result()
+            all_samples.extend(samples)
+            generated += len(samples)
+            pbar.update(1)
+    pbar.close()
 
     # Write output
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
