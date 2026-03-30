@@ -335,7 +335,7 @@ def main() -> None:
     print(f"{'=' * 72}")
 
     all_passed = True
-    for sub_type in sorted(report):
+    for sub_type in sorted(report, key=lambda x: x or ""):
         stats = report[sub_type]
 
         # Add has_reasoning_mode for prose sub-types
