@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+from collections import defaultdict
 import concurrent.futures
 import itertools
 import json
@@ -867,48 +868,88 @@ def main(argv: list[str] | None = None) -> None:
     clear_total = total - min(boundary_total, total // 3)
     per_sub_type = max(1, clear_total // n_sub_types)
 
-    # Resume support
+    # Resume support — count existing samples per sub-type and boundary pair
+    existing_per_sub_type: dict[str, int] = defaultdict(int)
+    existing_boundary: int = 0
     existing_count = 0
     if args.resume and os.path.exists(args.output):
         with open(args.output) as f:
-            existing_count = sum(1 for line in f if line.strip())
-        print(f"Resuming from {existing_count} existing samples")
+            for line in f:
+                if line.strip():
+                    try:
+                        sample = json.loads(line)
+                        existing_count += 1
+                        if sample.get("boundary_pair"):
+                            existing_boundary += 1
+                        else:
+                            st = sample.get("sub_type", "unknown")
+                            existing_per_sub_type[st] += 1
+                    except json.JSONDecodeError:
+                        pass
+        print(f"Resuming from {existing_count} existing samples ({existing_count - existing_boundary} clear, {existing_boundary} boundary)")
+        completed = [st for st, c in existing_per_sub_type.items() if c >= per_sub_type]
+        incomplete = {st: per_sub_type - c for st, c in existing_per_sub_type.items() if c < per_sub_type}
+        missing = [st for st in SUB_TYPE_CONFIG if st not in existing_per_sub_type]
+        if completed:
+            print(f"  Skipping {len(completed)} completed sub-types: {', '.join(completed[:5])}{'...' if len(completed) > 5 else ''}")
+        if incomplete:
+            print(f"  Resuming {len(incomplete)} incomplete sub-types: {', '.join(f'{st}({n} remaining)' for st, n in incomplete.items())}")
+        if missing:
+            print(f"  Starting {len(missing)} new sub-types: {', '.join(missing[:5])}{'...' if len(missing) > 5 else ''}")
 
     all_samples: list[dict] = []
     generated = existing_count
     max_workers = 4  # concurrent API calls
 
-    # Generate clear samples per sub-type (parallel)
-    print(f"\nGenerating clear samples ({per_sub_type}/sub-type, {len(SUB_TYPE_CONFIG)} sub-types, {max_workers} workers):")
-    sub_type_items = list(SUB_TYPE_CONFIG.items())
-    pbar = tqdm(total=len(sub_type_items), desc="Sub-types", unit="type")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(generate_samples, st, per_sub_type, cfg, client): st
-            for st, cfg in sub_type_items
-        }
-        for future in concurrent.futures.as_completed(futures):
-            samples = future.result()
-            all_samples.extend(samples)
-            generated += len(samples)
-            pbar.update(1)
-    pbar.close()
+    # Build list of sub-types that still need generation
+    sub_type_items = []
+    for st, cfg in SUB_TYPE_CONFIG.items():
+        existing = existing_per_sub_type.get(st, 0)
+        remaining = per_sub_type - existing
+        if remaining > 0:
+            sub_type_items.append((st, remaining, cfg))
+
+    if sub_type_items:
+        print(f"\nGenerating clear samples ({len(sub_type_items)} sub-types remaining, {max_workers} workers):")
+        pbar = tqdm(total=len(sub_type_items), desc="Sub-types", unit="type")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(generate_samples, st, count, cfg, client): st
+                for st, count, cfg in sub_type_items
+            }
+            for future in concurrent.futures.as_completed(futures):
+                samples = future.result()
+                all_samples.extend(samples)
+                generated += len(samples)
+                pbar.update(1)
+        pbar.close()
+    else:
+        print("\nAll clear sub-types already complete, skipping.")
 
     # Generate boundary samples (parallel)
-    boundary_per_pair = max(1, (total - len(all_samples) - existing_count) // len(BOUNDARY_PAIRS))
-    print(f"\nGenerating boundary samples ({boundary_per_pair}/pair, {len(BOUNDARY_PAIRS)} pairs, {max_workers} workers):")
-    pbar = tqdm(total=len(BOUNDARY_PAIRS), desc="Pairs", unit="pair")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(generate_boundary_samples, pair, boundary_per_pair, client): pair
-            for pair in BOUNDARY_PAIRS
-        }
-        for future in concurrent.futures.as_completed(futures):
-            samples = future.result()
-            all_samples.extend(samples)
-            generated += len(samples)
-            pbar.update(1)
-    pbar.close()
+    clear_done = sum(existing_per_sub_type.values()) + len(all_samples)
+    boundary_budget = max(0, total - clear_done)
+    boundary_per_pair = max(1, boundary_budget // len(BOUNDARY_PAIRS)) if boundary_budget > 0 else 0
+    if existing_boundary > 0:
+        already_per_pair = existing_boundary // len(BOUNDARY_PAIRS)
+        boundary_per_pair = max(0, boundary_per_pair - already_per_pair)
+
+    if boundary_per_pair > 0:
+        print(f"\nGenerating boundary samples ({boundary_per_pair}/pair, {len(BOUNDARY_PAIRS)} pairs, {max_workers} workers):")
+        pbar = tqdm(total=len(BOUNDARY_PAIRS), desc="Pairs", unit="pair")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(generate_boundary_samples, pair, boundary_per_pair, client): pair
+                for pair in BOUNDARY_PAIRS
+            }
+            for future in concurrent.futures.as_completed(futures):
+                samples = future.result()
+                all_samples.extend(samples)
+                generated += len(samples)
+                pbar.update(1)
+        pbar.close()
+    else:
+        print("\nAll boundary samples already complete, skipping.")
 
     # Write output
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
