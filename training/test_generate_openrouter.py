@@ -129,7 +129,7 @@ class TestSubTypeConfig:
 
         for sub_type, config in SUB_TYPE_CONFIG.items():
             models = config["models"]
-            assert 5 <= len(models) <= 7, (
+            assert 5 <= len(models) <= 9, (
                 f"{sub_type} has {len(models)} models, expected 5-7"
             )
 

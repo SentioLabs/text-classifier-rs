@@ -310,30 +310,37 @@ def _build_sub_type_config() -> dict[str, dict]:
         "artifact": ["pdf_dump", "ocr_garbage", "boilerplate", "skip"],
     }
 
-    # Model pools per category: cheap models (70%), frontier accent (30%)
-    # Cheap: DeepSeek, Llama, Qwen, Codestral, Gemma (~$0.10-0.50/M tokens)
-    # Frontier: Claude, GPT-5, Grok, Mistral Large (~$3-15/M tokens)
+    # Model pools per category: cheap models (90%), frontier accent (10%)
+    # Cheap: DeepSeek, Llama, Qwen, Codestral, Gemma, etc. (~$0.10-$1.50/M tokens)
+    # Frontier: Claude, GPT-5/5.4 (~$3-15/M tokens) — kept at 10% for diversity
     _code_models = _weighted_models(
         ["deepseek/deepseek-v3.2", "meta-llama/llama-3.3-70b-instruct",
-         "qwen/qwen3-235b-a22b", "mistralai/codestral-2508", "google/gemini-2.5-flash"],
+         "qwen/qwen3-235b-a22b", "mistralai/codestral-2508", "google/gemini-2.5-flash",
+         "qwen/qwen3-coder", "meta-llama/llama-4-maverick"],
         ["anthropic/claude-sonnet-4.6", "openai/gpt-5.4"],
+        primary_share=0.90,
     )
     _prose_models = _weighted_models(
         ["meta-llama/llama-3.3-70b-instruct", "google/gemma-3-27b-it",
-         "qwen/qwen3-235b-a22b", "cohere/command-a", "mistralai/mistral-large-2512"],
+         "qwen/qwen3-235b-a22b", "cohere/command-a", "mistralai/mistral-large-2512",
+         "deepseek/deepseek-r1-0528", "meta-llama/llama-4-maverick"],
         ["anthropic/claude-sonnet-4.6", "openai/gpt-5"],
+        primary_share=0.90,
     )
     _structured_models = _weighted_models(
         ["deepseek/deepseek-v3.2", "qwen/qwen3-235b-a22b",
          "meta-llama/llama-3.3-70b-instruct", "google/gemini-2.5-flash",
-         "mistralai/codestral-2508"],
+         "mistralai/codestral-2508", "qwen/qwen3-coder", "cohere/command-a"],
         ["anthropic/claude-sonnet-4.6", "openai/gpt-5.4"],
+        primary_share=0.90,
     )
     _artifact_models = _weighted_models(
         ["meta-llama/llama-3.1-8b-instruct", "microsoft/phi-4",
          "openai/gpt-5.4-nano", "deepseek/deepseek-v3.2",
-         "meta-llama/llama-3.3-70b-instruct"],
+         "meta-llama/llama-3.3-70b-instruct", "google/gemma-3-27b-it",
+         "qwen/qwen3-30b-a3b"],
         ["anthropic/claude-sonnet-4.6", "openai/gpt-5"],
+        primary_share=0.90,
     )
 
     model_pools = {
