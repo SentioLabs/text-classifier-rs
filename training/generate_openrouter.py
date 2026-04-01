@@ -18,6 +18,7 @@ Usage:
 import argparse
 from collections import defaultdict
 import concurrent.futures
+import threading
 import itertools
 import json
 import math
@@ -904,9 +905,21 @@ def main(argv: list[str] | None = None) -> None:
         if missing:
             print(f"  Starting {len(missing)} new sub-types: {', '.join(missing[:5])}{'...' if len(missing) > 5 else ''}")
 
-    all_samples: list[dict] = []
-    generated = existing_count
+    new_samples = 0
     max_workers = 4  # concurrent API calls
+
+    # Open output file for incremental writing (append mode for resume)
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    _output_lock = threading.Lock()
+    _output_file = open(args.output, "a")
+
+    def _flush_samples(samples: list[dict]) -> int:
+        """Write samples to output file immediately (thread-safe)."""
+        with _output_lock:
+            for sample in samples:
+                _output_file.write(json.dumps(sample) + "\n")
+            _output_file.flush()
+        return len(samples)
 
     # Build list of sub-types that still need generation
     sub_type_items = []
@@ -926,15 +939,14 @@ def main(argv: list[str] | None = None) -> None:
             }
             for future in concurrent.futures.as_completed(futures):
                 samples = future.result()
-                all_samples.extend(samples)
-                generated += len(samples)
+                new_samples += _flush_samples(samples)
                 pbar.update(1)
         pbar.close()
     else:
         print("\nAll clear sub-types already complete, skipping.")
 
     # Generate boundary samples (parallel)
-    clear_done = sum(existing_per_sub_type.values()) + len(all_samples)
+    clear_done = sum(existing_per_sub_type.values()) + new_samples
     boundary_budget = max(0, total - clear_done)
     boundary_per_pair = max(1, boundary_budget // len(BOUNDARY_PAIRS)) if boundary_budget > 0 else 0
     if existing_boundary > 0:
@@ -951,22 +963,16 @@ def main(argv: list[str] | None = None) -> None:
             }
             for future in concurrent.futures.as_completed(futures):
                 samples = future.result()
-                all_samples.extend(samples)
-                generated += len(samples)
+                new_samples += _flush_samples(samples)
                 pbar.update(1)
         pbar.close()
     else:
         print("\nAll boundary samples already complete, skipping.")
 
-    # Write output
-    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    mode = "a" if args.resume and os.path.exists(args.output) else "w"
-    with open(args.output, mode) as f:
-        for sample in all_samples:
-            f.write(json.dumps(sample) + "\n")
+    _output_file.close()
 
-    print(f"Wrote {len(all_samples)} samples to {args.output}")
-    print(f"Total: {generated}")
+    print(f"Wrote {new_samples} new samples to {args.output}")
+    print(f"Total: {existing_count + new_samples}")
 
     # Print API call stats summary
     print_api_stats()
