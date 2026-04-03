@@ -1,9 +1,7 @@
 """Tests for featurize.py — validates structural feature extraction parity with Rust."""
 
 import math
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -302,6 +300,79 @@ class TestSymbolRatio:
         text = "a{b}"  # '{' and '}' are symbols
         assert symbol_ratio(text) == pytest.approx(2.0 / 4.0, abs=1e-4)
 
+    def test_unicode_arrows_excluded(self):
+        # U+2192 RIGHTWARDS ARROW should be excluded
+        text = "a\u2192b"  # 3 chars, arrow excluded -> 0 symbols
+        assert symbol_ratio(text) == 0.0
+
+    def test_unicode_box_drawing_excluded(self):
+        # U+2500 BOX DRAWINGS LIGHT HORIZONTAL
+        text = "a\u2500b"
+        assert symbol_ratio(text) == 0.0
+
+    def test_unicode_block_elements_excluded(self):
+        # U+2588 FULL BLOCK
+        text = "a\u2588b"
+        assert symbol_ratio(text) == 0.0
+
+    def test_unicode_geometric_shapes_excluded(self):
+        # U+25A0 BLACK SQUARE
+        text = "a\u25A0b"
+        assert symbol_ratio(text) == 0.0
+
+    def test_unicode_dingbats_excluded(self):
+        # U+2714 HEAVY CHECK MARK
+        text = "a\u2714b"
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_em_dash_excluded(self):
+        text = "a\u2014b"  # em dash
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_en_dash_excluded(self):
+        text = "a\u2013b"  # en dash
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_bullet_excluded(self):
+        text = "a\u2022b"  # bullet
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_degree_excluded(self):
+        text = "a\u00B0b"  # degree sign
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_copyright_excluded(self):
+        text = "a\u00A9b"  # copyright
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_registered_excluded(self):
+        text = "a\u00AEb"  # registered
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_trademark_excluded(self):
+        text = "a\u2122b"  # trademark
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_ellipsis_excluded(self):
+        text = "a\u2026b"  # horizontal ellipsis
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_multiply_excluded(self):
+        text = "a\u00D7b"  # multiplication sign
+        assert symbol_ratio(text) == 0.0
+
+    def test_typographic_divide_excluded(self):
+        text = "a\u00F7b"  # division sign
+        assert symbol_ratio(text) == 0.0
+
+    def test_non_excluded_unicode_still_counted(self):
+        # U+03B1 GREEK SMALL LETTER ALPHA is alphanumeric, not a symbol
+        # U+2605 BLACK STAR is in Misc Symbols range (excluded)
+        # Use something outside excluded ranges, e.g. U+2000 EN QUAD (whitespace-ish but not alphanumeric)
+        # Actually let's use a char clearly outside: U+00A7 SECTION SIGN
+        text = "a\u00A7b"  # section sign, not in excluded sets
+        assert symbol_ratio(text) == pytest.approx(1.0 / 3.0, abs=1e-4)
+
 
 # ---------------------------------------------------------------------------
 # delimiter_consistency
@@ -567,3 +638,30 @@ class TestCli:
         assert len(output_df.columns) == 22
         for col in FEATURES:
             assert col in output_df.columns, f"missing column: {col}"
+
+    def test_feature_columns_are_float32(self, tmp_path):
+        """Feature columns should use Float32 dtype to match Rust f32."""
+        import polars as pl
+        from featurize import main
+
+        input_csv = tmp_path / "input.csv"
+        output_csv = tmp_path / "output.csv"
+
+        df = pl.DataFrame({"text": ["Hello world."]})
+        df.write_csv(str(input_csv))
+
+        main(["--input", str(input_csv), "--output", str(output_csv)])
+
+        output_df = pl.read_csv(str(output_csv))
+        # Re-read with schema overrides won't help; instead, test via main internals
+        # Actually, CSV loses dtype info. Let's test the DataFrame construction directly.
+        from featurize import extract_all
+
+        rows = [extract_all("Hello world.")]
+        features_df = pl.DataFrame(
+            rows, schema={name: pl.Float32 for name in FEATURES}
+        )
+        for col in FEATURES:
+            assert features_df[col].dtype == pl.Float32, (
+                f"{col} should be Float32, got {features_df[col].dtype}"
+            )

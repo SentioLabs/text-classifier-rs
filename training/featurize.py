@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["polars", "numpy", "tqdm"]
+# dependencies = ["polars", "tqdm"]
 # ///
 """Compute 18 structural text features and enrich a training CSV.
 
@@ -38,6 +38,29 @@ UNIQUENESS_LINES: int = 500
 # Punctuation excluded from symbol_ratio (matches features.rs exactly):
 # space, newline, tab, carriage-return, . , ; : ! ? - ' "
 COMMON_PUNCTUATION: frozenset[str] = frozenset(' \n\t\r.,;:!?-\'"')
+
+# Typographic symbols excluded from symbol_ratio (matches features.rs):
+# en dash, em dash, bullet, degree, copyright, registered, trademark,
+# horizontal ellipsis, multiplication sign, division sign
+TYPOGRAPHIC_SYMBOLS: frozenset[str] = frozenset('–—•°©®™…×÷')
+
+# Unicode decorative ranges excluded from symbol_ratio (matches features.rs):
+# Arrows (U+2190-21FF), Box Drawing + Block Elements (U+2500-259F),
+# Geometric Shapes + Misc Symbols + Dingbats (U+25A0-27BF)
+UNICODE_DECORATIVE_RANGES: list[tuple[int, int]] = [
+    (0x2190, 0x21FF),
+    (0x2500, 0x259F),
+    (0x25A0, 0x27BF),
+]
+
+
+def _is_unicode_decorative(ch: str) -> bool:
+    """Check if a character falls in a Unicode decorative range."""
+    cp = ord(ch)
+    for lo, hi in UNICODE_DECORATIVE_RANGES:
+        if lo <= cp <= hi:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -164,12 +187,19 @@ def short_line_ratio(text: str) -> float:
 def symbol_ratio(text: str) -> float:
     """Fraction of non-alphanumeric chars, excluding common punctuation.
 
-    Common punctuation excluded: space, newline, tab, CR, . , ; : ! ? - ' "
+    Excludes common punctuation (space, newline, tab, CR, . , ; : ! ? - ' "),
+    Unicode decorative ranges (arrows, box drawing, geometric shapes, etc.),
+    and typographic symbols (dashes, bullets, copyright, etc.).
     Matches features.rs exactly.
     """
     total_chars = max(len(text), 1)
     symbols = sum(
-        1 for ch in text if not ch.isalnum() and ch not in COMMON_PUNCTUATION
+        1
+        for ch in text
+        if not ch.isalnum()
+        and ch not in COMMON_PUNCTUATION
+        and not _is_unicode_decorative(ch)
+        and ch not in TYPOGRAPHIC_SYMBOLS
     )
     return symbols / total_chars
 
@@ -469,7 +499,7 @@ def main(argv: list[str] | None = None) -> None:
     for text in tqdm(texts, desc="Featurizing"):
         rows.append(extract_all(text if text is not None else ""))
 
-    features_df = pl.DataFrame(rows, schema={name: pl.Float64 for name in FEATURES})
+    features_df = pl.DataFrame(rows, schema={name: pl.Float32 for name in FEATURES})
     result = pl.concat([df, features_df], how="horizontal")
     result.write_csv(str(output_path))
 
