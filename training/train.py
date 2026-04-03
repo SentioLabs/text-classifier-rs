@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["torch", "pandas", "numpy", "onnx", "onnxruntime"]
+# dependencies = ["torch", "pandas", "numpy", "onnx", "onnxscript", "onnxruntime", "scikit-learn"]
 # ///
 """Train a dual-head feedforward neural network on structural text features.
 
@@ -80,6 +80,9 @@ def load_and_prepare_data(
 
     # Encode category labels
     y_cat = df["category"].map(CATEGORY_MAP).values.astype(np.int64)
+
+    # Fill missing sub_type values with "unknown"
+    df["sub_type"] = df["sub_type"].fillna("unknown")
 
     # Build sub_type label map from unique values in the data
     unique_sub_types = sorted(df["sub_type"].unique())

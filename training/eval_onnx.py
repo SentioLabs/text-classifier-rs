@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["onnxruntime", "numpy", "tqdm"]
+# dependencies = ["onnxruntime", "numpy", "tqdm", "polars"]
 # ///
 """Evaluate a trained ONNX model against eval JSONL files.
 

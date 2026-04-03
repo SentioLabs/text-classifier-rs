@@ -711,7 +711,8 @@ fn validate(
         let doc: serde_json::Value = serde_json::from_str(&line)?;
         let label = doc["label"]
             .as_str()
-            .ok_or("Missing or non-string 'label' field")?;
+            .or_else(|| doc["expected_category"].as_str())
+            .ok_or("Missing or non-string 'label'/'expected_category' field")?;
 
         if let Some(text) = resolve_field(&doc, text_field) {
             sample_num += 1;

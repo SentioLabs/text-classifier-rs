@@ -41,8 +41,9 @@ def feature_dedup(
         Deduplicated dataframe with the original column order preserved.
     """
     n = len(df)
-    if n <= 1:
-        logger.info("Feature dedup: removed 0 of %d samples (0.0%%)", n)
+    if n <= 1 or threshold <= 0:
+        logger.info("Feature dedup: removed 0 of %d samples (0.0%%) %s", n,
+                     "(disabled)" if threshold <= 0 else "")
         return df.copy()
 
     features = df[feature_cols].values.astype(np.float32)
@@ -181,7 +182,11 @@ def dedup_pipeline(
         c for c in df.select_dtypes(include=[np.number]).columns if c != "text"
     ]
 
-    df_after_feat = feature_dedup(df, feature_cols, threshold=feature_threshold)
+    if feature_cols:
+        df_after_feat = feature_dedup(df, feature_cols, threshold=feature_threshold)
+    else:
+        logger.info("No numeric feature columns found — skipping feature dedup")
+        df_after_feat = df
     after_feature_count = len(df_after_feat)
 
     df_after_sem = semantic_dedup(
