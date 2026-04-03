@@ -114,7 +114,7 @@ def semantic_dedup(
         return df.copy()
 
     model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-    texts = df[text_col].tolist()
+    texts = [str(t) if not isinstance(t, str) else t for t in df[text_col].tolist()]
     embeddings = model.encode(texts, convert_to_numpy=True).astype(np.float32)
 
     # L2 normalize so inner product == cosine similarity

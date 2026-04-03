@@ -721,8 +721,21 @@ def _safe_stream(dataset_name: str, **kwargs):
 
 def sample_finepdfs(n: int = 8000) -> Generator[dict, None, None]:
     """Stream from HuggingFaceFW/finepdfs_100BT for PDF dump text."""
-    ds = _safe_stream("HuggingFaceFW/finepdfs_100BT", split="train")
-    if ds is None:
+    try:
+        import datasets
+
+        token = _get_hf_token()
+        # Use data_files to select a single shard to avoid schema mismatch
+        ds = datasets.load_dataset(
+            "HuggingFaceFW/finepdfs_100BT",
+            split="train",
+            streaming=True,
+            token=token,
+            data_files="data/000_00000.parquet",
+            trust_remote_code=True,
+        )
+    except Exception as e:
+        print(f"WARNING: Failed to stream finepdfs: {e}", file=sys.stderr)
         return
 
     count = 0
@@ -1036,11 +1049,17 @@ def main():
                     gen = func(n=target_count)
 
                 source_count = 0
-                for sample in gen:
-                    f.write(json.dumps(sample, ensure_ascii=False) + "\n")
-                    source_count += 1
-                    total_written += 1
-                    pbar.update(1)
+                try:
+                    for sample in gen:
+                        f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+                        source_count += 1
+                        total_written += 1
+                        pbar.update(1)
+                except Exception as e:
+                    print(
+                        f"\nWARNING: {source_name} failed after {source_count} samples: {e}",
+                        file=sys.stderr,
+                    )
 
                 pbar.set_postfix(source=source_name, n=source_count)
 
