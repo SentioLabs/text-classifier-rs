@@ -41,14 +41,16 @@ tasks:
       - uv run featurize.py --input data/golden_raw.csv --output data/golden_featurized.csv
 
   train:dedup:
-    desc: FAISS dedup on featurized training split
+    desc: Semantic dedup on featurized training split
+    env:
+      KMP_DUPLICATE_LIB_OK: "TRUE"
     cmds:
-      - uv run dedup.py --input data/golden_featurized.csv --output data/golden_train.csv
+      - uv run dedup.py --input data/golden_featurized.csv --output data/golden_train.csv --feature-threshold 0
 
   train:train:
     desc: Train model on deduped golden data
     cmds:
-      - uv run train.py --input data/golden_train.csv --output output/
+      - uv run train.py --data data/golden_train.csv --output output/
 
   train:update-model:
     desc: Copy trained model to src/ for embedding
@@ -56,12 +58,10 @@ tasks:
       - cp output/model.onnx ../src/model.onnx
       - cp output/model_config.json ../src/model_config.json
 
-  train:validate:
-    desc: Validate against both golden eval sets
+  train:eval-onnx:
+    desc: Evaluate ONNX model against eval sets (Python, no Rust needed)
     cmds:
-      - cd .. && cargo build --release --features onnx-model
-      - cd .. && ./target/release/classify validate --input eval/clear.jsonl --json
-      - cd .. && ./target/release/classify validate --input eval/boundary.jsonl --json
+      - uv run eval_onnx.py --model output/model.onnx --config output/model_config.json --eval ../eval/clear.jsonl --eval ../eval/boundary.jsonl
 
   train:pipeline:
     desc: Full pipeline -- generate -> split -> featurize -> dedup -> train -> embed -> validate
@@ -72,4 +72,4 @@ tasks:
       - task train:dedup
       - task train:train
       - task train:update-model
-      - task train:validate
+      - task train:eval-onnx
