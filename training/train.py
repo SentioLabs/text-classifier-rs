@@ -50,6 +50,11 @@ FEATURE_COLUMNS = (
     "comment_ratio",
     "numeric_field_ratio",
     "repetitive_structure_score",
+    # Content-level features
+    "dictionary_word_ratio",
+    "encoding_error_ratio",
+    "repeated_ngram_ratio",
+    "sentence_coherence_score",
 )
 
 CATEGORY_MAP: dict[str, int] = {
@@ -108,6 +113,11 @@ def load_and_prepare_data(
     X_train = (X_train - feature_mean) / feature_std
     X_val = (X_val - feature_mean) / feature_std
 
+    # Inverse-frequency class weights so minority classes are penalized more
+    class_counts = np.bincount(y_cat_train, minlength=NUM_CATEGORIES)
+    class_weights = 1.0 / (class_counts + 1)
+    class_weights = class_weights / class_weights.sum() * len(class_weights)
+
     return {
         "X_train": X_train,
         "X_val": X_val,
@@ -118,6 +128,7 @@ def load_and_prepare_data(
         "feature_mean": feature_mean,
         "feature_std": feature_std,
         "sub_type_map": sub_type_map,
+        "class_weights": class_weights,
     }
 
 
@@ -131,7 +142,7 @@ class TextClassifier(nn.Module):
 
     def __init__(
         self,
-        n_features: int = 18,
+        n_features: int = 22,
         n_categories: int = NUM_CATEGORIES,
         n_sub_types: int = 33,
     ):
@@ -188,7 +199,8 @@ def train_model(
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5
     )
-    cat_criterion = nn.CrossEntropyLoss()
+    weight_tensor = torch.tensor(data["class_weights"], dtype=torch.float32).to(device)
+    cat_criterion = nn.CrossEntropyLoss(weight=weight_tensor)
     sub_criterion = nn.CrossEntropyLoss()
 
     best_val_loss = float("inf")

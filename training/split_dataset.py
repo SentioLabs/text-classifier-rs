@@ -120,6 +120,7 @@ def split_dataset(
     eval_per_category: int = 1000,
     eval_per_pair: int = 1000,
     seed: int = 42,
+    max_per_category: int = 0,
 ) -> None:
     """Split *input_path* JSONL into eval and training sets."""
     all_samples = load_jsonl(input_path)
@@ -142,6 +143,22 @@ def split_dataset(
     )
 
     training = train_clear + train_boundary
+
+    # Downsample overrepresented categories if requested
+    if max_per_category > 0:
+        training_by_cat: dict[str, list[dict]] = defaultdict(list)
+        for s in training:
+            training_by_cat[s.get("expected_category", "")].append(s)
+        rng = random.Random(seed)
+        downsampled: list[dict] = []
+        for cat in sorted(training_by_cat):
+            samples = training_by_cat[cat]
+            if len(samples) > max_per_category:
+                rng.shuffle(samples)
+                downsampled.extend(samples[:max_per_category])
+            else:
+                downsampled.extend(samples)
+        training = downsampled
 
     # Write eval clear JSONL
     _write_jsonl(eval_clear_path, eval_clear)
@@ -276,6 +293,12 @@ def main() -> None:
         default=42,
         help="Random seed for reproducibility",
     )
+    parser.add_argument(
+        "--max-per-category",
+        type=int,
+        default=0,
+        help="Max training samples per category (0 = no limit)",
+    )
     args = parser.parse_args()
 
     split_dataset(
@@ -286,6 +309,7 @@ def main() -> None:
         eval_per_category=args.eval_per_category,
         eval_per_pair=args.eval_per_pair,
         seed=args.seed,
+        max_per_category=args.max_per_category,
     )
 
     # Verify diversity on eval sets

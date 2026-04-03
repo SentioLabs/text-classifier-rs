@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from train import (
     CATEGORY_MAP,
     FEATURE_COLUMNS,
+    NUM_CATEGORIES,
     TextClassifier,
     load_and_prepare_data,
     parse_args,
@@ -82,7 +83,7 @@ def output_dir(tmp_path: Path) -> Path:
 
 class TestConstants:
     def test_feature_columns_count(self):
-        assert len(FEATURE_COLUMNS) == 18
+        assert len(FEATURE_COLUMNS) == 22
 
     def test_category_map_entries(self):
         assert CATEGORY_MAP == {
@@ -98,14 +99,14 @@ class TestModel:
     def test_forward_shapes(self):
         import torch
 
-        model = TextClassifier(n_features=18, n_categories=5, n_sub_types=10)
-        x = torch.randn(4, 18)
+        model = TextClassifier(n_features=22, n_categories=5, n_sub_types=10)
+        x = torch.randn(4, 22)
         cat_logits, sub_logits = model(x)
         assert cat_logits.shape == (4, 5)
         assert sub_logits.shape == (4, 10)
 
     def test_shared_layers_exist(self):
-        model = TextClassifier(n_features=18, n_categories=5, n_sub_types=10)
+        model = TextClassifier(n_features=22, n_categories=5, n_sub_types=10)
         assert hasattr(model, "shared")
         assert hasattr(model, "category_head")
         assert hasattr(model, "sub_type_head")
@@ -114,10 +115,10 @@ class TestModel:
         """Model should have 3 linear layers: 18->128, 128->64, 64->32."""
         import torch.nn as nn
 
-        model = TextClassifier(n_features=18, n_categories=5, n_sub_types=10)
+        model = TextClassifier(n_features=22, n_categories=5, n_sub_types=10)
         linear_layers = [m for m in model.shared if isinstance(m, nn.Linear)]
         assert len(linear_layers) == 3, f"Expected 3 Linear layers, got {len(linear_layers)}"
-        assert linear_layers[0].in_features == 18
+        assert linear_layers[0].in_features == 22
         assert linear_layers[0].out_features == 128
         assert linear_layers[1].in_features == 128
         assert linear_layers[1].out_features == 64
@@ -128,7 +129,7 @@ class TestModel:
         """Dropout layers should use p=0.3."""
         import torch.nn as nn
 
-        model = TextClassifier(n_features=18, n_categories=5, n_sub_types=10)
+        model = TextClassifier(n_features=22, n_categories=5, n_sub_types=10)
         dropout_layers = [m for m in model.shared if isinstance(m, nn.Dropout)]
         assert len(dropout_layers) >= 1, "No Dropout layers found"
         for d in dropout_layers:
@@ -183,6 +184,7 @@ class TestDataLoading:
             "feature_mean",
             "feature_std",
             "sub_type_map",
+            "class_weights",
         }
         assert set(result.keys()) == expected_keys
 
@@ -210,6 +212,47 @@ class TestDataLoading:
         # All sub_type labels should be non-negative integers
         assert all(isinstance(v, int) and v >= 0 for v in sub_map.values())
         assert len(sub_map) == len(DUMMY_SUB_TYPES)
+
+    def test_class_weights_length(self, dummy_csv):
+        """class_weights array should have length NUM_CATEGORIES."""
+        result = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+        weights = result["class_weights"]
+        assert len(weights) == NUM_CATEGORIES
+
+    def test_class_weights_inversely_proportional(self, tmp_path):
+        """Less frequent classes should receive higher weights."""
+        import random
+
+        random.seed(99)
+        csv_path = tmp_path / "imbalanced.csv"
+        counts_per_cat = {"prose": 100, "code": 10, "structured": 10, "artifact": 10, "skip": 10}
+
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            header = list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type"]
+            writer.writerow(header)
+            for cat in CATEGORY_MAP:
+                for _ in range(counts_per_cat[cat]):
+                    features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
+                    line_count = random.randint(1, 500)
+                    sub_type = random.choice(DUMMY_SUB_TYPES)
+                    writer.writerow(features + [line_count, cat, sub_type])
+
+        result = load_and_prepare_data(csv_path, val_fraction=0.2, seed=42)
+        weights = result["class_weights"]
+
+        prose_weight = weights[CATEGORY_MAP["prose"]]
+        code_weight = weights[CATEGORY_MAP["code"]]
+        assert code_weight > prose_weight, (
+            f"Minority class 'code' (weight={code_weight:.4f}) should have higher "
+            f"weight than majority class 'prose' (weight={prose_weight:.4f})"
+        )
+
+    def test_class_weights_all_positive(self, dummy_csv):
+        """All class weights should be positive."""
+        result = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+        weights = result["class_weights"]
+        assert all(w > 0 for w in weights), f"All weights should be positive, got {weights}"
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +316,9 @@ class TestEndToEnd:
         assert "feature_std" in config
         assert "category_map" in config
         assert "sub_type_map" in config
-        assert len(config["feature_names"]) == 18
-        assert len(config["feature_mean"]) == 18
-        assert len(config["feature_std"]) == 18
+        assert len(config["feature_names"]) == 22
+        assert len(config["feature_mean"]) == 22
+        assert len(config["feature_std"]) == 22
 
     def test_metrics_json_structure(self, dummy_csv, output_dir):
         """Verify metrics.json has expected fields."""

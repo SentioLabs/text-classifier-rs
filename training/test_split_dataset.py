@@ -343,3 +343,139 @@ class TestVerifyDiversity:
         # Should warn about "python" sub_type, not "plain"
         assert len(warnings) > 0
         assert any("python" in w for w in warnings)
+
+
+# ---------------------------------------------------------------------------
+# Tests for downsampling (max_per_category)
+# ---------------------------------------------------------------------------
+
+
+class TestDownsampling:
+    def test_downsampling_caps_large_categories(self, tmp_path):
+        from split_dataset import split_dataset
+
+        samples = []
+        for i in range(10):
+            samples.append(
+                _make_sample(
+                    text=f"code sample {i}",
+                    expected_category="code",
+                    sub_type="python",
+                    model=f"m{i % 3}",
+                )
+            )
+        for i in range(3):
+            samples.append(
+                _make_sample(
+                    text=f"prose sample {i}",
+                    expected_category="prose",
+                    sub_type="plain",
+                    model=f"m{i}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        eval_clear = str(tmp_path / "eval_clear.jsonl")
+        eval_boundary = str(tmp_path / "eval_boundary.jsonl")
+        train_path = str(tmp_path / "train.csv")
+
+        _write_jsonl(input_path, samples)
+
+        split_dataset(
+            input_path=input_path,
+            eval_clear_path=eval_clear,
+            eval_boundary_path=eval_boundary,
+            train_path=train_path,
+            eval_per_category=0,
+            eval_per_pair=0,
+            seed=42,
+            max_per_category=5,
+        )
+
+        with open(train_path) as f:
+            reader = csv.DictReader(f)
+            train_rows = list(reader)
+
+        from collections import Counter
+
+        cats = Counter(r["category"] for r in train_rows)
+        assert cats["code"] == 5
+        assert cats["prose"] == 3
+
+    def test_downsampling_zero_means_no_limit(self, tmp_path):
+        from split_dataset import split_dataset
+
+        samples = []
+        for i in range(10):
+            samples.append(
+                _make_sample(
+                    text=f"code sample {i}",
+                    expected_category="code",
+                    sub_type="python",
+                    model=f"m{i % 3}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        eval_clear = str(tmp_path / "eval_clear.jsonl")
+        eval_boundary = str(tmp_path / "eval_boundary.jsonl")
+        train_path = str(tmp_path / "train.csv")
+
+        _write_jsonl(input_path, samples)
+
+        split_dataset(
+            input_path=input_path,
+            eval_clear_path=eval_clear,
+            eval_boundary_path=eval_boundary,
+            train_path=train_path,
+            eval_per_category=0,
+            eval_per_pair=0,
+            seed=42,
+            max_per_category=0,
+        )
+
+        with open(train_path) as f:
+            reader = csv.DictReader(f)
+            train_rows = list(reader)
+
+        assert len(train_rows) == 10
+
+    def test_downsampling_is_deterministic(self, tmp_path):
+        from split_dataset import split_dataset
+
+        samples = []
+        for i in range(20):
+            samples.append(
+                _make_sample(
+                    text=f"code sample {i}",
+                    expected_category="code",
+                    sub_type="python",
+                    model=f"m{i % 5}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        _write_jsonl(input_path, samples)
+
+        results = []
+        for run in range(2):
+            eval_clear = str(tmp_path / f"eval_clear_{run}.jsonl")
+            eval_boundary = str(tmp_path / f"eval_boundary_{run}.jsonl")
+            train_path = str(tmp_path / f"train_{run}.csv")
+
+            split_dataset(
+                input_path=input_path,
+                eval_clear_path=eval_clear,
+                eval_boundary_path=eval_boundary,
+                train_path=train_path,
+                eval_per_category=0,
+                eval_per_pair=0,
+                seed=42,
+                max_per_category=5,
+            )
+
+            with open(train_path) as f:
+                reader = csv.DictReader(f)
+                results.append([r["text"] for r in reader])
+
+        assert results[0] == results[1]

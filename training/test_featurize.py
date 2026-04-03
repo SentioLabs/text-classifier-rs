@@ -17,6 +17,8 @@ from featurize import (
     char_entropy,
     comment_ratio,
     delimiter_consistency,
+    dictionary_word_ratio,
+    encoding_error_ratio,
     extract_all,
     json_brace_depth,
     key_value_ratio,
@@ -26,7 +28,9 @@ from featurize import (
     log_line_ratio,
     numeric_field_ratio,
     paragraph_break_rate,
+    repeated_ngram_ratio,
     repetitive_structure_score,
+    sentence_coherence_score,
     sentence_punctuation_rate,
     short_line_ratio,
     symbol_ratio,
@@ -47,8 +51,8 @@ class TestConstants:
     def test_uniqueness_lines(self):
         assert UNIQUENESS_LINES == 500
 
-    def test_features_registry_has_18_entries(self):
-        assert len(FEATURES) == 18
+    def test_features_registry_has_22_entries(self):
+        assert len(FEATURES) == 22
 
     def test_features_registry_keys(self):
         expected = [
@@ -70,6 +74,10 @@ class TestConstants:
             "comment_ratio",
             "numeric_field_ratio",
             "repetitive_structure_score",
+            "dictionary_word_ratio",
+            "encoding_error_ratio",
+            "repeated_ngram_ratio",
+            "sentence_coherence_score",
         ]
         assert list(FEATURES.keys()) == expected
 
@@ -568,14 +576,109 @@ class TestRepetitiveStructureScore:
 
 
 # ---------------------------------------------------------------------------
+# dictionary_word_ratio
+# ---------------------------------------------------------------------------
+
+
+class TestDictionaryWordRatio:
+    def test_english_sentence(self):
+        result = dictionary_word_ratio("The cat sat on the mat")
+        assert result >= 0.8
+
+    def test_gibberish(self):
+        result = dictionary_word_ratio("xkq zpt mfn brl")
+        assert result < 0.1
+
+    def test_empty(self):
+        assert dictionary_word_ratio("") == 0.0
+
+    def test_mixed(self):
+        result = dictionary_word_ratio("the xkq cat zpt")
+        assert 0.3 <= result <= 0.7
+
+
+# ---------------------------------------------------------------------------
+# encoding_error_ratio
+# ---------------------------------------------------------------------------
+
+
+class TestEncodingErrorRatio:
+    def test_clean_text(self):
+        assert encoding_error_ratio("Hello world") == 0.0
+
+    def test_replacement_char(self):
+        text = "Hello \ufffd world"
+        assert encoding_error_ratio(text) > 0.0
+
+    def test_mojibake(self):
+        text = "caf\u00c3\u00a9 na\u00c3\u00afve"
+        assert encoding_error_ratio(text) > 0.0
+
+    def test_empty(self):
+        assert encoding_error_ratio("") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# repeated_ngram_ratio
+# ---------------------------------------------------------------------------
+
+
+class TestRepeatedNgramRatio:
+    def test_repeated_text(self):
+        text = "the quick brown the quick brown the quick brown"
+        result = repeated_ngram_ratio(text)
+        assert result > 0.5
+
+    def test_unique_prose(self):
+        text = "the cat sat on the mat in the sun by the door"
+        result = repeated_ngram_ratio(text)
+        assert result <= 0.5
+
+    def test_fewer_than_3_words(self):
+        assert repeated_ngram_ratio("hello world") == 0.0
+
+    def test_empty(self):
+        assert repeated_ngram_ratio("") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# sentence_coherence_score
+# ---------------------------------------------------------------------------
+
+
+class TestSentenceCoherenceScore:
+    def test_proper_sentences(self):
+        text = "Hello world.\nThis is great.\nHow are you?"
+        result = sentence_coherence_score(text)
+        assert result == pytest.approx(1.0, abs=1e-4)
+
+    def test_no_sentences(self):
+        text = "hello world\nthis is text\nno punctuation"
+        assert sentence_coherence_score(text) == 0.0
+
+    def test_mixed(self):
+        text = "Hello world.\nno caps here\nGoodbye!"
+        result = sentence_coherence_score(text)
+        assert result == pytest.approx(2.0 / 3.0, abs=1e-4)
+
+    def test_empty(self):
+        assert sentence_coherence_score("") == 0.0
+
+    def test_empty_lines_ignored(self):
+        text = "Hello world.\n\nGoodbye!"
+        result = sentence_coherence_score(text)
+        assert result == pytest.approx(1.0, abs=1e-4)
+
+
+# ---------------------------------------------------------------------------
 # extract_all
 # ---------------------------------------------------------------------------
 
 
 class TestExtractAll:
-    def test_returns_18_features(self):
+    def test_returns_22_features(self):
         result = extract_all("hello world, this is a test.")
-        assert len(result) == 18
+        assert len(result) == 22
 
     def test_returns_dict_with_correct_keys(self):
         result = extract_all("hello world")
@@ -634,8 +737,8 @@ class TestCli:
 
         output_df = pl.read_csv(str(output_csv))
         assert len(output_df) == 3
-        # Should have original 4 cols + 18 feature cols
-        assert len(output_df.columns) == 22
+        # Should have original 4 cols + 22 feature cols
+        assert len(output_df.columns) == 26
         for col in FEATURES:
             assert col in output_df.columns, f"missing column: {col}"
 

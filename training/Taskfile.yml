@@ -23,20 +23,26 @@ tasks:
     cmds:
       - uv run generate_openrouter.py --output data/synthetic_samples.jsonl --total-samples 30000
 
+  train:sample-real-v2:
+    desc: Sample real data for underrepresented categories from HuggingFace datasets
+    cmds:
+      - uv run sample_real_data.py --output data/real_samples_v2.jsonl
+
   train:generate:
-    desc: Generate full dataset (30K real + 30K synthetic = ~60K total)
+    desc: Generate full dataset (real v1 + real v2 + synthetic)
     cmds:
       - task train:sample-real
+      - task train:sample-real-v2
       - task train:generate-synthetic
-      - cat data/real_samples.jsonl data/synthetic_samples.jsonl > data/raw_samples.jsonl
+      - cat data/real_samples.jsonl data/real_samples_v2.jsonl data/synthetic_samples.jsonl > data/raw_samples.jsonl
 
   train:split:
-    desc: Split raw samples into 10K eval + 50K training
+    desc: Split raw samples into eval + training with per-category cap
     cmds:
-      - uv run split_dataset.py --input data/raw_samples.jsonl --eval-output ../eval/clear.jsonl --eval-boundary-output ../eval/boundary.jsonl --train-output data/golden_raw.csv
+      - uv run split_dataset.py --input data/raw_samples.jsonl --eval-output ../eval/clear.jsonl --eval-boundary-output ../eval/boundary.jsonl --train-output data/golden_raw.csv --max-per-category 50000
 
   train:featurize:
-    desc: Compute 18 structural features from text and enrich the training CSV
+    desc: Compute 22 structural + content features from text and enrich the training CSV
     cmds:
       - uv run featurize.py --input data/golden_raw.csv --output data/golden_featurized.csv
 

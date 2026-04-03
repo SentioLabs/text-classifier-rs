@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["polars", "tqdm"]
 # ///
-"""Compute 18 structural text features and enrich a training CSV.
+"""Compute 22 structural text features and enrich a training CSV.
 
 Ports the feature extraction logic from src/features.rs to Python.
 Each feature is a standalone ``str -> float`` function with exact parity
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import string
 import sys
 from collections import Counter
 from pathlib import Path
@@ -63,8 +64,19 @@ def _is_unicode_decorative(ch: str) -> bool:
     return False
 
 
+_WORDLIST: frozenset[str] | None = None
+
+
+def _load_wordlist() -> frozenset[str]:
+    global _WORDLIST
+    if _WORDLIST is None:
+        path = Path(__file__).parent / "data" / "wordlist.txt"
+        _WORDLIST = frozenset(path.read_text().splitlines())
+    return _WORDLIST
+
+
 # ---------------------------------------------------------------------------
-# Feature functions (18 total, matching features.rs)
+# Feature functions (22 total — 18 structural + 4 content-level)
 # ---------------------------------------------------------------------------
 
 
@@ -427,6 +439,101 @@ def repetitive_structure_score(text: str) -> float:
     return max_freq / sample_size
 
 
+def dictionary_word_ratio(text: str) -> float:
+    """Fraction of whitespace-delimited tokens found in a dictionary wordlist.
+
+    Tokens are lowercased and stripped of leading/trailing punctuation before
+    lookup.  Returns 0.0 for empty text or no valid tokens.
+    """
+    if not text:
+        return 0.0
+
+    wordlist = _load_wordlist()
+    tokens = text.split()
+    valid: list[str] = []
+    for token in tokens:
+        stripped = token.lower().strip(string.punctuation)
+        if stripped:
+            valid.append(stripped)
+
+    if not valid:
+        return 0.0
+
+    found = sum(1 for w in valid if w in wordlist)
+    return found / len(valid)
+
+
+def encoding_error_ratio(text: str) -> float:
+    """Fraction of characters that are encoding errors or mojibake sequences.
+
+    Counts U+FFFD replacement characters and common mojibake byte sequences
+    that result from UTF-8 text misinterpreted as Latin-1.
+    """
+    if not text:
+        return 0.0
+
+    fffd_count = text.count('\ufffd')
+
+    mojibake_sequences = [
+        'Ã©', 'Ã¨', 'Ã¼', 'Ã¶', 'Ã¤', 'Â°', 'Â©',
+        '\u00e2\u0080\u0093',  # â€"
+        '\u00e2\u0080\u0099',  # â€™
+        '\u00e2\u0080\u009c',  # â€œ
+        '\u00e2\u0080\u009d',  # â€\x9d
+    ]
+    mojibake_count = sum(text.count(seq) for seq in mojibake_sequences)
+
+    return (fffd_count + mojibake_count) / max(len(text), 1)
+
+
+def repeated_ngram_ratio(text: str) -> float:
+    """Fraction of unique 3-gram types that appear more than once.
+
+    Splits text into words, forms 3-grams, and returns the ratio of repeated
+    3-gram types to total unique 3-gram types.  Returns 0.0 if fewer than 3
+    words.
+    """
+    words = text.split()
+    if len(words) < 3:
+        return 0.0
+
+    ngrams: list[tuple[str, ...]] = []
+    for i in range(len(words) - 2):
+        ngrams.append((words[i], words[i + 1], words[i + 2]))
+
+    freq: Counter[tuple[str, ...]] = Counter(ngrams)
+    total_unique = len(freq)
+    if total_unique == 0:
+        return 0.0
+
+    repeated = sum(1 for count in freq.values() if count > 1)
+    return repeated / total_unique
+
+
+def sentence_coherence_score(text: str) -> float:
+    """Fraction of non-empty lines that look like proper sentences.
+
+    A line is considered a proper sentence if it starts with an uppercase
+    letter and ends with sentence-ending punctuation (. ! ?).
+    Empty lines are ignored.  Returns 0.0 for empty text.
+    """
+    if not text:
+        return 0.0
+
+    lines = text.splitlines()
+    non_empty = [line.strip() for line in lines if line.strip()]
+
+    if not non_empty:
+        return 0.0
+
+    proper = 0
+    for line in non_empty:
+        if line[0].isupper() and line[-1] in '.!?':
+            proper += 1
+
+    return proper / len(non_empty)
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -450,11 +557,15 @@ FEATURES: dict[str, Callable[[str], float]] = {
     "comment_ratio": comment_ratio,
     "numeric_field_ratio": numeric_field_ratio,
     "repetitive_structure_score": repetitive_structure_score,
+    "dictionary_word_ratio": dictionary_word_ratio,
+    "encoding_error_ratio": encoding_error_ratio,
+    "repeated_ngram_ratio": repeated_ngram_ratio,
+    "sentence_coherence_score": sentence_coherence_score,
 }
 
 
 def extract_all(text: str) -> dict[str, float]:
-    """Extract all 18 features from *text*, sampling the first 10k chars."""
+    """Extract all 22 features from *text*, sampling the first 10k chars."""
     if not text:
         return {name: 0.0 for name in FEATURES}
 
@@ -469,7 +580,7 @@ def extract_all(text: str) -> dict[str, float]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compute 18 structural text features and enrich a CSV."
+        description="Compute 22 structural text features and enrich a CSV."
     )
     parser.add_argument(
         "--input",
