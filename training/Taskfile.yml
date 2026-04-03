@@ -35,10 +35,15 @@ tasks:
     cmds:
       - uv run split_dataset.py --input data/raw_samples.jsonl --eval-output ../eval/clear.jsonl --eval-boundary-output ../eval/boundary.jsonl --train-output data/golden_raw.csv
 
-  train:dedup:
-    desc: FAISS dedup on training split
+  train:featurize:
+    desc: Compute 18 structural features from text and enrich the training CSV
     cmds:
-      - uv run dedup.py --input data/golden_raw.csv --output data/golden_train.csv
+      - uv run featurize.py --input data/golden_raw.csv --output data/golden_featurized.csv
+
+  train:dedup:
+    desc: FAISS dedup on featurized training split
+    cmds:
+      - uv run dedup.py --input data/golden_featurized.csv --output data/golden_train.csv
 
   train:train:
     desc: Train model on deduped golden data
@@ -59,10 +64,11 @@ tasks:
       - cd .. && ./target/release/classify validate --input eval/boundary.jsonl --json
 
   train:pipeline:
-    desc: Full pipeline -- generate -> split -> dedup -> train -> embed -> validate
+    desc: Full pipeline -- generate -> split -> featurize -> dedup -> train -> embed -> validate
     cmds:
       - task train:generate
       - task train:split
+      - task train:featurize
       - task train:dedup
       - task train:train
       - task train:update-model
