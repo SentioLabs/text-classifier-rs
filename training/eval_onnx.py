@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["onnxruntime", "numpy", "tqdm", "polars"]
 # ///
-"""Evaluate a trained ONNX model against eval JSONL files.
+"""Evaluate a trained ONNX model against eval JSONL or Parquet files.
 
 Loads the ONNX model and model_config.json, runs inference on each eval
 sample, and reports accuracy, per-category precision/recall/F1, and a
@@ -297,7 +297,7 @@ def write_prediction_records(path: Path, records: list[dict[str, Any]]) -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Evaluate ONNX model against eval JSONL files."
+        description="Evaluate ONNX model against eval JSONL or Parquet files."
     )
     parser.add_argument(
         "--model",
@@ -313,7 +313,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--eval",
         action="append",
         required=True,
-        help="Path to eval JSONL file (can be specified multiple times)",
+        help="Path to eval JSONL or Parquet file (can be specified multiple times)",
     )
     parser.add_argument(
         "--json",
