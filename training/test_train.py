@@ -105,7 +105,7 @@ def output_dir(tmp_path: Path) -> Path:
 
 class TestConstants:
     def test_feature_columns_count(self):
-        assert len(FEATURE_COLUMNS) == 28
+        assert len(FEATURE_COLUMNS) == 38
 
     def test_feature_columns_order(self):
         expected = [
@@ -137,6 +137,16 @@ class TestConstants:
             "encoding_error_ratio",
             "repeated_ngram_ratio",
             "sentence_coherence_score",
+            "avg_words_per_line",
+            "operator_density",
+            "inline_markup_count",
+            "indentation_consistency",
+            "markup_heading_ratio",
+            "code_fence_density",
+            "prose_paragraph_ratio",
+            "semicolon_line_ending_ratio",
+            "list_item_ratio",
+            "parenthesis_density",
         ]
         assert list(FEATURE_COLUMNS) == expected
 
