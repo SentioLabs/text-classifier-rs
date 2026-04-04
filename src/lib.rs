@@ -7,7 +7,9 @@ pub mod types;
 
 pub use features::extract_features;
 pub use tier2::ModelClassifier;
-pub use types::{Classification, FeatureVector, TextType, Tier};
+pub use types::{
+    thresholds, Classification, ContentSubType, FeatureVector, TextCategory, TextType, Tier,
+};
 
 /// Classify a text string using Tier 1 structural features only.
 ///
@@ -16,7 +18,8 @@ pub use types::{Classification, FeatureVector, TextType, Tier};
 pub fn classify(text: &str) -> Classification {
     if text.trim().is_empty() || tier1::is_too_short(text) {
         return Classification {
-            text_type: TextType::Skip,
+            category: TextCategory::Skip,
+            sub_type: None,
             confidence: 1.0,
             reason: "too short".to_string(),
             tier: Tier::Structural,
@@ -50,13 +53,14 @@ impl Classifier {
     /// Classify a single text string.
     ///
     /// 1. Short text (< 5 words) -> Skip
-    /// 2. Tier 1 structural features -> if confidence >= 0.7, return
+    /// 2. Tier 1 structural features -> if confidence >= 0.95, return
     /// 3. Tier 2 model (if loaded) -> return model decision
     /// 4. No model -> return low-confidence fallback
     pub fn classify(&self, text: &str) -> Classification {
         if text.trim().is_empty() || tier1::is_too_short(text) {
             return Classification {
-                text_type: TextType::Skip,
+                category: TextCategory::Skip,
+                sub_type: None,
                 confidence: 1.0,
                 reason: "too short".to_string(),
                 tier: Tier::Structural,
@@ -66,13 +70,14 @@ impl Classifier {
         let features = features::extract_features(text);
         let tier1_result = tier1::classify_tier1(&features);
 
-        // If Tier 1 is confident, use it
-        if tier1_result.confidence >= tier1::MIN_CONFIDENCE {
+        // Only accept Tier 1 for very high-confidence short-circuits
+        let threshold = 0.95;
+        if tier1_result.confidence >= threshold {
             return tier1_result;
         }
 
         // Otherwise, fall through to Tier 2
-        self.model.classify(text, &features)
+        self.model.classify(&features)
     }
 
     /// Classify multiple texts in parallel using rayon.

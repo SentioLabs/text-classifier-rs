@@ -296,7 +296,6 @@ fn parse_category(s: &str) -> TextCategory {
         "prose" => TextCategory::Prose,
         "code" => TextCategory::Code,
         "structured" => TextCategory::Structured,
-        "artifact" => TextCategory::Artifact,
         _ => TextCategory::Skip,
     }
 }
@@ -332,12 +331,6 @@ fn parse_sub_type(s: &str) -> ContentSubType {
         "jsonl" | "jsonl_data" => ContentSubType::Jsonl,
         "key_value" => ContentSubType::KeyValue,
         "log_lines" => ContentSubType::LogLines,
-        "pdf_dump" => ContentSubType::PdfDump,
-        "ocr_garbage" => ContentSubType::OcrGarbage,
-        "boilerplate" => ContentSubType::Boilerplate,
-        "too_short" => ContentSubType::TooShort,
-        "empty" => ContentSubType::Empty,
-        "ambiguous" => ContentSubType::Ambiguous,
         _ => ContentSubType::Unknown,
     }
 }
@@ -404,8 +397,8 @@ mod tests {
         assert_eq!(parse_category("prose"), TextCategory::Prose);
         assert_eq!(parse_category("code"), TextCategory::Code);
         assert_eq!(parse_category("structured"), TextCategory::Structured);
-        assert_eq!(parse_category("artifact"), TextCategory::Artifact);
         assert_eq!(parse_category("skip"), TextCategory::Skip);
+        assert_eq!(parse_category("artifact"), TextCategory::Skip); // removed category falls to default
         assert_eq!(parse_category("unknown_value"), TextCategory::Skip);
     }
 
@@ -418,7 +411,7 @@ mod tests {
         assert_eq!(parse_sub_type("yaml_config"), ContentSubType::Yaml);
         assert_eq!(parse_sub_type("json_object"), ContentSubType::Json);
         assert_eq!(parse_sub_type("minified_js"), ContentSubType::JavaScript);
-        assert_eq!(parse_sub_type("boilerplate"), ContentSubType::Boilerplate);
+        assert_eq!(parse_sub_type("boilerplate"), ContentSubType::Unknown); // removed sub-type falls to default
     }
 
     #[test]

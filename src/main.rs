@@ -3,17 +3,20 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use text_classifier::tier1::MIN_CONFIDENCE;
-use text_classifier::{Classifier, TextType, classify};
+use text_classifier::{Classifier, TextCategory, classify, extract_features};
 
 #[derive(Parser)]
 #[command(name = "classify", about = "Classify text by structural type")]
 struct Cli {
+    /// Text to classify directly (use -- before text matching a subcommand name)
+    text: Option<String>,
+
+    /// Output in human-friendly format instead of JSON
+    #[arg(long)]
+    human: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
-
-    /// Path to fasttext model file (optional, enables Tier 2)
-    #[arg(long, global = true)]
-    model: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -67,39 +70,233 @@ enum Commands {
         /// Field to classify
         #[arg(long, default_value = "text")]
         text_field: String,
-    },
-    /// Train a fasttext model from labeled data
-    Train {
-        /// Input labeled JSONL file
+        /// Include feature vector in output
         #[arg(long)]
-        input: PathBuf,
-        /// Output model file
-        #[arg(long)]
-        output: PathBuf,
+        with_features: bool,
     },
-    /// Validate model against labeled data
+    /// Validate classifier against labeled data
     Validate {
         /// Input labeled JSONL file
         #[arg(long)]
         input: PathBuf,
-        /// Model file to validate
+        /// Field containing text to classify
+        #[arg(long, default_value = "text")]
+        text_field: String,
+        /// Output results as JSON
         #[arg(long)]
-        model: PathBuf,
+        json: bool,
+        /// Show details for each misclassified sample
+        #[arg(long)]
+        verbose: bool,
     },
+}
+
+struct Evaluator {
+    predictions: Vec<(String, String, String)>, // (predicted, actual, tier)
+}
+
+impl Evaluator {
+    fn new() -> Self {
+        Evaluator {
+            predictions: Vec::new(),
+        }
+    }
+
+    fn add(&mut self, predicted: &str, actual: &str, tier: &str) {
+        self.predictions
+            .push((predicted.to_string(), actual.to_string(), tier.to_string()));
+    }
+
+    fn total(&self) -> usize {
+        self.predictions.len()
+    }
+
+    fn accuracy(&self) -> f64 {
+        if self.predictions.is_empty() {
+            return 0.0;
+        }
+        let correct = self.predictions.iter().filter(|(p, a, _)| p == a).count();
+        correct as f64 / self.predictions.len() as f64
+    }
+
+    fn categories(&self) -> Vec<String> {
+        let mut cats: Vec<String> = self
+            .predictions
+            .iter()
+            .map(|(_, a, _)| a.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        cats.sort();
+        cats
+    }
+
+    fn tier_counts(&self) -> (usize, usize) {
+        let structural = self
+            .predictions
+            .iter()
+            .filter(|(_, _, t)| t == "structural")
+            .count();
+        let model = self
+            .predictions
+            .iter()
+            .filter(|(_, _, t)| t == "model")
+            .count();
+        (structural, model)
+    }
+
+    fn precision_recall_f1(&self, category: &str) -> (f64, f64, f64, usize) {
+        let true_positives = self
+            .predictions
+            .iter()
+            .filter(|(p, a, _)| p == category && a == category)
+            .count();
+        let predicted_positive = self
+            .predictions
+            .iter()
+            .filter(|(p, _, _)| p == category)
+            .count();
+        let actual_positive = self
+            .predictions
+            .iter()
+            .filter(|(_, a, _)| a == category)
+            .count();
+
+        let precision = if predicted_positive > 0 {
+            true_positives as f64 / predicted_positive as f64
+        } else {
+            0.0
+        };
+        let recall = if actual_positive > 0 {
+            true_positives as f64 / actual_positive as f64
+        } else {
+            0.0
+        };
+        let f1 = if precision + recall > 0.0 {
+            2.0 * precision * recall / (precision + recall)
+        } else {
+            0.0
+        };
+
+        (precision, recall, f1, actual_positive)
+    }
+
+    fn confusion_matrix(&self) -> (Vec<String>, Vec<Vec<usize>>) {
+        let labels = self.categories();
+        let n = labels.len();
+        let mut matrix = vec![vec![0usize; n]; n];
+
+        for (predicted, actual, _) in &self.predictions {
+            let actual_idx = labels.iter().position(|l| l == actual).unwrap();
+            let predicted_idx = labels.iter().position(|l| l == predicted).unwrap_or(n);
+            if predicted_idx < n {
+                matrix[actual_idx][predicted_idx] += 1;
+            }
+        }
+
+        (labels, matrix)
+    }
+
+    fn print_report(&self) {
+        let (structural, model) = self.tier_counts();
+        eprintln!("── Validation Summary ──");
+        eprintln!("  Total samples:     {}", self.total());
+        eprintln!("  Overall accuracy:  {:.3}", self.accuracy());
+        eprintln!("  Tier 1 (rules):    {}", structural);
+        eprintln!("  Tier 2 (model):    {}", model);
+        eprintln!();
+        eprintln!("── Per-Category ──────────────────────────────────");
+        eprintln!(
+            "{:<13}{:<11}{:<8}{:<7}N",
+            "Category", "Precision", "Recall", "F1"
+        );
+        for cat in &self.categories() {
+            let (prec, recall, f1, count) = self.precision_recall_f1(cat);
+            eprintln!(
+                "{:<13}{:<11.2}{:<8.2}{:<7.2}{}",
+                cat, prec, recall, f1, count
+            );
+        }
+        eprintln!();
+
+        let (labels, matrix) = self.confusion_matrix();
+        eprintln!("── Confusion Matrix ──────────────────────────────");
+        // Header: abbreviated labels (first 3 chars, capitalized)
+        let abbrevs: Vec<String> = labels
+            .iter()
+            .map(|l| {
+                let mut chars = l.chars();
+                let first = chars.next().unwrap_or(' ').to_uppercase().to_string();
+                let rest: String = chars.take(2).collect();
+                format!("{first}{rest}")
+            })
+            .collect();
+        eprint!("{:<13}", "Predicted →");
+        for abbr in &abbrevs {
+            eprint!("{:<6}", abbr);
+        }
+        eprintln!();
+        for (i, label) in labels.iter().enumerate() {
+            // Capitalize first letter of label
+            let display: String = {
+                let mut chars = label.chars();
+                match chars.next() {
+                    Some(c) => c.to_uppercase().to_string() + chars.as_str(),
+                    None => String::new(),
+                }
+            };
+            eprint!("{:<13}", display);
+            for cell in &matrix[i] {
+                eprint!("{cell:<6}");
+            }
+            eprintln!();
+        }
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        let mut per_category = Vec::new();
+        for cat in &self.categories() {
+            let (prec, recall, f1, count) = self.precision_recall_f1(cat);
+            per_category.push(serde_json::json!({
+                "category": cat,
+                "precision": prec,
+                "recall": recall,
+                "f1": f1,
+                "count": count,
+            }));
+        }
+
+        let (labels, matrix) = self.confusion_matrix();
+
+        let (structural, model) = self.tier_counts();
+        serde_json::json!({
+            "total": self.total(),
+            "accuracy": self.accuracy(),
+            "tier_1_count": structural,
+            "tier_2_count": model,
+            "per_category": per_category,
+            "confusion_matrix": {
+                "labels": labels,
+                "matrix": matrix,
+            },
+        })
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let classifier = match &cli.model {
-        Some(path) => Classifier::with_model(path.to_str().ok_or("Invalid model path")?)?,
-        None => Classifier::new(),
-    };
+    let classifier = Classifier::new();
 
     match cli.command {
         None => {
-            // Default: read from stdin, classify each line
-            classify_stdin(&classifier)?;
+            if let Some(text) = cli.text {
+                classify_inline(&classifier, &text, cli.human)?;
+            } else {
+                // Always output JSON for stdin to preserve backward compatibility
+                // (scripts expect `echo "text" | classify | jq` to work)
+                classify_stdin(&classifier)?;
+            }
         }
         Some(Commands::File {
             input,
@@ -136,22 +333,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             output,
             text_field,
+            with_features,
         }) => {
-            label_corpus(&input, &output, &text_field)?;
+            label_corpus(&input, &output, &text_field, with_features)?;
         }
-        Some(Commands::Train { input, output }) => {
-            eprintln!("Training not yet implemented — use fasttext CLI directly:");
-            eprintln!("  fasttext supervised -input {input:?} -output {output:?}");
-            std::process::exit(1);
-        }
-        Some(Commands::Validate { input, model }) => {
-            eprintln!("Validation not yet implemented");
-            eprintln!("  input: {input:?}");
-            eprintln!("  model: {model:?}");
-            std::process::exit(1);
+        Some(Commands::Validate {
+            input,
+            text_field,
+            json,
+            verbose,
+        }) => {
+            validate(&classifier, &input, &text_field, json, verbose)?;
         }
     }
 
+    Ok(())
+}
+
+fn format_human_friendly(result: &text_classifier::Classification) -> String {
+    let category = result.category.to_string();
+    let label = match &result.sub_type {
+        Some(st) => format!("{}/{}", category, st.label()),
+        None => category,
+    };
+    format!(
+        "{} (confidence: {:.2}, tier: {})",
+        label, result.confidence, result.tier
+    )
+}
+
+fn classify_inline(
+    classifier: &Classifier,
+    text: &str,
+    human_output: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let result = classifier.classify(text);
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    if human_output {
+        writeln!(out, "{}", format_human_friendly(&result))?;
+    } else {
+        serde_json::to_writer(&mut out, &result)?;
+        writeln!(out)?;
+    }
     Ok(())
 }
 
@@ -210,7 +434,8 @@ fn classify_file(
         if let Some(text) = resolve_field(&doc, text_field) {
             let result = classifier.classify(text);
             doc["_classification"] = serde_json::json!({
-                "text_type": result.text_type,
+                "category": result.category,
+                "sub_type": result.sub_type,
                 "confidence": result.confidence,
                 "reason": result.reason,
                 "tier": result.tier,
@@ -268,31 +493,32 @@ fn filter_file(
                 if text.len() < 50 {
                     any_prose = true;
                     *category_counts
-                        .entry(TextType::Prose.to_string())
+                        .entry(TextCategory::Prose.to_string())
                         .or_insert(0) += 1;
                     field_classifications.insert(
                         field_name.to_string(),
-                        serde_json::json!({"text_type": "prose", "confidence": 1.0, "reason": "short field"}),
+                        serde_json::json!({"category": "prose", "sub_type": null, "confidence": 1.0, "reason": "short field"}),
                     );
                     continue;
                 }
 
                 let result = classifier.classify(text);
                 let is_prose =
-                    result.text_type == TextType::Prose || (result.confidence < min_confidence); // uncertain → let through
+                    result.category == TextCategory::Prose || (result.confidence < min_confidence); // uncertain → let through
 
                 if is_prose {
                     any_prose = true;
                 }
 
                 *category_counts
-                    .entry(result.text_type.to_string())
+                    .entry(result.category.to_string())
                     .or_insert(0) += 1;
 
                 field_classifications.insert(
                     field_name.to_string(),
                     serde_json::json!({
-                        "text_type": result.text_type,
+                        "category": result.category,
+                        "sub_type": result.sub_type,
                         "confidence": result.confidence,
                         "reason": result.reason,
                         "tier": result.tier,
@@ -343,7 +569,7 @@ fn extract_features_file(
     // CSV header
     writeln!(
         out,
-        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio,line_count"
+        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio,delimiter_consistency,json_brace_depth,key_value_ratio,xml_tag_ratio,log_line_ratio,comment_ratio,numeric_field_ratio,repetitive_structure_score,line_count"
     )?;
 
     let mut count = 0;
@@ -358,7 +584,7 @@ fn extract_features_file(
             let f = classifier.extract_features(text);
             writeln!(
                 out,
-                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{}",
+                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{}",
                 f.line_length_cv,
                 f.char_entropy,
                 f.leading_whitespace_ratio,
@@ -369,6 +595,14 @@ fn extract_features_file(
                 f.line_uniqueness,
                 f.short_line_ratio,
                 f.symbol_ratio,
+                f.delimiter_consistency,
+                f.json_brace_depth,
+                f.key_value_ratio,
+                f.xml_tag_ratio,
+                f.log_line_ratio,
+                f.comment_ratio,
+                f.numeric_field_ratio,
+                f.repetitive_structure_score,
                 f.line_count
             )?;
             count += 1;
@@ -383,6 +617,7 @@ fn label_corpus(
     input: &PathBuf,
     output: &PathBuf,
     text_field: &str,
+    with_features: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let reader = open_reader(input)?;
     let mut out = io::BufWriter::new(std::fs::File::create(output)?);
@@ -407,13 +642,38 @@ fn label_corpus(
                 ambiguous += 1;
             }
 
-            let labeled = serde_json::json!({
+            let mut labeled = serde_json::json!({
                 "text": text,
-                "label": result.text_type.to_string(),
+                "label": result.category.to_string(),
+                "sub_type": result.sub_type.map(|s| s.to_string()),
                 "confidence": result.confidence,
                 "tier": result.tier.to_string(),
                 "reason": result.reason,
             });
+
+            if with_features {
+                let features = extract_features(text);
+                labeled["features"] = serde_json::json!({
+                    "line_length_cv": features.line_length_cv,
+                    "char_entropy": features.char_entropy,
+                    "leading_whitespace_ratio": features.leading_whitespace_ratio,
+                    "tab_density": features.tab_density,
+                    "sentence_punctuation_rate": features.sentence_punctuation_rate,
+                    "paragraph_break_rate": features.paragraph_break_rate,
+                    "alpha_ratio": features.alpha_ratio,
+                    "line_uniqueness": features.line_uniqueness,
+                    "short_line_ratio": features.short_line_ratio,
+                    "symbol_ratio": features.symbol_ratio,
+                    "delimiter_consistency": features.delimiter_consistency,
+                    "json_brace_depth": features.json_brace_depth,
+                    "key_value_ratio": features.key_value_ratio,
+                    "xml_tag_ratio": features.xml_tag_ratio,
+                    "log_line_ratio": features.log_line_ratio,
+                    "comment_ratio": features.comment_ratio,
+                    "numeric_field_ratio": features.numeric_field_ratio,
+                    "repetitive_structure_score": features.repetitive_structure_score,
+                });
+            }
 
             serde_json::to_writer(&mut out, &labeled)?;
             writeln!(out)?;
@@ -429,4 +689,369 @@ fn label_corpus(
         eprintln!("  Warning: {missing_field} documents missing field \"{text_field}\"");
     }
     Ok(())
+}
+
+fn validate(
+    classifier: &Classifier,
+    input: &PathBuf,
+    text_field: &str,
+    json_output: bool,
+    verbose: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let reader = open_reader(input)?;
+    let mut evaluator = Evaluator::new();
+    let mut sample_num = 0u64;
+
+    for line in reader.lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let doc: serde_json::Value = serde_json::from_str(&line)?;
+        let label = doc["label"]
+            .as_str()
+            .or_else(|| doc["expected_category"].as_str())
+            .ok_or("Missing or non-string 'label'/'expected_category' field")?;
+
+        if let Some(text) = resolve_field(&doc, text_field) {
+            sample_num += 1;
+            let result = classifier.classify(text);
+            let predicted = result.category.to_string();
+            evaluator.add(&predicted, label, &result.tier.to_string());
+
+            if verbose && predicted != label {
+                let preview: String = text.chars().take(80).collect();
+                let preview = preview.replace('\n', " ");
+                eprintln!(
+                    "  MISS #{}: expected={}, predicted={}, conf={:.2}, tier={}, reason=\"{}\"",
+                    sample_num, label, predicted, result.confidence, result.tier, result.reason
+                );
+                eprintln!("        text=\"{}...\"", preview);
+            }
+        }
+    }
+
+    if json_output {
+        let json = evaluator.to_json();
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        evaluator.print_report();
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use text_classifier::Classification;
+
+    #[test]
+    fn evaluator_new_is_empty() {
+        let eval = Evaluator::new();
+        assert_eq!(eval.total(), 0);
+    }
+
+    #[test]
+    fn evaluator_add_increments_total() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "prose", "structural");
+        assert_eq!(eval.total(), 2);
+    }
+
+    #[test]
+    fn evaluator_accuracy_all_correct() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "code", "structural");
+        eval.add("tabular", "tabular", "structural");
+        assert!((eval.accuracy() - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn evaluator_accuracy_none_correct() {
+        let mut eval = Evaluator::new();
+        eval.add("code", "prose", "structural");
+        eval.add("prose", "code", "structural");
+        assert!((eval.accuracy() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn evaluator_accuracy_partial() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "prose", "structural");
+        eval.add("code", "code", "structural");
+        eval.add("prose", "code", "structural");
+        assert!((eval.accuracy() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn evaluator_accuracy_empty_returns_zero() {
+        let eval = Evaluator::new();
+        assert!((eval.accuracy() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn evaluator_categories_sorted() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "code", "structural");
+        eval.add("code", "prose", "structural");
+        eval.add("tabular", "tabular", "structural");
+        let cats = eval.categories();
+        assert_eq!(cats, vec!["code", "prose", "tabular"]);
+    }
+
+    #[test]
+    fn evaluator_precision_recall_f1() {
+        let mut eval = Evaluator::new();
+        // 3 actual prose, 2 predicted correctly, 1 mislabeled as code
+        eval.add("prose", "prose", "structural");
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "prose", "structural");
+        // 2 actual code, 1 predicted correctly, 1 mislabeled as prose
+        eval.add("code", "code", "structural");
+        eval.add("prose", "code", "structural");
+
+        let (prec, recall, f1, count) = eval.precision_recall_f1("prose");
+        // Predicted prose: 3 (2 correct + 1 was actually code) → precision = 2/3
+        assert!((prec - 2.0 / 3.0).abs() < 1e-9);
+        // Actual prose: 3, correctly predicted 2 → recall = 2/3
+        assert!((recall - 2.0 / 3.0).abs() < 1e-9);
+        // F1 = 2 * (2/3 * 2/3) / (2/3 + 2/3) = 2/3
+        assert!((f1 - 2.0 / 3.0).abs() < 1e-9);
+        assert_eq!(count, 3); // actual count for prose
+    }
+
+    #[test]
+    fn evaluator_precision_recall_f1_no_predictions() {
+        let mut eval = Evaluator::new();
+        eval.add("code", "prose", "structural");
+        // No predictions for "prose" category — precision 0, recall 0
+        // Wait, "code" was predicted, "prose" was actual.
+        // precision_recall_f1("prose"): predicted prose = 0, actual prose = 1
+        // precision = 0/0 = 0 (no predictions of prose)
+        // recall = 0/1 = 0 (none of actual prose predicted correctly)
+        let (prec, recall, f1, count) = eval.precision_recall_f1("prose");
+        assert!((prec - 0.0).abs() < f64::EPSILON);
+        assert!((recall - 0.0).abs() < f64::EPSILON);
+        assert!((f1 - 0.0).abs() < f64::EPSILON);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn evaluator_confusion_matrix() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose", "structural");
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "prose", "structural");
+        eval.add("code", "code", "structural");
+        eval.add("prose", "code", "structural");
+
+        let (labels, matrix) = eval.confusion_matrix();
+        assert_eq!(labels, vec!["code", "prose"]);
+        // matrix[actual_idx][predicted_idx]
+        // actual=code (idx 0): predicted code=1, predicted prose=1
+        assert_eq!(matrix[0], vec![1, 1]);
+        // actual=prose (idx 1): predicted code=1, predicted prose=2
+        assert_eq!(matrix[1], vec![1, 2]);
+    }
+
+    #[test]
+    fn label_corpus_without_features() {
+        let dir = tempfile::tempdir().unwrap();
+        let input_path = dir.path().join("input.jsonl");
+        let output_path = dir.path().join("output.jsonl");
+
+        std::fs::write(
+            &input_path,
+            r#"{"text": "This is a simple prose sentence for testing purposes."}"#,
+        )
+        .unwrap();
+
+        label_corpus(
+            &input_path.to_path_buf(),
+            &output_path.to_path_buf(),
+            "text",
+            false,
+        )
+        .unwrap();
+
+        let output = std::fs::read_to_string(&output_path).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+        assert!(doc.get("text").is_some());
+        assert!(doc.get("label").is_some());
+        assert!(
+            doc.get("features").is_none(),
+            "features should not be present when with_features is false"
+        );
+    }
+
+    #[test]
+    fn label_corpus_with_features() {
+        let dir = tempfile::tempdir().unwrap();
+        let input_path = dir.path().join("input.jsonl");
+        let output_path = dir.path().join("output.jsonl");
+
+        std::fs::write(
+            &input_path,
+            r#"{"text": "This is a simple prose sentence for testing purposes."}"#,
+        )
+        .unwrap();
+
+        label_corpus(
+            &input_path.to_path_buf(),
+            &output_path.to_path_buf(),
+            "text",
+            true,
+        )
+        .unwrap();
+
+        let output = std::fs::read_to_string(&output_path).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+        assert!(doc.get("text").is_some());
+        assert!(doc.get("label").is_some());
+
+        let features = doc
+            .get("features")
+            .expect("features should be present when with_features is true");
+        assert!(features.is_object());
+        // Check all 18 feature fields are present
+        let expected_fields = [
+            "line_length_cv",
+            "char_entropy",
+            "leading_whitespace_ratio",
+            "tab_density",
+            "sentence_punctuation_rate",
+            "paragraph_break_rate",
+            "alpha_ratio",
+            "line_uniqueness",
+            "short_line_ratio",
+            "symbol_ratio",
+            "delimiter_consistency",
+            "json_brace_depth",
+            "key_value_ratio",
+            "xml_tag_ratio",
+            "log_line_ratio",
+            "comment_ratio",
+            "numeric_field_ratio",
+            "repetitive_structure_score",
+        ];
+        for field in &expected_fields {
+            assert!(
+                features.get(field).is_some(),
+                "features missing field: {field}"
+            );
+            assert!(
+                features[field].is_number(),
+                "feature {field} should be a number"
+            );
+        }
+    }
+
+    #[test]
+    fn evaluator_to_json_structure() {
+        let mut eval = Evaluator::new();
+        eval.add("prose", "prose", "structural");
+        eval.add("code", "code", "structural");
+
+        let json = eval.to_json();
+        assert_eq!(json["total"], 2);
+        assert!((json["accuracy"].as_f64().unwrap() - 1.0).abs() < f64::EPSILON);
+        assert!(json["per_category"].is_array());
+        assert!(json["confusion_matrix"].is_object());
+    }
+
+    #[test]
+    fn format_human_friendly_without_sub_type() {
+        let result = Classification {
+            category: TextCategory::Prose,
+            sub_type: None,
+            confidence: 0.95,
+            reason: "high alpha ratio".to_string(),
+            tier: text_classifier::Tier::Structural,
+        };
+        let output = format_human_friendly(&result);
+        assert_eq!(output, "prose (confidence: 0.95, tier: structural)");
+    }
+
+    #[test]
+    fn format_human_friendly_with_sub_type() {
+        let result = Classification {
+            category: TextCategory::Code,
+            sub_type: Some(text_classifier::ContentSubType::Yaml),
+            confidence: 0.85,
+            reason: "config detected".to_string(),
+            tier: text_classifier::Tier::Structural,
+        };
+        let output = format_human_friendly(&result);
+        assert_eq!(output, "code/yaml (confidence: 0.85, tier: structural)");
+    }
+
+    #[test]
+    fn classify_inline_human_output() {
+        let classifier = Classifier::new();
+        let text = "This is a wonderful example of prose text that should be classified as prose by the classifier.";
+        let result = classifier.classify(text);
+        let output = format_human_friendly(&result);
+        // Should contain the category and confidence/tier format
+        assert!(output.contains("confidence:"));
+        assert!(output.contains("tier:"));
+    }
+
+    #[test]
+    fn classify_inline_json_output() {
+        let classifier = Classifier::new();
+        let text = "This is a wonderful example of prose text that should be classified as prose by the classifier.";
+        let result = classifier.classify(text);
+        let json_str = serde_json::to_string(&result).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert!(parsed.get("category").is_some());
+        assert!(parsed.get("confidence").is_some());
+        assert!(parsed.get("tier").is_some());
+    }
+
+    #[test]
+    fn cli_parses_positional_text() {
+        let cli = Cli::parse_from(["classify", "some text here"]);
+        assert_eq!(cli.text.as_deref(), Some("some text here"));
+        assert!(!cli.human);
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn cli_parses_human_flag_with_text() {
+        let cli = Cli::parse_from(["classify", "--human", "some text"]);
+        assert_eq!(cli.text.as_deref(), Some("some text"));
+        assert!(cli.human);
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn cli_subcommand_takes_priority() {
+        // When a subcommand is given, text should not be parsed as positional
+        let cli = Cli::parse_from(["classify", "validate", "--input", "test.jsonl"]);
+        assert!(cli.command.is_some());
+        assert!(cli.text.is_none());
+    }
+
+    #[test]
+    fn cli_double_dash_forces_positional_text() {
+        // Using -- should force "file" to be parsed as positional text, not a subcommand
+        let cli = Cli::parse_from(["classify", "--", "file"]);
+        assert_eq!(cli.text.as_deref(), Some("file"));
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn cli_no_text_no_subcommand_means_stdin() {
+        // When neither text nor subcommand is given, we route to stdin (JSON output).
+        // Verify that cli.human flag doesn't matter for this path — stdin always gets JSON.
+        let cli = Cli::parse_from(["classify"]);
+        assert!(cli.text.is_none());
+        assert!(cli.command.is_none());
+        // The dispatch logic in main() routes this to classify_stdin() which always outputs JSON
+    }
 }
