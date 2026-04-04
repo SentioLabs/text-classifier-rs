@@ -1012,10 +1012,10 @@ def run_golden_train_mode(
     """Run golden-train generation mode.
 
     Generates clear samples (per sub-type) and boundary samples (per pair),
-    writing results to ``golden_raw.csv``.
+    writing results to ``golden_raw.parquet``.
 
     Args:
-        output_dir: Directory to write the output CSV.
+        output_dir: Directory to write the output parquet file.
         samples_per_type: Number of samples per sub-type for clear generation.
         api_key: Anthropic API key. Falls back to ANTHROPIC_API_KEY env var.
         model: Claude model to use.
@@ -1044,7 +1044,7 @@ def run_golden_train_mode(
         sys.exit(1)
 
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "golden_raw.csv")
+    output_path = os.path.join(output_dir, "golden_raw.parquet")
     client = anthropic.Anthropic(api_key=api_key)
 
     all_rows: list[dict] = []
@@ -1082,12 +1082,10 @@ def run_golden_train_mode(
         all_rows.extend(samples)
         print(f"  Done: {len(samples)} boundary samples for '{pair_label}'")
 
-    # Write CSV
+    # Write Parquet
+    import polars as pl
     golden_columns = ["text", "category", "sub_type", "source"]
-    with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=golden_columns)
-        writer.writeheader()
-        writer.writerows(all_rows)
+    pl.DataFrame(all_rows).select(golden_columns).write_parquet(output_path)
 
     print(f"Golden train: wrote {len(all_rows)} rows to {output_path}")
     return output_path

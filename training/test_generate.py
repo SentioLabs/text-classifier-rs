@@ -395,7 +395,7 @@ class TestGoldenTrainDryRun:
                 samples_per_type=1,
                 dry_run=True,
             )
-            csv_path = os.path.join(tmpdir, "golden_raw.csv")
+            csv_path = os.path.join(tmpdir, "golden_raw.parquet")
             assert not os.path.exists(csv_path)
 
     def test_dry_run_shows_sample_counts(self, capsys):
@@ -423,6 +423,70 @@ class TestGoldenTrainDryRun:
             )
             captured = capsys.readouterr()
             assert "domain" in captured.out.lower() or "Domain" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Tests for golden-train parquet output
+# ---------------------------------------------------------------------------
+
+
+class TestGoldenTrainParquetOutput:
+    def test_writes_parquet_file(self):
+        """run_golden_train_mode should write a .parquet file, not CSV."""
+        import polars as pl
+        from generate import run_golden_train_mode
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Mock anthropic import and client
+            mock_client = mock.MagicMock()
+            mock_response = mock.MagicMock()
+            mock_response.content = [mock.MagicMock()]
+            mock_response.content[0].text = '"Sample text for golden test."]'
+            mock_client.messages.create.return_value = mock_response
+
+            mock_anthropic = mock.MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+
+            with mock.patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+                result = run_golden_train_mode(
+                    output_dir=tmpdir,
+                    samples_per_type=1,
+                    api_key="test-key",
+                )
+
+            # Should return path to parquet file
+            assert result is not None
+            assert result.endswith(".parquet")
+            assert os.path.exists(result)
+
+            # Should be readable as parquet
+            df = pl.read_parquet(result)
+            assert set(df.columns) == {"text", "category", "sub_type", "source"}
+            assert len(df) > 0
+
+    def test_no_csv_file_created(self):
+        """Ensure no golden_raw.csv file is created."""
+        from generate import run_golden_train_mode
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_client = mock.MagicMock()
+            mock_response = mock.MagicMock()
+            mock_response.content = [mock.MagicMock()]
+            mock_response.content[0].text = '"Sample text."]'
+            mock_client.messages.create.return_value = mock_response
+
+            mock_anthropic = mock.MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+
+            with mock.patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+                run_golden_train_mode(
+                    output_dir=tmpdir,
+                    samples_per_type=1,
+                    api_key="test-key",
+                )
+
+            csv_path = os.path.join(tmpdir, "golden_raw.csv")
+            assert not os.path.exists(csv_path)
 
 
 # ---------------------------------------------------------------------------
