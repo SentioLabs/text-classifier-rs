@@ -10,7 +10,7 @@ artifact, prose, and structured categories. Uses streaming to avoid full
 downloads.
 
 Usage:
-    python training/sample_real_data.py --output data/real_samples_v2.jsonl
+    python training/sample_real_data.py --output data/source/real/real_samples_v2.jsonl
     python training/sample_real_data.py --dry-run
 """
 
@@ -1417,8 +1417,8 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="data/real_samples_v2.jsonl",
-        help="Output JSONL file path (default: data/real_samples_v2.jsonl)",
+        default="data/source/real/real_samples_v2.jsonl",
+        help="Output JSONL file path (default: data/source/real/real_samples_v2.jsonl)",
     )
     parser.add_argument(
         "--dry-run",

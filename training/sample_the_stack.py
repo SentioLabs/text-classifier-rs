@@ -11,7 +11,7 @@ OpenRouter generator.
 
 Usage:
     python training/sample_the_stack.py --dry-run
-    python training/sample_the_stack.py --output data/real_samples.jsonl
+    python training/sample_the_stack.py --output data/source/real/real_samples.jsonl
     python training/sample_the_stack.py --languages python,rust --per-language 500
 
 Requires: pip install datasets
@@ -225,8 +225,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output",
-        default="data/real_samples.jsonl",
-        help="Output JSONL file path (default: data/real_samples.jsonl)",
+        default="data/source/real/real_samples.jsonl",
+        help="Output JSONL file path (default: data/source/real/real_samples.jsonl)",
     )
     parser.add_argument(
         "--per-language",

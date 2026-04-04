@@ -334,22 +334,22 @@ def main() -> None:
     )
     parser.add_argument(
         "--input",
-        default="data/raw_samples.jsonl",
+        default="data/source/merged/raw_samples.jsonl",
         help="Path to input JSONL file",
     )
     parser.add_argument(
         "--eval-output",
-        default="eval/clear.jsonl",
+        default="data/eval/clear.jsonl",
         help="Path for eval clear output JSONL",
     )
     parser.add_argument(
         "--eval-boundary-output",
-        default="eval/boundary.jsonl",
+        default="data/eval/boundary.jsonl",
         help="Path for eval boundary output JSONL",
     )
     parser.add_argument(
         "--train-output",
-        default="training/data/golden_raw.csv",
+        default="data/curated/train/golden_raw.csv",
         help="Path for training output CSV",
     )
     parser.add_argument(

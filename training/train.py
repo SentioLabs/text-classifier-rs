@@ -9,7 +9,7 @@ Reads CSV files produced by generate.py and exports the trained model to ONNX
 format along with configuration and metrics JSON files.
 
 Usage:
-    python training/train.py --data training/data/combined.csv \
+    python training/train.py --data data/curated/train/golden_train.csv \
         --output training/models/ [--epochs 200] [--batch-size 64] \
         [--lr 0.001] [--patience 15]
 """

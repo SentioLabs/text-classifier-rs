@@ -209,13 +209,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--input",
-        default="training/data/golden_raw.csv",
-        help="Path to input CSV (default: training/data/golden_raw.csv)",
+        default="data/curated/train/golden_featurized.csv",
+        help="Path to input CSV (default: data/curated/train/golden_featurized.csv)",
     )
     parser.add_argument(
         "--output",
-        default="training/data/golden_train.csv",
-        help="Path to output CSV (default: training/data/golden_train.csv)",
+        default="data/curated/train/golden_train.csv",
+        help="Path to output CSV (default: data/curated/train/golden_train.csv)",
     )
     parser.add_argument(
         "--feature-threshold",
