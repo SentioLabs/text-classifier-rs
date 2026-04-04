@@ -1,335 +1,309 @@
 {
-  "overall_accuracy": 0.528,
+  "overall_accuracy": 0.74,
   "total_samples": 6000,
   "per_category": {
     "prose": {
-      "precision": 0.46811702925731435,
-      "recall": 0.832,
-      "f1": 0.599135861737878,
-      "n": 1500
+      "precision": 0.6957196029776674,
+      "recall": 0.9384937238493724,
+      "f1": 0.7990737442109013,
+      "n": 2390
     },
     "code": {
-      "precision": 0.7917737789203085,
-      "recall": 0.616,
-      "f1": 0.6929133858267718,
-      "n": 1500
+      "precision": 0.8015075376884422,
+      "recall": 0.6346153846153846,
+      "f1": 0.7083641746854182,
+      "n": 1508
     },
     "structured": {
-      "precision": 0.483492296404989,
-      "recall": 0.43962641761174115,
-      "f1": 0.46051712089447944,
-      "n": 1499
-    },
-    "artifact": {
-      "precision": 0.4191542288557214,
-      "recall": 0.22451698867421718,
-      "f1": 0.2924078091106291,
-      "n": 1501
+      "precision": 0.7838179519595448,
+      "recall": 0.5899143672692674,
+      "f1": 0.6731813246471227,
+      "n": 2102
     }
   },
   "confusion_matrix": [
     [
-      1248,
-      47,
-      42,
-      163
+      2243,
+      63,
+      84
     ],
     [
-      272,
-      924,
-      274,
-      30
+      293,
+      957,
+      258
     ],
     [
-      454,
-      112,
-      659,
-      274
-    ],
-    [
-      692,
-      84,
-      388,
-      337
+      688,
+      174,
+      1240
     ]
   ],
   "categories": [
     "prose",
     "code",
-    "structured",
-    "artifact"
+    "structured"
   ],
   "per_sub_type": {},
   "per_boundary_pair": {
-    "code_artifact": {
-      "total": 1000,
-      "correct": 365,
-      "accuracy": 0.365
+    "code_code": {
+      "total": 19,
+      "correct": 19,
+      "accuracy": 1.0
+    },
+    "code_prose": {
+      "total": 415,
+      "correct": 263,
+      "accuracy": 0.6337349397590362
     },
     "code_structured": {
-      "total": 1000,
-      "correct": 621,
-      "accuracy": 0.621
-    },
-    "prose_artifact": {
-      "total": 1000,
-      "correct": 573,
-      "accuracy": 0.573
+      "total": 1566,
+      "correct": 1089,
+      "accuracy": 0.6954022988505747
     },
     "prose_code": {
-      "total": 1000,
-      "correct": 722,
-      "accuracy": 0.722
+      "total": 1007,
+      "correct": 777,
+      "accuracy": 0.7715988083416088
+    },
+    "prose_prose": {
+      "total": 722,
+      "correct": 705,
+      "accuracy": 0.9764542936288089
     },
     "prose_structured": {
-      "total": 1000,
-      "correct": 632,
-      "accuracy": 0.632
+      "total": 1271,
+      "correct": 945,
+      "accuracy": 0.7435090479937058
     },
-    "structured_artifact": {
-      "total": 1000,
-      "correct": 255,
-      "accuracy": 0.255
+    "structured_prose": {
+      "total": 672,
+      "correct": 375,
+      "accuracy": 0.5580357142857143
+    },
+    "structured_structured": {
+      "total": 328,
+      "correct": 267,
+      "accuracy": 0.8140243902439024
     }
   },
   "top_confusions": {
     "by_category_pair": [
       {
-        "expected_category": "artifact",
-        "predicted_category": "prose",
-        "count": 692
-      },
-      {
         "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 454
-      },
-      {
-        "expected_category": "artifact",
-        "predicted_category": "structured",
-        "count": 388
-      },
-      {
-        "expected_category": "code",
-        "predicted_category": "structured",
-        "count": 274
-      },
-      {
-        "expected_category": "structured",
-        "predicted_category": "artifact",
-        "count": 274
+        "count": 688
       },
       {
         "expected_category": "code",
         "predicted_category": "prose",
-        "count": 272
+        "count": 293
+      },
+      {
+        "expected_category": "code",
+        "predicted_category": "structured",
+        "count": 258
+      },
+      {
+        "expected_category": "structured",
+        "predicted_category": "code",
+        "count": 174
       },
       {
         "expected_category": "prose",
-        "predicted_category": "artifact",
-        "count": 163
-      },
-      {
-        "expected_category": "structured",
-        "predicted_category": "code",
-        "count": 112
-      },
-      {
-        "expected_category": "artifact",
-        "predicted_category": "code",
+        "predicted_category": "structured",
         "count": 84
       },
       {
         "expected_category": "prose",
         "predicted_category": "code",
-        "count": 47
+        "count": 63
       }
     ],
     "by_sub_type": [],
     "by_content_domain": [
       {
-        "expected_category": "artifact",
+        "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 31,
-        "content_domain": "technical writing"
+        "count": 25,
+        "content_domain": "recipe management"
       },
       {
-        "expected_category": "artifact",
+        "expected_category": "code",
         "predicted_category": "prose",
-        "count": 29,
-        "content_domain": "API response formatting"
+        "count": 20,
+        "content_domain": "authentication systems"
       },
       {
-        "expected_category": "prose",
-        "predicted_category": "artifact",
-        "count": 29,
-        "content_domain": "load balancing"
-      },
-      {
-        "expected_category": "artifact",
+        "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 27,
-        "content_domain": "agriculture"
+        "count": 20,
+        "content_domain": "screenwriting"
       },
       {
-        "expected_category": "artifact",
+        "expected_category": "code",
         "predicted_category": "prose",
-        "count": 27,
-        "content_domain": "linguistics"
+        "count": 19,
+        "content_domain": "biology"
       },
       {
-        "expected_category": "artifact",
+        "expected_category": "structured",
+        "predicted_category": "prose",
+        "count": 17,
+        "content_domain": "political science"
+      },
+      {
+        "expected_category": "structured",
+        "predicted_category": "prose",
+        "count": 15,
+        "content_domain": "urban planning"
+      },
+      {
+        "expected_category": "structured",
+        "predicted_category": "prose",
+        "count": 14,
+        "content_domain": "terms of service"
+      },
+      {
+        "expected_category": "code",
         "predicted_category": "structured",
-        "count": 26,
-        "content_domain": "game design documentation"
+        "count": 14,
+        "content_domain": "chemistry"
       },
       {
-        "expected_category": "artifact",
+        "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 26,
-        "content_domain": "photography"
-      },
-      {
-        "expected_category": "artifact",
-        "predicted_category": "prose",
-        "count": 25,
-        "content_domain": "robotics"
-      },
-      {
-        "expected_category": "artifact",
-        "predicted_category": "prose",
-        "count": 25,
+        "count": 14,
         "content_domain": "fiction writing"
       },
       {
-        "expected_category": "artifact",
+        "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 24,
-        "content_domain": "legal contracts"
+        "count": 13,
+        "content_domain": "environmental science"
       }
     ],
     "by_length_bucket": [
       {
-        "expected_category": "artifact",
+        "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 334,
+        "count": 316,
         "length_bucket": "short"
       },
       {
         "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 247,
-        "length_bucket": "short"
+        "count": 198,
+        "length_bucket": "medium"
       },
       {
-        "expected_category": "artifact",
+        "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 205,
+        "count": 174,
         "length_bucket": "long"
-      },
-      {
-        "expected_category": "artifact",
-        "predicted_category": "prose",
-        "count": 153,
-        "length_bucket": "medium"
-      },
-      {
-        "expected_category": "artifact",
-        "predicted_category": "structured",
-        "count": 144,
-        "length_bucket": "medium"
       },
       {
         "expected_category": "code",
         "predicted_category": "prose",
-        "count": 134,
+        "count": 144,
         "length_bucket": "short"
       },
       {
-        "expected_category": "structured",
+        "expected_category": "code",
+        "predicted_category": "structured",
+        "count": 103,
+        "length_bucket": "short"
+      },
+      {
+        "expected_category": "code",
+        "predicted_category": "structured",
+        "count": 94,
+        "length_bucket": "long"
+      },
+      {
+        "expected_category": "code",
         "predicted_category": "prose",
-        "count": 127,
+        "count": 87,
+        "length_bucket": "long"
+      },
+      {
+        "expected_category": "structured",
+        "predicted_category": "code",
+        "count": 86,
+        "length_bucket": "long"
+      },
+      {
+        "expected_category": "code",
+        "predicted_category": "prose",
+        "count": 62,
         "length_bucket": "medium"
       },
       {
-        "expected_category": "structured",
-        "predicted_category": "artifact",
-        "count": 127,
-        "length_bucket": "long"
-      },
-      {
-        "expected_category": "artifact",
+        "expected_category": "code",
         "predicted_category": "structured",
-        "count": 126,
-        "length_bucket": "long"
-      },
-      {
-        "expected_category": "prose",
-        "predicted_category": "artifact",
-        "count": 123,
-        "length_bucket": "long"
+        "count": 61,
+        "length_bucket": "medium"
       }
     ],
     "by_model": [
       {
-        "expected_category": "artifact",
-        "predicted_category": "prose",
-        "count": 194,
-        "model": "meta-llama/llama-3.3-70b-instruct"
-      },
-      {
         "expected_category": "code",
         "predicted_category": "prose",
-        "count": 186,
+        "count": 200,
         "model": "meta-llama/llama-3.3-70b-instruct"
-      },
-      {
-        "expected_category": "artifact",
-        "predicted_category": "prose",
-        "count": 137,
-        "model": "mistralai/mistral-large-2512"
       },
       {
         "expected_category": "structured",
-        "predicted_category": "artifact",
-        "count": 109,
+        "predicted_category": "prose",
+        "count": 137,
         "model": "anthropic/claude-sonnet-4.6"
       },
       {
-        "expected_category": "artifact",
-        "predicted_category": "structured",
-        "count": 107,
-        "model": "openai/gpt-5"
-      },
-      {
-        "expected_category": "artifact",
+        "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 106,
-        "model": "deepseek/deepseek-v3.2"
-      },
-      {
-        "expected_category": "artifact",
-        "predicted_category": "prose",
-        "count": 106,
+        "count": 126,
         "model": "openai/gpt-5.4"
       },
       {
         "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 99,
-        "model": "meta-llama/llama-3.3-70b-instruct"
+        "count": 112,
+        "model": "qwen/qwen3-235b-a22b"
       },
       {
         "expected_category": "structured",
         "predicted_category": "prose",
-        "count": 98,
+        "count": 104,
+        "model": "mistralai/mistral-large-2512"
+      },
+      {
+        "expected_category": "structured",
+        "predicted_category": "prose",
+        "count": 96,
+        "model": "meta-llama/llama-3.3-70b-instruct"
+      },
+      {
+        "expected_category": "code",
+        "predicted_category": "structured",
+        "count": 85,
+        "model": "openai/gpt-5"
+      },
+      {
+        "expected_category": "structured",
+        "predicted_category": "prose",
+        "count": 70,
+        "model": "deepseek/deepseek-v3.2"
+      },
+      {
+        "expected_category": "code",
+        "predicted_category": "prose",
+        "count": 68,
         "model": "qwen/qwen3-235b-a22b"
       },
       {
         "expected_category": "code",
         "predicted_category": "structured",
-        "count": 87,
-        "model": "openai/gpt-5"
+        "count": 47,
+        "model": "openai/gpt-5.4"
       }
     ]
   },
