@@ -7,9 +7,6 @@ pub enum TextCategory {
     Prose,
     Code,
     Structured,
-    Artifact,
-    Tabular,
-    PdfDump,
     Skip,
 }
 
@@ -28,9 +25,6 @@ impl std::fmt::Display for TextCategory {
             TextCategory::Prose => write!(f, "prose"),
             TextCategory::Code => write!(f, "code"),
             TextCategory::Structured => write!(f, "structured"),
-            TextCategory::Artifact => write!(f, "artifact"),
-            TextCategory::Tabular => write!(f, "tabular"),
-            TextCategory::PdfDump => write!(f, "pdf_dump"),
             TextCategory::Skip => write!(f, "skip"),
         }
     }
@@ -93,14 +87,6 @@ pub enum ContentSubType {
     Yaml,
     Toml,
     Ini,
-    // Artifact
-    PdfDump,
-    OcrGarbage,
-    Boilerplate,
-    // Skip
-    TooShort,
-    Empty,
-    Ambiguous,
     // Fallback
     Unknown,
 }
@@ -131,7 +117,7 @@ impl ContentSubType {
             | ContentSubType::Xml
             | ContentSubType::Sgml => TextCategory::Code,
 
-            // Structured (tabular + data)
+            // Structured (tabular + data + config)
             ContentSubType::Csv
             | ContentSubType::Tsv
             | ContentSubType::PipeTable
@@ -140,21 +126,12 @@ impl ContentSubType {
             | ContentSubType::Jsonl
             | ContentSubType::KeyValue
             | ContentSubType::LogLines
-            // Structured > Config
             | ContentSubType::Yaml
             | ContentSubType::Toml
             | ContentSubType::Ini => TextCategory::Structured,
 
-            // Artifact
-            ContentSubType::PdfDump | ContentSubType::OcrGarbage | ContentSubType::Boilerplate => {
-                TextCategory::Artifact
-            }
-
-            // Skip + Fallback
-            ContentSubType::TooShort
-            | ContentSubType::Empty
-            | ContentSubType::Ambiguous
-            | ContentSubType::Unknown => TextCategory::Skip,
+            // Fallback
+            ContentSubType::Unknown => TextCategory::Skip,
         }
     }
 
@@ -190,12 +167,6 @@ impl ContentSubType {
             ContentSubType::Jsonl => "jsonl",
             ContentSubType::KeyValue => "key_value",
             ContentSubType::LogLines => "log_lines",
-            ContentSubType::PdfDump => "pdf_dump",
-            ContentSubType::OcrGarbage => "ocr_garbage",
-            ContentSubType::Boilerplate => "boilerplate",
-            ContentSubType::TooShort => "too_short",
-            ContentSubType::Empty => "empty",
-            ContentSubType::Ambiguous => "ambiguous",
             ContentSubType::Unknown => "unknown",
         }
     }
@@ -304,6 +275,5 @@ pub mod thresholds {
     pub const PROSE: f32 = 0.65;
     pub const CODE: f32 = 0.70;
     pub const STRUCTURED: f32 = 0.60;
-    pub const ARTIFACT: f32 = 0.75;
     pub const SUB_TYPE: f32 = 0.80;
 }

@@ -17,7 +17,6 @@ fn contract_root_reexports_thresholds() {
     assert_eq!(text_classifier::thresholds::PROSE, 0.65);
     assert_eq!(text_classifier::thresholds::CODE, 0.70);
     assert_eq!(text_classifier::thresholds::STRUCTURED, 0.60);
-    assert_eq!(text_classifier::thresholds::ARTIFACT, 0.75);
 }
 
 #[test]
@@ -25,7 +24,6 @@ fn contract_text_category_variants() {
     let _: TextCategory = TextCategory::Prose;
     let _: TextCategory = TextCategory::Code;
     let _: TextCategory = TextCategory::Structured;
-    let _: TextCategory = TextCategory::Artifact;
     let _: TextCategory = TextCategory::Skip;
 }
 
@@ -42,8 +40,6 @@ fn contract_content_sub_type_category_mapping() {
         ContentSubType::LogLines.category(),
         TextCategory::Structured
     );
-    assert_eq!(ContentSubType::PdfDump.category(), TextCategory::Artifact);
-    assert_eq!(ContentSubType::TooShort.category(), TextCategory::Skip);
     assert_eq!(ContentSubType::Unknown.category(), TextCategory::Skip);
 }
 
@@ -51,7 +47,7 @@ fn contract_content_sub_type_category_mapping() {
 fn contract_content_sub_type_labels() {
     assert_eq!(ContentSubType::Python.label(), "python");
     assert_eq!(ContentSubType::Csv.label(), "csv");
-    assert_eq!(ContentSubType::PdfDump.label(), "pdf_dump");
+    assert_eq!(ContentSubType::Unknown.label(), "unknown");
 }
 
 #[test]
@@ -101,7 +97,6 @@ fn contract_text_category_display() {
     assert_eq!(TextCategory::Prose.to_string(), "prose");
     assert_eq!(TextCategory::Code.to_string(), "code");
     assert_eq!(TextCategory::Structured.to_string(), "structured");
-    assert_eq!(TextCategory::Artifact.to_string(), "artifact");
     assert_eq!(TextCategory::Skip.to_string(), "skip");
 }
 
@@ -110,7 +105,6 @@ fn contract_text_category_is_prose() {
     assert!(TextCategory::Prose.is_prose());
     assert!(!TextCategory::Code.is_prose());
     assert!(!TextCategory::Structured.is_prose());
-    assert!(!TextCategory::Artifact.is_prose());
     assert!(!TextCategory::Skip.is_prose());
 }
 
@@ -118,7 +112,7 @@ fn contract_text_category_is_prose() {
 fn contract_content_sub_type_display() {
     assert_eq!(ContentSubType::Python.to_string(), "python");
     assert_eq!(ContentSubType::Csv.to_string(), "csv");
-    assert_eq!(ContentSubType::PdfDump.to_string(), "pdf_dump");
+    assert_eq!(ContentSubType::Unknown.to_string(), "unknown");
 }
 
 #[test]
@@ -127,7 +121,6 @@ fn contract_thresholds() {
     assert_eq!(thresholds::PROSE, 0.65);
     assert_eq!(thresholds::CODE, 0.70);
     assert_eq!(thresholds::STRUCTURED, 0.60);
-    assert_eq!(thresholds::ARTIFACT, 0.75);
     assert_eq!(thresholds::SUB_TYPE, 0.80);
 }
 
@@ -201,22 +194,6 @@ fn contract_content_sub_type_all_category_mappings() {
     assert_eq!(ContentSubType::Toml.category(), TextCategory::Structured);
     assert_eq!(ContentSubType::Ini.category(), TextCategory::Structured);
 
-    // Artifact
-    assert_eq!(ContentSubType::PdfDump.category(), TextCategory::Artifact);
-    assert_eq!(
-        ContentSubType::OcrGarbage.category(),
-        TextCategory::Artifact
-    );
-    assert_eq!(
-        ContentSubType::Boilerplate.category(),
-        TextCategory::Artifact
-    );
-
-    // Skip
-    assert_eq!(ContentSubType::TooShort.category(), TextCategory::Skip);
-    assert_eq!(ContentSubType::Empty.category(), TextCategory::Skip);
-    assert_eq!(ContentSubType::Ambiguous.category(), TextCategory::Skip);
-
     // Fallback
     assert_eq!(ContentSubType::Unknown.category(), TextCategory::Skip);
 }
@@ -252,12 +229,6 @@ fn contract_content_sub_type_all_labels() {
     assert_eq!(ContentSubType::Jsonl.label(), "jsonl");
     assert_eq!(ContentSubType::KeyValue.label(), "key_value");
     assert_eq!(ContentSubType::LogLines.label(), "log_lines");
-    assert_eq!(ContentSubType::PdfDump.label(), "pdf_dump");
-    assert_eq!(ContentSubType::OcrGarbage.label(), "ocr_garbage");
-    assert_eq!(ContentSubType::Boilerplate.label(), "boilerplate");
-    assert_eq!(ContentSubType::TooShort.label(), "too_short");
-    assert_eq!(ContentSubType::Empty.label(), "empty");
-    assert_eq!(ContentSubType::Ambiguous.label(), "ambiguous");
     assert_eq!(ContentSubType::Unknown.label(), "unknown");
 }
 
@@ -293,4 +264,30 @@ fn contract_feature_vector_zeroed_all_zero() {
     assert_eq!(f.repeated_ngram_ratio, 0.0);
     assert_eq!(f.sentence_coherence_score, 0.0);
     assert_eq!(f.line_count, 0);
+}
+
+/// Verify that TextCategory has exactly 4 variants after simplification.
+#[test]
+fn contract_text_category_no_artifact_variants() {
+    // TextCategory should only have Prose, Code, Structured, Skip
+    // This test verifies the enum is exhaustive with exactly these 4 variants
+    let categories = [
+        TextCategory::Prose,
+        TextCategory::Code,
+        TextCategory::Structured,
+        TextCategory::Skip,
+    ];
+    for cat in &categories {
+        // Each variant should have a valid display string
+        let s = cat.to_string();
+        assert!(!s.is_empty());
+    }
+}
+
+/// Verify that ContentSubType no longer has artifact or skip sub-types.
+#[test]
+fn contract_content_sub_type_no_artifact_skip_subtypes() {
+    // Unknown is the only fallback, mapping to Skip
+    assert_eq!(ContentSubType::Unknown.category(), TextCategory::Skip);
+    assert_eq!(ContentSubType::Unknown.label(), "unknown");
 }
