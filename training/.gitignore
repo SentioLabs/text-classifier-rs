@@ -1,7 +1,5 @@
-# Training data (regenerated, not committed)
-data/*.csv
-data/*.jsonl
-data/*.json
+# Regenerable pilot data (not DVC-tracked)
+data/source/pilot/
 
 # Model artifacts (large binaries)
 models/*.onnx
