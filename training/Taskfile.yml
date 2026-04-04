@@ -47,27 +47,27 @@ tasks:
       - |
         if [ -f data/eval/clear.jsonl ]; then
           echo "Frozen eval sets found in data/eval/, skipping eval generation"
-          uv run split_dataset.py --input data/source/merged/raw_samples.jsonl --train-output data/curated/train/golden_raw.csv --max-per-category 50000 --skip-eval
+          uv run split_dataset.py --input data/source/merged/raw_samples.jsonl --train-output data/curated/train/golden_raw.parquet --max-per-category 50000 --skip-eval
         else
-          uv run split_dataset.py --input data/source/merged/raw_samples.jsonl --eval-output data/eval/clear.jsonl --eval-boundary-output data/eval/boundary.jsonl --train-output data/curated/train/golden_raw.csv --max-per-category 50000
+          uv run split_dataset.py --input data/source/merged/raw_samples.jsonl --eval-output data/eval/clear.jsonl --eval-boundary-output data/eval/boundary.jsonl --train-output data/curated/train/golden_raw.parquet --max-per-category 50000
         fi
 
   train:featurize:
-    desc: Compute 22 structural + content features from text and enrich the training CSV
+    desc: Compute 22 structural + content features from text and enrich the training dataset
     cmds:
-      - uv run featurize.py --input data/curated/train/golden_raw.csv --output data/curated/train/golden_featurized.csv
+      - uv run featurize.py --input data/curated/train/golden_raw.parquet --output data/curated/train/golden_featurized.parquet
 
   train:dedup:
     desc: Semantic dedup on featurized training split
     env:
       KMP_DUPLICATE_LIB_OK: "TRUE"
     cmds:
-      - uv run dedup.py --input data/curated/train/golden_featurized.csv --output data/curated/train/golden_train.csv --feature-threshold 0
+      - uv run dedup.py --input data/curated/train/golden_featurized.parquet --output data/curated/train/golden_train.parquet --feature-threshold 0
 
   train:train:
     desc: Train model with stratified validation and artifact-subtype-balanced sampling
     cmds:
-      - uv run train.py --data data/curated/train/golden_train.csv --output output/ --balance-artifact-subtypes --device auto
+      - uv run train.py --data data/curated/train/golden_train.parquet --output output/ --balance-artifact-subtypes --device auto
 
   train:update-model:
     desc: Copy trained model to src/ for embedding
