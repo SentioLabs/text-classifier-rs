@@ -42,25 +42,25 @@ pub fn extract_features(text: &str) -> FeatureVector {
         line_uniqueness: compute_line_uniqueness(&lines),
         short_line_ratio: compute_short_line_ratio(&lines, n_lines),
         symbol_ratio: compute_symbol_ratio(sample, total_chars),
+        delimiter_consistency: compute_delimiter_consistency(&lines),
+        json_brace_depth: compute_json_brace_depth(sample, total_chars),
+        key_value_ratio: compute_key_value_ratio(&lines, n_lines),
+        xml_tag_ratio: compute_xml_tag_ratio(&lines, n_lines),
+        log_line_ratio: compute_log_line_ratio(&lines, n_lines),
+        comment_ratio: compute_comment_ratio(&lines, n_lines),
+        numeric_field_ratio: compute_numeric_field_ratio(sample),
+        repetitive_structure_score: compute_repetitive_structure_score(&lines),
+        hyphenated_line_break_ratio: 0.0,
+        short_repeated_line_ratio: 0.0,
+        page_number_density: 0.0,
+        label_value_line_ratio: 0.0,
+        table_fragment_score: 0.0,
+        uppercase_header_ratio: 0.0,
+        dictionary_word_ratio: 0.0,
+        encoding_error_ratio: 0.0,
+        repeated_ngram_ratio: 0.0,
+        sentence_coherence_score: 0.0,
         line_count: n_lines,
-    }
-}
-
-impl FeatureVector {
-    fn zeroed() -> Self {
-        Self {
-            line_length_cv: 0.0,
-            char_entropy: 0.0,
-            leading_whitespace_ratio: 0.0,
-            tab_density: 0.0,
-            sentence_punctuation_rate: 0.0,
-            paragraph_break_rate: 0.0,
-            alpha_ratio: 0.0,
-            line_uniqueness: 0.0,
-            short_line_ratio: 0.0,
-            symbol_ratio: 0.0,
-            line_count: 0,
-        }
     }
 }
 
@@ -207,8 +207,8 @@ fn compute_short_line_ratio(lines: &[&str], n_lines: usize) -> f32 {
     short as f32 / n_lines as f32
 }
 
-/// Fraction of non-alphanumeric chars, excluding common punctuation.
-/// Common punctuation excluded: space, newline, tab, . , ; : ! ? - ' "
+/// Fraction of non-alphanumeric chars, excluding common punctuation and
+/// Unicode decorative characters (box-drawing, block elements, symbols).
 /// Code/garbled text > 0.15. Prose < 0.05.
 fn compute_symbol_ratio(text: &str, total_chars: f32) -> f32 {
     let symbols = text
@@ -219,8 +219,257 @@ fn compute_symbol_ratio(text: &str, total_chars: f32) -> f32 {
                     c,
                     ' ' | '\n' | '\t' | '\r' | '.' | ',' | ';' | ':' | '!' | '?' | '-' | '\'' | '"'
                 )
+                // Exclude Unicode decorative characters commonly found in
+                // formatted documents, OCR output, and ASCII art:
+                // Box Drawing (U+2500-257F), Block Elements (U+2580-259F),
+                // Geometric Shapes (U+25A0-25FF), Misc Symbols (U+2600-26FF),
+                // Dingbats (U+2700-27BF), Arrows (U+2190-21FF)
+                && !matches!(*c as u32, 0x2190..=0x21FF | 0x2500..=0x259F | 0x25A0..=0x27BF)
+                // Also exclude common typographic symbols: bullets, dashes, quotes
+                && !matches!(c, '–' | '—' | '•' | '°' | '©' | '®' | '™' | '…' | '×' | '÷')
         })
         .count();
 
     symbols as f32 / total_chars
+}
+
+/// Consistency of delimiter counts across lines.
+/// For each candidate delimiter (`,` `|` `\t` `;`), count occurrences per line,
+/// find the mode count, and compute fraction of lines matching that mode.
+/// Returns the best (highest) consistency across all delimiters.
+/// Returns 0.0 if fewer than 3 lines.
+fn compute_delimiter_consistency(lines: &[&str]) -> f32 {
+    if lines.len() < 3 {
+        return 0.0;
+    }
+
+    let delimiters = [',', '|', '\t', ';'];
+    let mut best = 0.0f32;
+
+    for &delim in &delimiters {
+        // Count occurrences of this delimiter per line
+        let counts: Vec<usize> = lines
+            .iter()
+            .map(|line| line.chars().filter(|&c| c == delim).count())
+            .collect();
+
+        // Find mode count (most common count)
+        let mut freq: HashMap<usize, usize> = HashMap::new();
+        for &count in &counts {
+            *freq.entry(count).or_insert(0) += 1;
+        }
+
+        // Find how many lines have the mode count
+        let mode_freq = freq.values().copied().max().unwrap_or(0);
+
+        // Skip if mode is 0 occurrences (delimiter not present)
+        let mode_count = freq
+            .iter()
+            .filter(|&(_, v)| *v == mode_freq)
+            .map(|(&k, _)| k)
+            .next()
+            .unwrap_or(0);
+
+        if mode_count == 0 {
+            continue;
+        }
+
+        let consistency = mode_freq as f32 / lines.len() as f32;
+        if consistency > best {
+            best = consistency;
+        }
+    }
+
+    best
+}
+
+/// Fraction of JSON brace/bracket characters (`{` `}` `[` `]`) in text.
+fn compute_json_brace_depth(text: &str, total_chars: f32) -> f32 {
+    let count = text
+        .chars()
+        .filter(|c| matches!(c, '{' | '}' | '[' | ']'))
+        .count();
+    count as f32 / total_chars
+}
+
+/// Fraction of lines with key-value patterns (word followed by `:` or `=` then a value).
+/// Uses simple char-level checks, not regex.
+fn compute_key_value_ratio(lines: &[&str], n_lines: usize) -> f32 {
+    let count = lines
+        .iter()
+        .filter(|line| {
+            let trimmed = line.trim();
+            // Look for `: ` or `=` preceded by a word character
+            if let Some(pos) = trimmed.find(": ") {
+                // Check there's at least one non-whitespace char before the colon
+                pos > 0 && trimmed[..pos].chars().any(|c| c.is_alphanumeric())
+            } else if let Some(pos) = trimmed.find('=') {
+                // Check there's a word before = and something after
+                pos > 0
+                    && pos + 1 < trimmed.len()
+                    && trimmed[..pos].chars().any(|c| c.is_alphanumeric())
+            } else {
+                false
+            }
+        })
+        .count();
+
+    count as f32 / n_lines as f32
+}
+
+/// Fraction of lines containing XML/HTML tags (`<` followed by a letter or `</` followed by a letter).
+fn compute_xml_tag_ratio(lines: &[&str], n_lines: usize) -> f32 {
+    let count = lines
+        .iter()
+        .filter(|line| {
+            let chars: Vec<char> = line.chars().collect();
+            for i in 0..chars.len() {
+                if chars[i] == '<'
+                    && let Some(&next) = chars.get(i + 1)
+                {
+                    if next.is_alphabetic() {
+                        return true;
+                    }
+                    if next == '/'
+                        && let Some(&after) = chars.get(i + 2)
+                        && after.is_alphabetic()
+                    {
+                        return true;
+                    }
+                }
+            }
+            false
+        })
+        .count();
+
+    count as f32 / n_lines as f32
+}
+
+/// Fraction of lines starting with timestamp-like patterns.
+/// Detects: `\d{4}-\d{2}-\d{2}`, `\d{2}:\d{2}:\d{2}`, or `[\d{4}` (bracket timestamps).
+/// Uses char-level checks for performance.
+fn compute_log_line_ratio(lines: &[&str], n_lines: usize) -> f32 {
+    let count = lines
+        .iter()
+        .filter(|line| {
+            let trimmed = line.trim();
+            let chars: Vec<char> = trimmed.chars().collect();
+
+            // Pattern: \d{4}-\d{2}-\d{2}
+            if chars.len() >= 10
+                && chars[0].is_ascii_digit()
+                && chars[1].is_ascii_digit()
+                && chars[2].is_ascii_digit()
+                && chars[3].is_ascii_digit()
+                && chars[4] == '-'
+                && chars[5].is_ascii_digit()
+                && chars[6].is_ascii_digit()
+                && chars[7] == '-'
+                && chars[8].is_ascii_digit()
+                && chars[9].is_ascii_digit()
+            {
+                return true;
+            }
+
+            // Pattern: \d{2}:\d{2}:\d{2}
+            if chars.len() >= 8
+                && chars[0].is_ascii_digit()
+                && chars[1].is_ascii_digit()
+                && chars[2] == ':'
+                && chars[3].is_ascii_digit()
+                && chars[4].is_ascii_digit()
+                && chars[5] == ':'
+                && chars[6].is_ascii_digit()
+                && chars[7].is_ascii_digit()
+            {
+                return true;
+            }
+
+            // Pattern: [\d{4} (bracket timestamp)
+            if chars.len() >= 5
+                && chars[0] == '['
+                && chars[1].is_ascii_digit()
+                && chars[2].is_ascii_digit()
+                && chars[3].is_ascii_digit()
+                && chars[4].is_ascii_digit()
+            {
+                return true;
+            }
+
+            false
+        })
+        .count();
+
+    count as f32 / n_lines as f32
+}
+
+/// Fraction of lines where trimmed content starts with comment markers.
+/// Detects: `#`, `//`, `/*`, `--`, `%`.
+fn compute_comment_ratio(lines: &[&str], n_lines: usize) -> f32 {
+    let count = lines
+        .iter()
+        .filter(|line| {
+            let trimmed = line.trim();
+            trimmed.starts_with('#')
+                || trimmed.starts_with("//")
+                || trimmed.starts_with("/*")
+                || trimmed.starts_with("--")
+                || trimmed.starts_with('%')
+        })
+        .count();
+
+    count as f32 / n_lines as f32
+}
+
+/// Fraction of whitespace-delimited tokens that parse as numbers.
+/// Strips commas before parsing (e.g. "1,000" → "1000").
+fn compute_numeric_field_ratio(text: &str) -> f32 {
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    if tokens.is_empty() {
+        return 0.0;
+    }
+
+    let numeric = tokens
+        .iter()
+        .filter(|token| {
+            let stripped: String = token.chars().filter(|&c| c != ',').collect();
+            stripped.parse::<f64>().is_ok()
+        })
+        .count();
+
+    numeric as f32 / tokens.len() as f32
+}
+
+/// Repetitive structure score: fraction of lines sharing the most common "shape".
+/// Shape = (number of whitespace-separated tokens, set of delimiter chars present).
+/// Samples first min(20, lines.len()) lines. Returns 0.0 if fewer than 3 lines.
+fn compute_repetitive_structure_score(lines: &[&str]) -> f32 {
+    if lines.len() < 3 {
+        return 0.0;
+    }
+
+    let sample_size = lines.len().min(20);
+    let sample = &lines[..sample_size];
+
+    let delimiters = [',', '|', '\t', ';'];
+
+    // Compute shape for each line
+    let shapes: Vec<(usize, Vec<bool>)> = sample
+        .iter()
+        .map(|line| {
+            let token_count = line.split_whitespace().count();
+            let delim_present: Vec<bool> = delimiters.iter().map(|&d| line.contains(d)).collect();
+            (token_count, delim_present)
+        })
+        .collect();
+
+    // Count how many lines share each shape
+    let mut freq: HashMap<(usize, Vec<bool>), usize> = HashMap::new();
+    for shape in &shapes {
+        *freq.entry(shape.clone()).or_insert(0) += 1;
+    }
+
+    let max_freq = freq.values().copied().max().unwrap_or(0);
+
+    max_freq as f32 / sample_size as f32
 }
