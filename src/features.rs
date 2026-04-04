@@ -1,6 +1,14 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 use crate::types::FeatureVector;
+
+static WORDLIST: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    include_str!("wordlist.txt")
+        .lines()
+        .filter(|l| !l.is_empty())
+        .collect()
+});
 
 /// Maximum chars to sample from input text.
 const SAMPLE_SIZE: usize = 10_000;
@@ -50,16 +58,16 @@ pub fn extract_features(text: &str) -> FeatureVector {
         comment_ratio: compute_comment_ratio(&lines, n_lines),
         numeric_field_ratio: compute_numeric_field_ratio(sample),
         repetitive_structure_score: compute_repetitive_structure_score(&lines),
-        hyphenated_line_break_ratio: 0.0,
-        short_repeated_line_ratio: 0.0,
-        page_number_density: 0.0,
-        label_value_line_ratio: 0.0,
-        table_fragment_score: 0.0,
-        uppercase_header_ratio: 0.0,
-        dictionary_word_ratio: 0.0,
-        encoding_error_ratio: 0.0,
-        repeated_ngram_ratio: 0.0,
-        sentence_coherence_score: 0.0,
+        hyphenated_line_break_ratio: compute_hyphenated_line_break_ratio(&lines),
+        short_repeated_line_ratio: compute_short_repeated_line_ratio(&lines),
+        page_number_density: compute_page_number_density(&lines, n_lines),
+        label_value_line_ratio: compute_label_value_line_ratio(&lines, n_lines),
+        table_fragment_score: compute_table_fragment_score(&lines),
+        uppercase_header_ratio: compute_uppercase_header_ratio(&lines),
+        dictionary_word_ratio: compute_dictionary_word_ratio(sample),
+        encoding_error_ratio: compute_encoding_error_ratio(sample, total_chars),
+        repeated_ngram_ratio: compute_repeated_ngram_ratio(sample),
+        sentence_coherence_score: compute_sentence_coherence_score(&lines),
         line_count: n_lines,
     }
 }
@@ -472,4 +480,426 @@ fn compute_repetitive_structure_score(lines: &[&str]) -> f32 {
     let max_freq = freq.values().copied().max().unwrap_or(0);
 
     max_freq as f32 / sample_size as f32
+}
+
+/// Fraction of line transitions where current line ends with `-` and next starts
+/// with a lowercase letter (hyphenated line break pattern from OCR/PDF).
+fn compute_hyphenated_line_break_ratio(lines: &[&str]) -> f32 {
+    let n_transitions = (lines.len().saturating_sub(1)).max(1);
+
+    let mut count = 0;
+    for i in 0..lines.len().saturating_sub(1) {
+        let current = lines[i].trim_end();
+        if !current.ends_with('-') {
+            continue;
+        }
+        let next = lines[i + 1].trim_start();
+        if let Some(ch) = next.chars().next()
+            && ch.is_alphabetic()
+            && ch.is_lowercase()
+        {
+            count += 1;
+        }
+    }
+
+    count as f32 / n_transitions as f32
+}
+
+/// Fraction of short lines (1-40 trimmed chars) that appear more than once.
+fn compute_short_repeated_line_ratio(lines: &[&str]) -> f32 {
+    let short_lines: Vec<&str> = lines
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| {
+            let len = l.len();
+            (1..=40).contains(&len)
+        })
+        .collect();
+
+    if short_lines.is_empty() {
+        return 0.0;
+    }
+
+    let mut freq: HashMap<&str, usize> = HashMap::new();
+    for line in &short_lines {
+        *freq.entry(line).or_insert(0) += 1;
+    }
+
+    let repeated_instances: usize = freq.values().filter(|&&c| c > 1).sum();
+
+    repeated_instances as f32 / short_lines.len() as f32
+}
+
+/// Fraction of non-empty trimmed lines matching page number patterns.
+fn compute_page_number_density(lines: &[&str], n_lines: usize) -> f32 {
+    let mut count = 0;
+
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if is_page_number_only(trimmed)
+            || is_page_n_of_m(trimmed)
+            || is_page_fraction(trimmed)
+        {
+            count += 1;
+        }
+    }
+
+    count as f32 / n_lines as f32
+}
+
+/// Matches `^\d{1,4}$`
+fn is_page_number_only(s: &str) -> bool {
+    let len = s.len();
+    (1..=4).contains(&len) && s.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Matches `(?i)^page\s+\d{1,4}(\s+of\s+\d{1,4})?$`
+fn is_page_n_of_m(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    let bytes = lower.as_bytes();
+
+    if !lower.starts_with("page") {
+        return false;
+    }
+
+    let mut i = 4; // past "page"
+
+    // Require at least one whitespace
+    if i >= bytes.len() || !bytes[i].is_ascii_whitespace() {
+        return false;
+    }
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+
+    // Read 1-4 digits
+    let digit_start = i;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    let digit_count = i - digit_start;
+    if !(1..=4).contains(&digit_count) {
+        return false;
+    }
+
+    // End here? That's valid.
+    if i == bytes.len() {
+        return true;
+    }
+
+    // Otherwise expect " of \d{1,4}"
+    if !bytes[i].is_ascii_whitespace() {
+        return false;
+    }
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+
+    // "of"
+    if i + 2 > bytes.len() || &lower[i..i + 2] != "of" {
+        return false;
+    }
+    i += 2;
+
+    // whitespace
+    if i >= bytes.len() || !bytes[i].is_ascii_whitespace() {
+        return false;
+    }
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+
+    // 1-4 digits
+    let digit_start2 = i;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    let digit_count2 = i - digit_start2;
+    if !(1..=4).contains(&digit_count2) {
+        return false;
+    }
+
+    i == bytes.len()
+}
+
+/// Matches `^\d{1,4}\s*/\s*\d{1,4}$`
+fn is_page_fraction(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+
+    // 1-4 digits
+    let digit_start = i;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    let digit_count = i - digit_start;
+    if !(1..=4).contains(&digit_count) {
+        return false;
+    }
+
+    // optional whitespace
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+
+    // slash
+    if i >= bytes.len() || bytes[i] != b'/' {
+        return false;
+    }
+    i += 1;
+
+    // optional whitespace
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+
+    // 1-4 digits
+    let digit_start2 = i;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    let digit_count2 = i - digit_start2;
+    if !(1..=4).contains(&digit_count2) {
+        return false;
+    }
+
+    i == bytes.len()
+}
+
+/// Fraction of lines matching label-value pattern:
+/// `^[A-Za-z][A-Za-z0-9 _/().]{0,30}\s*[:\-]\s+\S`
+fn compute_label_value_line_ratio(lines: &[&str], n_lines: usize) -> f32 {
+    let count = lines
+        .iter()
+        .filter(|line| is_label_value_line(line.trim()))
+        .count();
+
+    count as f32 / n_lines as f32
+}
+
+fn is_label_value_line(s: &str) -> bool {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.is_empty() {
+        return false;
+    }
+
+    // First char must be [A-Za-z]
+    if !chars[0].is_ascii_alphabetic() {
+        return false;
+    }
+
+    // Next 0-30 chars must be [A-Za-z0-9 _/().]
+    let mut i = 1;
+    let label_max = (chars.len()).min(32); // 1 + up to 30 more = 31 max index, but we need room for separator
+    while i < label_max {
+        let ch = chars[i];
+        if ch.is_ascii_alphanumeric()
+            || matches!(ch, ' ' | '_' | '/' | '(' | ')' | '.')
+        {
+            i += 1;
+        } else {
+            break;
+        }
+    }
+
+    // Optional whitespace before separator
+    while i < chars.len() && chars[i].is_ascii_whitespace() {
+        i += 1;
+    }
+
+    // Separator must be : or -
+    if i >= chars.len() || !matches!(chars[i], ':' | '-') {
+        return false;
+    }
+    i += 1;
+
+    // Must have at least one whitespace after separator
+    if i >= chars.len() || !chars[i].is_ascii_whitespace() {
+        return false;
+    }
+    while i < chars.len() && chars[i].is_ascii_whitespace() {
+        i += 1;
+    }
+
+    // Must have a non-whitespace char after
+    if i >= chars.len() {
+        return false;
+    }
+    !chars[i].is_whitespace()
+}
+
+/// Fraction of non-empty lines that look table-like (have delimiters or
+/// multi-space column separation).
+fn compute_table_fragment_score(lines: &[&str]) -> f32 {
+    let non_empty: Vec<&str> = lines.iter().filter(|l| !l.trim().is_empty()).copied().collect();
+    if non_empty.is_empty() {
+        return 0.0;
+    }
+
+    let mut score = 0;
+    for line in &non_empty {
+        let delimiter_hits = line.chars().filter(|&c| matches!(c, ',' | '|' | '\t' | ';')).count();
+        if delimiter_hits >= 2 || has_spaced_columns(line) {
+            score += 1;
+        }
+    }
+
+    score as f32 / non_empty.len() as f32
+}
+
+/// Check if line has `\S+\s{2,}\S+` pattern (multi-space column separation).
+fn has_spaced_columns(s: &str) -> bool {
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    // Find a non-whitespace char
+    while i < len {
+        if !chars[i].is_whitespace() {
+            // Found non-whitespace, now look for 2+ spaces followed by non-whitespace
+            i += 1;
+            while i < len && !chars[i].is_whitespace() {
+                i += 1;
+            }
+            // Now at whitespace or end
+            let ws_start = i;
+            while i < len && chars[i].is_whitespace() {
+                i += 1;
+            }
+            let ws_count = i - ws_start;
+            if ws_count >= 2 && i < len && !chars[i].is_whitespace() {
+                return true;
+            }
+            // Continue scanning from current position
+        } else {
+            i += 1;
+        }
+    }
+
+    false
+}
+
+/// Fraction of non-empty trimmed lines that look like uppercase section headers.
+fn compute_uppercase_header_ratio(lines: &[&str]) -> f32 {
+    let non_empty: Vec<&str> = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    if non_empty.is_empty() {
+        return 0.0;
+    }
+
+    let mut count = 0;
+    for line in &non_empty {
+        if line.len() > 80 {
+            continue;
+        }
+        let alpha_chars: Vec<char> = line.chars().filter(|c| c.is_alphabetic()).collect();
+        if alpha_chars.len() < 3 {
+            continue;
+        }
+        let upper_count = alpha_chars.iter().filter(|c| c.is_uppercase()).count();
+        if (upper_count as f32 / alpha_chars.len() as f32) >= 0.8 {
+            // Last char must NOT be . ! ?
+            if let Some(last) = line.chars().next_back()
+                && matches!(last, '.' | '!' | '?')
+            {
+                continue;
+            }
+            count += 1;
+        }
+    }
+
+    count as f32 / non_empty.len() as f32
+}
+
+/// Fraction of whitespace-delimited tokens found in the dictionary wordlist.
+fn compute_dictionary_word_ratio(text: &str) -> f32 {
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let mut valid_count = 0;
+    let mut found_count = 0;
+
+    for token in &tokens {
+        let lower = token.to_lowercase();
+        let stripped = lower
+            .trim_start_matches(|c: char| c.is_ascii_punctuation())
+            .trim_end_matches(|c: char| c.is_ascii_punctuation());
+        if stripped.is_empty() {
+            continue;
+        }
+        valid_count += 1;
+        if WORDLIST.contains(stripped) {
+            found_count += 1;
+        }
+    }
+
+    if valid_count == 0 {
+        return 0.0;
+    }
+
+    found_count as f32 / valid_count as f32
+}
+
+/// Fraction of characters that are encoding errors (U+FFFD) or mojibake sequences.
+fn compute_encoding_error_ratio(text: &str, total_chars: f32) -> f32 {
+    let fffd_count = text.chars().filter(|&c| c == '\u{FFFD}').count();
+
+    let mojibake_sequences: &[&str] = &[
+        "\u{00C3}\u{00A9}",   // Ã©
+        "\u{00C3}\u{00A8}",   // Ã¨
+        "\u{00C3}\u{00BC}",   // Ã¼
+        "\u{00C3}\u{00B6}",   // Ã¶
+        "\u{00C3}\u{00A4}",   // Ã¤
+        "\u{00C2}\u{00B0}",   // Â°
+        "\u{00C2}\u{00A9}",   // Â©
+        "\u{00E2}\u{0080}\u{0093}", // em-dash mojibake
+        "\u{00E2}\u{0080}\u{0099}", // right-single-quote mojibake
+        "\u{00E2}\u{0080}\u{009C}", // left-double-quote mojibake
+        "\u{00E2}\u{0080}\u{009D}", // right-double-quote mojibake
+    ];
+
+    let mojibake_count: usize = mojibake_sequences.iter().map(|seq| text.matches(seq).count()).sum();
+
+    (fffd_count + mojibake_count) as f32 / total_chars
+}
+
+/// Fraction of unique 3-gram types that appear more than once.
+fn compute_repeated_ngram_ratio(text: &str) -> f32 {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() < 3 {
+        return 0.0;
+    }
+
+    let mut freq: HashMap<(&str, &str, &str), usize> = HashMap::new();
+    for i in 0..words.len() - 2 {
+        let ngram = (words[i], words[i + 1], words[i + 2]);
+        *freq.entry(ngram).or_insert(0) += 1;
+    }
+
+    let total_unique = freq.len();
+    if total_unique == 0 {
+        return 0.0;
+    }
+
+    let repeated = freq.values().filter(|&&c| c > 1).count();
+    repeated as f32 / total_unique as f32
+}
+
+/// Fraction of non-empty trimmed lines that start with uppercase and end with `.!?`.
+fn compute_sentence_coherence_score(lines: &[&str]) -> f32 {
+    let non_empty: Vec<&str> = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    if non_empty.is_empty() {
+        return 0.0;
+    }
+
+    let mut proper = 0;
+    for line in &non_empty {
+        let first = line.chars().next().unwrap();
+        let last = line.chars().last().unwrap();
+        if first.is_uppercase() && matches!(last, '.' | '!' | '?') {
+            proper += 1;
+        }
+    }
+
+    proper as f32 / non_empty.len() as f32
 }
