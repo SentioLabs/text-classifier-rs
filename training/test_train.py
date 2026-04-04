@@ -145,32 +145,37 @@ class TestConstants:
             "prose": 0,
             "code": 1,
             "structured": 2,
-            "artifact": 3,
-            "skip": 4,
         }
+
+    def test_category_map_has_three_entries(self):
+        assert len(CATEGORY_MAP) == 3
+
+    def test_no_artifact_or_skip_in_category_map(self):
+        assert "artifact" not in CATEGORY_MAP
+        assert "skip" not in CATEGORY_MAP
 
 
 class TestModel:
     def test_forward_shapes(self):
         import torch
 
-        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=5, n_sub_types=10)
+        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
         x = torch.randn(4, len(FEATURE_COLUMNS))
         cat_logits, sub_logits = model(x)
-        assert cat_logits.shape == (4, 5)
+        assert cat_logits.shape == (4, 3)
         assert sub_logits.shape == (4, 10)
 
     def test_shared_layers_exist(self):
-        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=5, n_sub_types=10)
+        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
         assert hasattr(model, "shared")
         assert hasattr(model, "category_head")
         assert hasattr(model, "sub_type_head")
 
     def test_three_shared_linear_layers(self):
-        """Model should have 3 linear layers: 18->128, 128->64, 64->32."""
+        """Model should have 3 linear layers: 28->128, 128->64, 64->32."""
         import torch.nn as nn
 
-        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=5, n_sub_types=10)
+        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
         linear_layers = [m for m in model.shared if isinstance(m, nn.Linear)]
         assert len(linear_layers) == 3, f"Expected 3 Linear layers, got {len(linear_layers)}"
         assert linear_layers[0].in_features == len(FEATURE_COLUMNS)
@@ -184,7 +189,7 @@ class TestModel:
         """Dropout layers should use p=0.3."""
         import torch.nn as nn
 
-        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=5, n_sub_types=10)
+        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
         dropout_layers = [m for m in model.shared if isinstance(m, nn.Dropout)]
         assert len(dropout_layers) >= 1, "No Dropout layers found"
         for d in dropout_layers:
@@ -281,12 +286,11 @@ class TestTrainingDefaults:
             # scheduler.step should be called once per epoch
             assert mock_scheduler.step.call_count == 3
 
-    def test_new_slice_aware_flags_default_off(self):
+    def test_group_val_by_source_flag_default_off(self):
         args = parse_args(["--data", "dummy.csv", "--output", "out"])
         assert args.group_val_by_source is False
-        assert args.balance_artifact_subtypes is False
 
-    def test_new_slice_aware_flags_can_be_enabled(self):
+    def test_group_val_by_source_flag_can_be_enabled(self):
         args = parse_args(
             [
                 "--data",
@@ -294,11 +298,22 @@ class TestTrainingDefaults:
                 "--output",
                 "out",
                 "--group-val-by-source",
-                "--balance-artifact-subtypes",
             ]
         )
         assert args.group_val_by_source is True
-        assert args.balance_artifact_subtypes is True
+
+    def test_no_balance_artifact_subtypes_argument(self):
+        """The --balance-artifact-subtypes CLI argument should no longer exist."""
+        with pytest.raises(SystemExit):
+            parse_args(
+                [
+                    "--data",
+                    "dummy.csv",
+                    "--output",
+                    "out",
+                    "--balance-artifact-subtypes",
+                ]
+            )
 
 
 class TestFeatureAblation:
@@ -400,7 +415,7 @@ class TestDataLoading:
 
         random.seed(99)
         csv_path = tmp_path / "imbalanced.csv"
-        counts_per_cat = {"prose": 100, "code": 10, "structured": 10, "artifact": 10, "skip": 10}
+        counts_per_cat = {"prose": 100, "code": 10, "structured": 10}
 
         with open(csv_path, "w", newline="") as f:
             writer = csv.writer(f)
@@ -546,94 +561,12 @@ class TestDataLoading:
         assert 0.15 <= val_ratio <= 0.25
         assert train_sources.intersection(val_sources)
 
-    def test_balance_artifact_subtypes_adds_sampler_weights_for_rare_artifacts(self, tmp_path):
-        import random
+    def test_load_and_prepare_data_no_balance_artifact_param(self, dummy_csv):
+        """load_and_prepare_data should no longer accept balance_artifact_subtypes."""
+        import inspect
 
-        random.seed(777)
-        csv_path = tmp_path / "artifact_balance.csv"
-        header = list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type", "source"]
-
-        rows = []
-        for _ in range(80):
-            features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
-            rows.append(features + [1, "prose", "narrative", "book-src"])
-
-        for _ in range(15):
-            features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
-            rows.append(features + [1, "artifact", "pdf_dump", "artifact-major"])
-
-        for _ in range(5):
-            features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
-            rows.append(features + [1, "artifact", "ocr_text", "artifact-minor"])
-
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
-            writer.writerows(rows)
-
-        result = load_and_prepare_data(
-            csv_path,
-            val_fraction=0.2,
-            seed=42,
-            balance_artifact_subtypes=True,
-        )
-        sample_weights = result["sample_weights_train"]
-        y_cat_train = result["y_cat_train"]
-        y_sub_train = result["y_sub_train"]
-        inverse_sub_map = {v: k for k, v in result["sub_type_map"].items()}
-
-        artifact_weights_by_subtype: dict[str, list[float]] = {"pdf_dump": [], "ocr_text": []}
-        for idx, cat_id in enumerate(y_cat_train):
-            if cat_id != CATEGORY_MAP["artifact"]:
-                continue
-            sub_type = inverse_sub_map[int(y_sub_train[idx])]
-            if sub_type in artifact_weights_by_subtype:
-                artifact_weights_by_subtype[sub_type].append(float(sample_weights[idx]))
-
-        assert artifact_weights_by_subtype["pdf_dump"]
-        assert artifact_weights_by_subtype["ocr_text"]
-        assert (
-            sum(artifact_weights_by_subtype["ocr_text"]) / len(artifact_weights_by_subtype["ocr_text"])
-            > sum(artifact_weights_by_subtype["pdf_dump"]) / len(artifact_weights_by_subtype["pdf_dump"])
-        )
-
-    def test_train_model_uses_weighted_sampler_when_balancing_enabled(self, tmp_path):
-        import random
-        import torch
-        from unittest import mock
-
-        random.seed(9)
-        csv_path = tmp_path / "sampler.csv"
-        header = list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type"]
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
-            for category in CATEGORY_MAP:
-                for _ in range(40):
-                    features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
-                    sub_type = "pdf_dump" if category == "artifact" else "narrative"
-                    writer.writerow(features + [2, category, sub_type])
-
-        data = load_and_prepare_data(
-            csv_path,
-            val_fraction=0.2,
-            seed=42,
-            balance_artifact_subtypes=True,
-        )
-
-        with mock.patch(
-            "torch.utils.data.WeightedRandomSampler",
-            wraps=torch.utils.data.WeightedRandomSampler,
-        ) as mock_sampler:
-            train_model(
-                data,
-                n_sub_types=len(data["sub_type_map"]),
-                epochs=1,
-                batch_size=32,
-                patience=2,
-                balance_artifact_subtypes=True,
-            )
-            assert mock_sampler.called, "Expected WeightedRandomSampler to be used when balancing is enabled"
+        sig = inspect.signature(load_and_prepare_data)
+        assert "balance_artifact_subtypes" not in sig.parameters
 
 
 # ---------------------------------------------------------------------------

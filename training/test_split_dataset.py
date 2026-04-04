@@ -479,3 +479,230 @@ class TestDownsampling:
                 results.append([r["text"] for r in reader])
 
         assert results[0] == results[1]
+
+
+# ---------------------------------------------------------------------------
+# Tests for SUBTYPE_CATEGORY_OVERRIDES updates
+# ---------------------------------------------------------------------------
+
+
+class TestSubtypeCategoryOverrides:
+    def test_overrides_include_reclassified_subtypes(self):
+        from split_dataset import SUBTYPE_CATEGORY_OVERRIDES
+
+        # Original overrides
+        assert SUBTYPE_CATEGORY_OVERRIDES["yaml"] == "structured"
+        assert SUBTYPE_CATEGORY_OVERRIDES["toml"] == "structured"
+        assert SUBTYPE_CATEGORY_OVERRIDES["ini"] == "structured"
+
+        # New overrides: None means reclassified by heuristic
+        assert SUBTYPE_CATEGORY_OVERRIDES["pdf_dump"] is None
+        assert SUBTYPE_CATEGORY_OVERRIDES["ocr_garbage"] is None
+        assert SUBTYPE_CATEGORY_OVERRIDES["boilerplate"] is None
+        assert SUBTYPE_CATEGORY_OVERRIDES["skip"] is None
+
+
+# ---------------------------------------------------------------------------
+# Tests for reclassify_by_content
+# ---------------------------------------------------------------------------
+
+
+class TestReclassifyByContent:
+    def test_high_coherence_and_dictionary_returns_prose(self):
+        from split_dataset import reclassify_by_content
+
+        # Craft text with high sentence_coherence_score and dictionary_word_ratio
+        # Sentences that start uppercase and end with period, using dictionary words
+        text = "The quick brown fox jumps over the lazy dog.\n" * 10
+        result = reclassify_by_content(text)
+        assert result == "prose"
+
+    def test_high_kvr_returns_structured(self):
+        from split_dataset import reclassify_by_content
+
+        # Text with lots of key: value lines
+        text = "name: John\nage: 30\ncity: Paris\ncolor: blue\n" * 10
+        result = reclassify_by_content(text)
+        assert result == "structured"
+
+    def test_high_comment_ratio_returns_code(self):
+        from split_dataset import reclassify_by_content
+
+        # Text with lots of comment lines
+        text = "# this is a comment\n# another comment\n# more comments\nx = 1\n# yet another\n" * 5
+        result = reclassify_by_content(text)
+        assert result == "code"
+
+    def test_high_delimiter_consistency_returns_structured(self):
+        from split_dataset import reclassify_by_content
+
+        # CSV-like data with consistent delimiters
+        text = "a,b,c\n1,2,3\n4,5,6\n7,8,9\n10,11,12\n" * 5
+        result = reclassify_by_content(text)
+        assert result == "structured"
+
+    def test_fallback_returns_structured(self):
+        from split_dataset import reclassify_by_content
+
+        # Gibberish: no coherence, no dictionary words, no kv, no comments
+        text = "xzq wrp tlm\nbrg fnd klt\nmxp qrs znt\n"
+        result = reclassify_by_content(text)
+        assert result == "structured"
+
+    def test_returns_only_valid_categories(self):
+        from split_dataset import reclassify_by_content
+
+        # Any text should return one of the 3 valid categories
+        for text in ["", "hello", "x=1\ny=2\n", "# comment\n"]:
+            result = reclassify_by_content(text)
+            assert result in ("prose", "code", "structured")
+
+
+# ---------------------------------------------------------------------------
+# Tests for reclassification in split_dataset
+# ---------------------------------------------------------------------------
+
+
+class TestReclassificationInSplit:
+    def test_artifact_samples_are_reclassified(self, tmp_path):
+        from split_dataset import split_dataset
+
+        # Create samples with artifact category
+        samples = []
+        for i in range(5):
+            samples.append(
+                _make_sample(
+                    text=f"The quick brown fox jumped over the lazy dog sentence {i}.\n" * 5,
+                    expected_category="artifact",
+                    sub_type="pdf_dump",
+                    model=f"m{i}",
+                )
+            )
+        for i in range(5):
+            samples.append(
+                _make_sample(
+                    text=f"prose text {i}",
+                    expected_category="prose",
+                    sub_type="plain",
+                    model=f"m{i}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        train_path = str(tmp_path / "train.csv")
+
+        _write_jsonl(input_path, samples)
+
+        split_dataset(
+            input_path=input_path,
+            eval_clear_path=None,
+            eval_boundary_path=None,
+            train_path=train_path,
+            eval_per_category=0,
+            eval_per_pair=0,
+            seed=42,
+        )
+
+        with open(train_path) as f:
+            reader = csv.DictReader(f)
+            train_rows = list(reader)
+
+        # No training row should have category "artifact"
+        categories = {r["category"] for r in train_rows}
+        assert "artifact" not in categories
+        assert categories.issubset({"prose", "code", "structured"})
+
+    def test_skip_samples_are_reclassified(self, tmp_path):
+        from split_dataset import split_dataset
+
+        samples = []
+        for i in range(5):
+            samples.append(
+                _make_sample(
+                    text=f"name: value{i}\nkey: data{i}\nfield: entry{i}\n" * 3,
+                    expected_category="skip",
+                    sub_type="whitespace",
+                    model=f"m{i}",
+                )
+            )
+        for i in range(5):
+            samples.append(
+                _make_sample(
+                    text=f"code text {i}",
+                    expected_category="code",
+                    sub_type="python",
+                    model=f"m{i}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        train_path = str(tmp_path / "train.csv")
+
+        _write_jsonl(input_path, samples)
+
+        split_dataset(
+            input_path=input_path,
+            eval_clear_path=None,
+            eval_boundary_path=None,
+            train_path=train_path,
+            eval_per_category=0,
+            eval_per_pair=0,
+            seed=42,
+        )
+
+        with open(train_path) as f:
+            reader = csv.DictReader(f)
+            train_rows = list(reader)
+
+        categories = {r["category"] for r in train_rows}
+        assert "skip" not in categories
+        assert categories.issubset({"prose", "code", "structured"})
+
+    def test_samples_with_invalid_category_after_reclassification_are_dropped(self, tmp_path):
+        """Samples whose expected_category is not in {prose, code, structured}
+        after reclassification should be dropped."""
+        from split_dataset import split_dataset
+
+        samples = []
+        for i in range(5):
+            samples.append(
+                _make_sample(
+                    text=f"prose text {i}",
+                    expected_category="prose",
+                    sub_type="plain",
+                    model=f"m{i}",
+                )
+            )
+        # Add a sample with an unknown category
+        samples.append(
+            _make_sample(
+                text="unknown category sample",
+                expected_category="unknown_garbage",
+                sub_type="mystery",
+                model="m0",
+            )
+        )
+
+        input_path = str(tmp_path / "input.jsonl")
+        train_path = str(tmp_path / "train.csv")
+
+        _write_jsonl(input_path, samples)
+
+        split_dataset(
+            input_path=input_path,
+            eval_clear_path=None,
+            eval_boundary_path=None,
+            train_path=train_path,
+            eval_per_category=0,
+            eval_per_pair=0,
+            seed=42,
+        )
+
+        with open(train_path) as f:
+            reader = csv.DictReader(f)
+            train_rows = list(reader)
+
+        # The unknown category sample should be dropped
+        categories = {r["category"] for r in train_rows}
+        assert "unknown_garbage" not in categories
+        assert len(train_rows) == 5
