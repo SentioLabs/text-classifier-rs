@@ -40,8 +40,12 @@ impl PyClassification {
         format!(
             "Classification(category='{}', sub_type={}, confidence={:.2}, reason='{}', tier='{}')",
             self.category,
-            self.sub_type.as_deref().map_or("None".to_string(), |s| format!("'{s}'")),
-            self.confidence, self.reason, self.tier
+            self.sub_type
+                .as_deref()
+                .map_or("None".to_string(), |s| format!("'{s}'")),
+            self.confidence,
+            self.reason,
+            self.tier
         )
     }
 }
