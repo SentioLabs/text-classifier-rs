@@ -337,7 +337,7 @@ class TestCLI:
 
         parser = build_parser()
         args = parser.parse_args([])
-        assert args.output == "data/real_samples.jsonl"
+        assert args.output == "data/source/real/real_samples.jsonl"
         assert args.per_language == 1800
         assert args.seed == 42
         assert args.dry_run is False

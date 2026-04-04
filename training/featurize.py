@@ -10,7 +10,7 @@ Each feature is a standalone ``str -> float`` function with exact parity
 to the Rust implementation, including edge cases and Unicode handling.
 
 Usage:
-    uv run featurize.py --input data/golden_raw.csv --output data/golden_featurized.csv
+    uv run featurize.py --input data/curated/train/golden_raw.csv --output data/curated/train/golden_featurized.csv
 """
 
 from __future__ import annotations
@@ -700,13 +700,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--input",
-        default="data/golden_raw.csv",
-        help="Input CSV path (default: data/golden_raw.csv)",
+        default="data/curated/train/golden_raw.csv",
+        help="Input CSV path (default: data/curated/train/golden_raw.csv)",
     )
     parser.add_argument(
         "--output",
-        default="data/golden_featurized.csv",
-        help="Output CSV path (default: data/golden_featurized.csv)",
+        default="data/curated/train/golden_featurized.csv",
+        help="Output CSV path (default: data/curated/train/golden_featurized.csv)",
     )
     return parser.parse_args(argv)
 

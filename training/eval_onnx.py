@@ -11,7 +11,7 @@ confusion matrix.
 
 Usage:
     uv run eval_onnx.py --model output/model.onnx --config output/model_config.json \
-        --eval ../eval/clear.jsonl [--eval ../eval/boundary.jsonl] [--json]
+        --eval data/eval/clear.jsonl [--eval data/eval/boundary.jsonl] [--json]
 """
 
 from __future__ import annotations

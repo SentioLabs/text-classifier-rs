@@ -9,7 +9,7 @@ Checks model diversity, template coverage, and classifier performance
 for a JSONL file of pilot samples.
 
 Usage:
-    python validate_pilot.py --input data/pilot_samples.jsonl
+    python validate_pilot.py --input data/source/pilot/pilot_samples.jsonl
 """
 
 import argparse
@@ -296,8 +296,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--input",
-        default="data/pilot_samples.jsonl",
-        help="Path to the JSONL file of pilot samples (default: data/pilot_samples.jsonl)",
+        default="data/source/pilot/pilot_samples.jsonl",
+        help="Path to the JSONL file of pilot samples (default: data/source/pilot/pilot_samples.jsonl)",
     )
     return parser
 

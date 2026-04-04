@@ -413,7 +413,7 @@ class TestCLIParsing:
 
         parser = build_parser()
         args = parser.parse_args([])
-        assert args.input == "data/pilot_samples.jsonl"
+        assert args.input == "data/source/pilot/pilot_samples.jsonl"
 
     def test_custom_input_path(self):
         from validate_pilot import build_parser
