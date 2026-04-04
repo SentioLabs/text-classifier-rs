@@ -45,18 +45,25 @@ def load_config(path: str) -> dict[str, Any]:
 
 
 def load_eval_samples(paths: list[str]) -> list[dict[str, Any]]:
-    """Load evaluation samples from one or more JSONL files."""
+    """Load evaluation samples from one or more JSONL or Parquet files."""
     samples: list[dict[str, Any]] = []
     for p in paths:
-        with open(p) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    samples.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
+        if p.endswith(".parquet"):
+            import polars as pl
+
+            df = pl.read_parquet(p)
+            samples.extend(df.to_dicts())
+        else:
+            # Existing JSONL logic unchanged
+            with open(p) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        samples.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
     return samples
 
 

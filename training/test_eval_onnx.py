@@ -153,6 +153,76 @@ class TestLoadEvalSamples:
 
         assert len(result) == 2
 
+    def test_loads_samples_from_parquet(self, tmp_path):
+        import polars as pl
+        from eval_onnx import load_eval_samples
+
+        parquet_path = str(tmp_path / "test.parquet")
+        df = pl.DataFrame({
+            "text": ["Hello world.", "def foo():"],
+            "category": ["prose", "code"],
+            "sub_type": ["plain", "python"],
+        })
+        df.write_parquet(parquet_path)
+
+        result = load_eval_samples([parquet_path])
+
+        assert len(result) == 2
+        assert result[0]["text"] == "Hello world."
+        assert result[0]["category"] == "prose"
+        assert result[0]["sub_type"] == "plain"
+        assert result[1]["text"] == "def foo():"
+        assert result[1]["category"] == "code"
+
+    def test_parquet_samples_same_format_as_jsonl(self, tmp_path):
+        import polars as pl
+        from eval_onnx import load_eval_samples
+
+        # Create a Parquet file
+        parquet_path = str(tmp_path / "test.parquet")
+        df = pl.DataFrame({
+            "text": ["Hello world."],
+            "category": ["prose"],
+            "sub_type": ["plain"],
+        })
+        df.write_parquet(parquet_path)
+
+        # Create a JSONL file with the same data
+        jsonl_path = str(tmp_path / "test.jsonl")
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({"text": "Hello world.", "category": "prose", "sub_type": "plain"}) + "\n")
+
+        parquet_result = load_eval_samples([parquet_path])
+        jsonl_result = load_eval_samples([jsonl_path])
+
+        assert parquet_result[0] == jsonl_result[0]
+
+    def test_mixed_jsonl_and_parquet_input(self, tmp_path):
+        import polars as pl
+        from eval_onnx import load_eval_samples
+
+        # Create JSONL file
+        jsonl_path = str(tmp_path / "test.jsonl")
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({"text": "JSONL sample", "category": "prose", "sub_type": "plain"}) + "\n")
+
+        # Create Parquet file
+        parquet_path = str(tmp_path / "test.parquet")
+        df = pl.DataFrame({
+            "text": ["Parquet sample"],
+            "category": ["code"],
+            "sub_type": ["python"],
+        })
+        df.write_parquet(parquet_path)
+
+        result = load_eval_samples([jsonl_path, parquet_path])
+
+        assert len(result) == 2
+        assert result[0]["text"] == "JSONL sample"
+        assert result[0]["category"] == "prose"
+        assert result[1]["text"] == "Parquet sample"
+        assert result[1]["category"] == "code"
+
 
 # ---------------------------------------------------------------------------
 # Tests for normalize_features
