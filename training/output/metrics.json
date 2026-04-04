@@ -1,7 +1,7 @@
 {
-  "best_val_loss": 0.2963905334472656,
-  "best_epoch": 189,
-  "total_epochs": 200,
-  "val_category_accuracy": 0.9587994813919067,
-  "val_sub_type_accuracy": 0.8374975323677063
+  "best_val_loss": 0.2571086883544922,
+  "best_epoch": 118,
+  "total_epochs": 133,
+  "val_category_accuracy": 0.9596521258354187,
+  "val_sub_type_accuracy": 0.8691738843917847
 }

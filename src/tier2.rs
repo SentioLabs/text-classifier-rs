@@ -182,8 +182,10 @@ impl ModelClassifier {
             })
             .collect();
 
-        let input =
-            ort::value::Tensor::from_array((vec![1i64, 28], standardized.into_boxed_slice()))?;
+        let input = ort::value::Tensor::from_array((
+            vec![1i64, NUM_FEATURES as i64],
+            standardized.into_boxed_slice(),
+        ))?;
         let mut session = self.session.as_ref().unwrap().lock().map_err(|e| {
             Box::<dyn std::error::Error>::from(format!("session lock poisoned: {e}"))
         })?;
@@ -237,9 +239,13 @@ impl ModelClassifier {
     }
 }
 
-/// Extract 28 f32 features from a FeatureVector in model-expected order.
+/// Number of features in the feature vector (must match model input size).
 #[cfg(any(feature = "onnx-model", test))]
-fn feature_vector_to_array(f: &FeatureVector) -> [f32; 28] {
+const NUM_FEATURES: usize = 38;
+
+/// Extract features from a FeatureVector in model-expected order.
+#[cfg(any(feature = "onnx-model", test))]
+fn feature_vector_to_array(f: &FeatureVector) -> [f32; NUM_FEATURES] {
     [
         f.line_length_cv,
         f.char_entropy,
@@ -269,6 +275,17 @@ fn feature_vector_to_array(f: &FeatureVector) -> [f32; 28] {
         f.encoding_error_ratio,
         f.repeated_ngram_ratio,
         f.sentence_coherence_score,
+        // New features (v2)
+        f.avg_words_per_line,
+        f.operator_density,
+        f.inline_markup_count,
+        f.indentation_consistency,
+        f.markup_heading_ratio,
+        f.code_fence_density,
+        f.prose_paragraph_ratio,
+        f.semicolon_line_ending_ratio,
+        f.list_item_ratio,
+        f.parenthesis_density,
     ]
 }
 
@@ -429,7 +446,7 @@ mod tests {
         assert_eq!(arr[0], 1.0);
         assert_eq!(arr[1], 2.0);
         assert_eq!(arr[17], 18.0);
-        assert_eq!(arr.len(), 28);
+        assert_eq!(arr.len(), NUM_FEATURES);
     }
 
     #[test]

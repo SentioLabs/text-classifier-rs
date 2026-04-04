@@ -19,12 +19,13 @@ const UNIQUENESS_LINES: usize = 500;
 /// Extract structural features from text.
 ///
 /// Samples the first 10k characters for performance on large inputs.
+/// Normalizes literal `\n` sequences to real newlines before processing.
 pub fn extract_features(text: &str) -> FeatureVector {
     if text.is_empty() {
         return FeatureVector::zeroed();
     }
 
-    let sample = if text.len() > SAMPLE_SIZE {
+    let truncated = if text.len() > SAMPLE_SIZE {
         // Don't split mid-char for UTF-8 safety
         let end = text.floor_char_boundary(SAMPLE_SIZE);
         &text[..end]
@@ -32,12 +33,21 @@ pub fn extract_features(text: &str) -> FeatureVector {
         text
     };
 
+    // Normalize literal \n to real newlines so line-based features work
+    // correctly on text arriving from JSON/CSV/API payloads.
+    let normalized = truncated.replace("\\n", "\n");
+    let sample = normalized.as_str();
+
     let lines: Vec<&str> = sample.lines().collect();
     let n_lines = lines.len().max(1);
     let total_chars = sample.chars().count().max(1) as f32;
 
     // Count words (whitespace-delimited tokens)
     let word_count = sample.split_whitespace().count().max(1) as f32;
+
+    // Non-empty lines (used by several features)
+    let non_empty: Vec<&str> = lines.iter().filter(|l| !l.trim().is_empty()).copied().collect();
+    let n_non_empty = non_empty.len().max(1);
 
     FeatureVector {
         line_length_cv: compute_line_length_cv(&lines),
@@ -68,6 +78,17 @@ pub fn extract_features(text: &str) -> FeatureVector {
         encoding_error_ratio: compute_encoding_error_ratio(sample, total_chars),
         repeated_ngram_ratio: compute_repeated_ngram_ratio(sample),
         sentence_coherence_score: compute_sentence_coherence_score(&lines),
+        // New features (v2)
+        avg_words_per_line: compute_avg_words_per_line(&non_empty, n_non_empty),
+        operator_density: compute_operator_density(sample, total_chars),
+        inline_markup_count: compute_inline_markup_count(sample, total_chars),
+        indentation_consistency: compute_indentation_consistency(&lines),
+        markup_heading_ratio: compute_markup_heading_ratio(&non_empty, n_non_empty),
+        code_fence_density: compute_code_fence_density(&lines, n_lines),
+        prose_paragraph_ratio: compute_prose_paragraph_ratio(&lines, n_lines),
+        semicolon_line_ending_ratio: compute_semicolon_line_ending_ratio(&non_empty, n_non_empty),
+        list_item_ratio: compute_list_item_ratio(&non_empty, n_non_empty),
+        parenthesis_density: compute_parenthesis_density(sample, total_chars),
         line_count: n_lines,
     }
 }
@@ -902,4 +923,279 @@ fn compute_sentence_coherence_score(lines: &[&str]) -> f32 {
     }
 
     proper as f32 / non_empty.len() as f32
+}
+
+// ---------------------------------------------------------------------------
+// New features (v2): 10 additional features
+// ---------------------------------------------------------------------------
+
+/// Average whitespace-delimited tokens per non-empty line.
+/// Prose: ~10-80 words/line. Code: ~3-8. Structured: ~2-10.
+fn compute_avg_words_per_line(non_empty: &[&str], n_non_empty: usize) -> f32 {
+    if n_non_empty == 0 {
+        return 0.0;
+    }
+    let total_words: usize = non_empty.iter().map(|l| l.split_whitespace().count()).sum();
+    total_words as f32 / n_non_empty as f32
+}
+
+/// Multi-character programming operators per 1000 characters.
+/// Counts ==, !=, >=, <=, &&, ||, =>, ->, +=, -=, etc.
+fn compute_operator_density(text: &str, total_chars: f32) -> f32 {
+    const OPERATORS: &[&str] = &[
+        "==", "!=", ">=", "<=", "&&", "||", "=>", "->",
+        "+=", "-=", "*=", "/=", "**", "<<", ">>", "::",
+    ];
+    let count: usize = OPERATORS.iter().map(|op| text.matches(op).count()).sum();
+    count as f32 / total_chars * 1000.0
+}
+
+/// Inline markup patterns per 1000 characters.
+/// Detects **bold**, `code`, *italic*, [link](url).
+fn compute_inline_markup_count(text: &str, total_chars: f32) -> f32 {
+    let mut count = 0usize;
+
+    // Count **bold** patterns
+    let mut rest = text;
+    while let Some(start) = rest.find("**") {
+        let after = &rest[start + 2..];
+        if let Some(end) = after.find("**") {
+            if end > 0 {
+                count += 1;
+            }
+            rest = &after[end + 2..];
+        } else {
+            break;
+        }
+    }
+
+    // Count `code` patterns
+    rest = text;
+    while let Some(start) = rest.find('`') {
+        let after = &rest[start + 1..];
+        if after.starts_with('`') {
+            // Skip `` (double backtick)
+            rest = &after[1..];
+            continue;
+        }
+        if let Some(end) = after.find('`') {
+            if end > 0 {
+                count += 1;
+            }
+            rest = &after[end + 1..];
+        } else {
+            break;
+        }
+    }
+
+    // Count [link](url) patterns
+    rest = text;
+    while let Some(start) = rest.find("](") {
+        // Check for [ before ]
+        let before = &rest[..start];
+        if before.rfind('[').is_some() {
+            let after = &rest[start + 2..];
+            if let Some(end) = after.find(')') {
+                if end > 0 {
+                    count += 1;
+                }
+                rest = &after[end + 1..];
+            } else {
+                break;
+            }
+        } else {
+            rest = &rest[start + 2..];
+        }
+    }
+
+    count as f32 / total_chars * 1000.0
+}
+
+/// Whether indentation follows a regular pattern (0.0-1.0).
+/// Code has consistent indentation (multiples of 2, 3, or 4).
+fn compute_indentation_consistency(lines: &[&str]) -> f32 {
+    let mut indent_levels: Vec<usize> = Vec::new();
+
+    for line in lines {
+        let stripped = line.trim_start();
+        if stripped.is_empty() || stripped.len() == line.len() {
+            continue;
+        }
+        let indent: usize = line
+            .chars()
+            .take_while(|c| c.is_whitespace())
+            .map(|c| if c == '\t' { 4 } else { 1 })
+            .sum();
+        indent_levels.push(indent);
+    }
+
+    if indent_levels.len() < 3 {
+        return 0.0;
+    }
+
+    let n = indent_levels.len() as f32;
+    let mut best = 0.0f32;
+    for base in [2, 3, 4] {
+        let consistent = indent_levels.iter().filter(|&&i| i % base == 0).count();
+        let ratio = consistent as f32 / n;
+        if ratio > best {
+            best = ratio;
+        }
+    }
+
+    best
+}
+
+/// Fraction of non-empty lines that are Markdown/RST section headings.
+fn compute_markup_heading_ratio(non_empty: &[&str], n_non_empty: usize) -> f32 {
+    if n_non_empty == 0 {
+        return 0.0;
+    }
+
+    const RST_UNDERLINE_CHARS: &[char] = &['=', '-', '*', '~', '^', '"', '\'', '`'];
+
+    let mut count = 0;
+    for line in non_empty {
+        let stripped = line.trim();
+        // Markdown heading: # followed by space
+        if stripped.starts_with('#') {
+            let rest = stripped.trim_start_matches('#');
+            if rest.starts_with(' ') && !rest.trim().is_empty() {
+                count += 1;
+                continue;
+            }
+        }
+        // RST underline: all same char from the set, length >= 3
+        if stripped.len() >= 3 && stripped.chars().all(|c| RST_UNDERLINE_CHARS.contains(&c)) {
+            count += 1;
+        }
+    }
+
+    count as f32 / n_non_empty as f32
+}
+
+/// Fraction of lines inside triple-backtick fenced code blocks.
+fn compute_code_fence_density(lines: &[&str], n_lines: usize) -> f32 {
+    if n_lines == 0 {
+        return 0.0;
+    }
+
+    let mut inside = false;
+    let mut fenced_lines = 0;
+
+    for line in lines {
+        let stripped = line.trim();
+        if stripped.starts_with("```") {
+            inside = !inside;
+            continue;
+        }
+        if inside {
+            fenced_lines += 1;
+        }
+    }
+
+    fenced_lines as f32 / n_lines as f32
+}
+
+/// Fraction of lines in multi-sentence paragraph blocks.
+/// A paragraph block is 3+ consecutive non-empty lines of >40 chars
+/// without structural delimiters.
+fn compute_prose_paragraph_ratio(lines: &[&str], n_lines: usize) -> f32 {
+    if n_lines == 0 {
+        return 0.0;
+    }
+
+    let structural_chars: &[char] = &['|', '{', '}', '\t'];
+    let mut para_lines = 0;
+    let mut streak = 0;
+
+    for line in lines {
+        let stripped = line.trim();
+        let is_para = stripped.len() > 40
+            && !stripped.chars().any(|c| structural_chars.contains(&c))
+            && !stripped.starts_with('#');
+
+        if is_para {
+            streak += 1;
+        } else {
+            if streak >= 3 {
+                para_lines += streak;
+            }
+            streak = 0;
+        }
+    }
+    if streak >= 3 {
+        para_lines += streak;
+    }
+
+    para_lines as f32 / n_lines as f32
+}
+
+/// Fraction of non-empty lines ending with semicolons.
+fn compute_semicolon_line_ending_ratio(non_empty: &[&str], n_non_empty: usize) -> f32 {
+    if n_non_empty == 0 {
+        return 0.0;
+    }
+    let count = non_empty
+        .iter()
+        .filter(|l| l.trim_end().ends_with(';'))
+        .count();
+    count as f32 / n_non_empty as f32
+}
+
+/// Fraction of non-empty lines that are list items.
+/// Detects: - item, * item, • item, 1. item, a) item.
+fn compute_list_item_ratio(non_empty: &[&str], n_non_empty: usize) -> f32 {
+    if n_non_empty == 0 {
+        return 0.0;
+    }
+
+    let count = non_empty.iter().filter(|line| is_list_item(line)).count();
+    count as f32 / n_non_empty as f32
+}
+
+fn is_list_item(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // Bullet: - item, * item, • item
+    if let Some(first) = trimmed.chars().next() {
+        if matches!(first, '-' | '*' | '•') {
+            if let Some(second) = trimmed.chars().nth(1) {
+                if second == ' ' {
+                    if let Some(third) = trimmed.chars().nth(2) {
+                        if !third.is_whitespace() {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Numbered: 1. item, 1) item
+    let chars: Vec<char> = trimmed.chars().collect();
+    if !chars.is_empty() && chars[0].is_ascii_digit() {
+        let mut i = 0;
+        while i < chars.len() && chars[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i < chars.len() && matches!(chars[i], '.' | ')') {
+            if i + 1 < chars.len() && chars[i + 1] == ' ' {
+                if i + 2 < chars.len() && !chars[i + 2].is_whitespace() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Parentheses per 1000 characters. Code has high density (function calls).
+fn compute_parenthesis_density(text: &str, total_chars: f32) -> f32 {
+    let count = text.chars().filter(|&c| c == '(' || c == ')').count();
+    count as f32 / total_chars * 1000.0
 }

@@ -53,7 +53,10 @@ def load_eval_samples(paths: list[str]) -> list[dict[str, Any]]:
                 line = line.strip()
                 if not line:
                     continue
-                samples.append(json.loads(line))
+                try:
+                    samples.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
     return samples
 
 

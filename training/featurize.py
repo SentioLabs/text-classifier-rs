@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["polars", "tqdm"]
 # ///
-"""Compute 28 structural text features and enrich a training dataset.
+"""Compute 38 structural text features and enrich a training dataset.
 
 Ports the feature extraction logic from src/features.rs to Python.
 Each feature is a standalone ``str -> float`` function with exact parity
@@ -645,6 +645,229 @@ def sentence_coherence_score(text: str) -> float:
 
 
 # ---------------------------------------------------------------------------
+# New features (10 additional — 29-38)
+# ---------------------------------------------------------------------------
+
+# Programming operators (multi-char only — single chars overlap with prose).
+_CODE_OPERATORS: list[str] = [
+    "==", "!=", ">=", "<=", "&&", "||", "=>", "->",
+    "+=", "-=", "*=", "/=", "**", "<<", ">>", "::",
+]
+
+_MARKUP_HEADING_RE = re.compile(
+    r"^#{1,6}\s+\S"  # Markdown: # Heading
+)
+_RST_UNDERLINE_CHARS = frozenset("=-*~^\"'`")
+
+_LIST_ITEM_RE = re.compile(
+    r"^\s*(?:[-*•]\s+\S|\d+[.)]\s+\S)"
+)
+
+_INLINE_MARKUP_RE = re.compile(
+    r"\*\*[^*]+\*\*"    # **bold**
+    r"|`[^`]+`"          # `code`
+    r"|\*[^*\s][^*]*\*"  # *italic*
+    r"|\[[^\]]+\]\([^)]+\)"  # [link](url)
+)
+
+
+def avg_words_per_line(text: str) -> float:
+    """Average whitespace-delimited tokens per non-empty line.
+
+    Prose: ~10-80 words/line (long paragraphs).
+    Code: ~3-8 words/line (short statements).
+    Structured: ~2-10 words/line (key-value pairs).
+    """
+    lines = text.splitlines()
+    non_empty = [line for line in lines if line.strip()]
+    if not non_empty:
+        return 0.0
+    total_words = sum(len(line.split()) for line in non_empty)
+    return total_words / len(non_empty)
+
+
+def operator_density(text: str) -> float:
+    """Programming operators per 1000 characters.
+
+    Counts multi-character operators (==, !=, >=, &&, etc.) that are
+    strong code signals. Single-char operators like + and - overlap
+    with prose and are excluded.
+    """
+    total_chars = max(len(text), 1)
+    count = sum(text.count(op) for op in _CODE_OPERATORS)
+    return count / total_chars * 1000
+
+
+def inline_markup_count(text: str) -> float:
+    """Count of inline markup patterns per 1000 characters.
+
+    Detects **bold**, `code`, *italic*, and [link](url) patterns that
+    signal Markdown/RST prose rather than code.
+    """
+    total_chars = max(len(text), 1)
+    matches = _INLINE_MARKUP_RE.findall(text)
+    return len(matches) / total_chars * 1000
+
+
+def indentation_consistency(text: str) -> float:
+    """Whether indentation follows a regular pattern (0.0-1.0).
+
+    Code has consistent indentation (multiples of 2 or 4 spaces).
+    Prose has no indentation. Structured data has shallow/irregular indentation.
+    Returns the fraction of indented lines whose indent level is a multiple
+    of the detected base indent (2, 3, or 4 spaces).
+    """
+    lines = text.splitlines()
+    indent_levels: list[int] = []
+    for line in lines:
+        stripped = line.lstrip()
+        if not stripped or line == stripped:
+            continue
+        indent = len(line) - len(stripped)
+        # Convert tabs to 4 spaces
+        indent = line[:len(line) - len(stripped)].replace('\t', '    ')
+        indent_levels.append(len(indent))
+
+    if len(indent_levels) < 3:
+        return 0.0
+
+    # Try base indents of 2, 3, 4
+    best_consistency = 0.0
+    for base in [2, 3, 4]:
+        consistent = sum(1 for i in indent_levels if i % base == 0)
+        ratio = consistent / len(indent_levels)
+        if ratio > best_consistency:
+            best_consistency = ratio
+
+    return best_consistency
+
+
+def markup_heading_ratio(text: str) -> float:
+    """Fraction of non-empty lines that are Markdown/RST section headings.
+
+    Detects:
+    - Markdown headings: lines starting with 1-6 # followed by space
+    - RST underlines: lines consisting entirely of =, -, *, ~, ^, etc.
+    """
+    lines = text.splitlines()
+    non_empty = [line for line in lines if line.strip()]
+    if not non_empty:
+        return 0.0
+
+    count = 0
+    for line in non_empty:
+        stripped = line.strip()
+        # Markdown heading
+        if _MARKUP_HEADING_RE.match(stripped):
+            count += 1
+            continue
+        # RST underline (all same char, length >= 3)
+        if len(stripped) >= 3 and all(c in _RST_UNDERLINE_CHARS for c in stripped):
+            count += 1
+
+    return count / len(non_empty)
+
+
+def code_fence_density(text: str) -> float:
+    """Fraction of lines inside triple-backtick fenced code blocks.
+
+    Prose documents *contain* code fences (the fenced lines are a minority).
+    Actual source code does not use fences.
+    """
+    lines = text.splitlines()
+    if not lines:
+        return 0.0
+
+    inside = False
+    fenced_lines = 0
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            inside = not inside
+            continue
+        if inside:
+            fenced_lines += 1
+
+    return fenced_lines / len(lines)
+
+
+def prose_paragraph_ratio(text: str) -> float:
+    """Fraction of lines in multi-sentence paragraph blocks.
+
+    A paragraph block is 3+ consecutive non-empty lines of >40 characters
+    without structural delimiters (|, tab, {, }).
+    Prose has these; code and structured data do not.
+    """
+    lines = text.splitlines()
+    if not lines:
+        return 0.0
+
+    structural_chars = frozenset('|{}\t')
+    para_lines = 0
+    streak = 0
+
+    for line in lines:
+        stripped = line.strip()
+        is_paragraph_line = (
+            len(stripped) > 40
+            and not any(c in stripped for c in structural_chars)
+            and not stripped.startswith('#')
+        )
+        if is_paragraph_line:
+            streak += 1
+        else:
+            if streak >= 3:
+                para_lines += streak
+            streak = 0
+
+    if streak >= 3:
+        para_lines += streak
+
+    return para_lines / len(lines)
+
+
+def semicolon_line_ending_ratio(text: str) -> float:
+    """Fraction of non-empty lines ending with semicolons.
+
+    Strong code signal (C, Java, JavaScript, CSS, SQL).
+    Prose and structured data almost never end lines with semicolons.
+    """
+    lines = text.splitlines()
+    non_empty = [line for line in lines if line.strip()]
+    if not non_empty:
+        return 0.0
+
+    count = sum(1 for line in non_empty if line.rstrip().endswith(';'))
+    return count / len(non_empty)
+
+
+def list_item_ratio(text: str) -> float:
+    """Fraction of non-empty lines that are list items.
+
+    Detects: - item, * item, bullet item, 1. item, a) item.
+    Prose and Markdown have lists; code and structured data typically do not.
+    """
+    lines = text.splitlines()
+    non_empty = [line for line in lines if line.strip()]
+    if not non_empty:
+        return 0.0
+
+    count = sum(1 for line in non_empty if _LIST_ITEM_RE.match(line))
+    return count / len(non_empty)
+
+
+def parenthesis_density(text: str) -> float:
+    """Parentheses per 1000 characters.
+
+    Code has high parenthesis density (function calls, conditionals).
+    Prose has moderate. Structured data has low.
+    """
+    total_chars = max(len(text), 1)
+    count = text.count('(') + text.count(')')
+    return count / total_chars * 1000
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -677,15 +900,36 @@ FEATURES: dict[str, Callable[[str], float]] = {
     "encoding_error_ratio": encoding_error_ratio,
     "repeated_ngram_ratio": repeated_ngram_ratio,
     "sentence_coherence_score": sentence_coherence_score,
+    # New features (v2)
+    "avg_words_per_line": avg_words_per_line,
+    "operator_density": operator_density,
+    "inline_markup_count": inline_markup_count,
+    "indentation_consistency": indentation_consistency,
+    "markup_heading_ratio": markup_heading_ratio,
+    "code_fence_density": code_fence_density,
+    "prose_paragraph_ratio": prose_paragraph_ratio,
+    "semicolon_line_ending_ratio": semicolon_line_ending_ratio,
+    "list_item_ratio": list_item_ratio,
+    "parenthesis_density": parenthesis_density,
 }
 
 
+def _normalize_escaped_newlines(text: str) -> str:
+    """Replace literal backslash-n sequences with real newlines.
+
+    Text arriving from JSON, CSV, or API payloads sometimes contains
+    literal ``\\n`` instead of actual newline characters, which breaks
+    all line-based feature extraction.
+    """
+    return text.replace("\\n", "\n")
+
+
 def extract_all(text: str) -> dict[str, float]:
-    """Extract all 28 features from *text*, sampling the first 10k chars."""
+    """Extract all features from *text*, sampling the first 10k chars."""
     if not text:
         return {name: 0.0 for name in FEATURES}
 
-    sample = text[:SAMPLE_SIZE]
+    sample = _normalize_escaped_newlines(text[:SAMPLE_SIZE])
     return {name: fn(sample) for name, fn in FEATURES.items()}
 
 
@@ -696,7 +940,7 @@ def extract_all(text: str) -> dict[str, float]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compute 28 structural text features and enrich a dataset."
+        description="Compute 38 structural text features and enrich a dataset."
     )
     parser.add_argument(
         "--input",

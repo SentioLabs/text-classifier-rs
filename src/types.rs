@@ -228,6 +228,17 @@ pub struct FeatureVector {
     pub encoding_error_ratio: f32,
     pub repeated_ngram_ratio: f32,
     pub sentence_coherence_score: f32,
+    // New features (v2)
+    pub avg_words_per_line: f32,
+    pub operator_density: f32,
+    pub inline_markup_count: f32,
+    pub indentation_consistency: f32,
+    pub markup_heading_ratio: f32,
+    pub code_fence_density: f32,
+    pub prose_paragraph_ratio: f32,
+    pub semicolon_line_ending_ratio: f32,
+    pub list_item_ratio: f32,
+    pub parenthesis_density: f32,
     /// Number of lines in the sampled text. Used by rules that need
     /// a minimum sample size (e.g. tabular detection).
     pub line_count: usize,
@@ -265,6 +276,16 @@ impl FeatureVector {
             encoding_error_ratio: 0.0,
             repeated_ngram_ratio: 0.0,
             sentence_coherence_score: 0.0,
+            avg_words_per_line: 0.0,
+            operator_density: 0.0,
+            inline_markup_count: 0.0,
+            indentation_consistency: 0.0,
+            markup_heading_ratio: 0.0,
+            code_fence_density: 0.0,
+            prose_paragraph_ratio: 0.0,
+            semicolon_line_ending_ratio: 0.0,
+            list_item_ratio: 0.0,
+            parenthesis_density: 0.0,
             line_count: 0,
         }
     }
