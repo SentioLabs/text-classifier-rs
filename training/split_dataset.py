@@ -124,8 +124,8 @@ def _sub_stratify_by_model(
 
 def split_dataset(
     input_path: str,
-    eval_clear_path: str,
-    eval_boundary_path: str,
+    eval_clear_path: str | None,
+    eval_boundary_path: str | None,
     train_path: str,
     eval_per_category: int = 1000,
     eval_per_pair: int = 1000,
@@ -177,11 +177,13 @@ def split_dataset(
                 downsampled.extend(samples)
         training = downsampled
 
-    # Write eval clear JSONL
-    _write_jsonl(eval_clear_path, eval_clear)
+    # Write eval clear JSONL (skip if path is None — frozen eval mode)
+    if eval_clear_path is not None:
+        _write_jsonl(eval_clear_path, eval_clear)
 
-    # Write eval boundary JSONL
-    _write_jsonl(eval_boundary_path, eval_boundary)
+    # Write eval boundary JSONL (skip if path is None — frozen eval mode)
+    if eval_boundary_path is not None:
+        _write_jsonl(eval_boundary_path, eval_boundary)
 
     # Write training CSV — preserve original source and model provenance
     Path(train_path).parent.mkdir(parents=True, exist_ok=True)
@@ -317,12 +319,20 @@ def main() -> None:
         default=0,
         help="Max training samples per category (0 = no limit)",
     )
+    parser.add_argument(
+        "--skip-eval",
+        action="store_true",
+        help="Skip eval set generation (for frozen eval mode)",
+    )
     args = parser.parse_args()
+
+    eval_clear_path = None if args.skip_eval else args.eval_output
+    eval_boundary_path = None if args.skip_eval else args.eval_boundary_output
 
     split_dataset(
         input_path=args.input,
-        eval_clear_path=args.eval_output,
-        eval_boundary_path=args.eval_boundary_output,
+        eval_clear_path=eval_clear_path,
+        eval_boundary_path=eval_boundary_path,
         train_path=args.train_output,
         eval_per_category=args.eval_per_category,
         eval_per_pair=args.eval_per_pair,
@@ -330,18 +340,19 @@ def main() -> None:
         max_per_category=args.max_per_category,
     )
 
-    # Verify diversity on eval sets
-    eval_clear = load_jsonl(args.eval_output)
-    eval_boundary = load_jsonl(args.eval_boundary_output)
+    # Verify diversity on eval sets (skip if frozen eval mode)
+    if not args.skip_eval:
+        eval_clear = load_jsonl(args.eval_output)
+        eval_boundary = load_jsonl(args.eval_boundary_output)
 
-    for label, data in [("eval clear", eval_clear), ("eval boundary", eval_boundary)]:
-        warnings = verify_diversity(data)
-        if warnings:
-            print(f"\nDiversity warnings for {label}:")
-            for w in warnings:
-                print(f"  WARNING: {w}")
-        else:
-            print(f"\nDiversity check passed for {label}")
+        for label, data in [("eval clear", eval_clear), ("eval boundary", eval_boundary)]:
+            warnings = verify_diversity(data)
+            if warnings:
+                print(f"\nDiversity warnings for {label}:")
+                for w in warnings:
+                    print(f"  WARNING: {w}")
+            else:
+                print(f"\nDiversity check passed for {label}")
 
 
 if __name__ == "__main__":
