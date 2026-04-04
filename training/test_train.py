@@ -1,6 +1,5 @@
 """Tests for training/train.py — validates data loading, model, training, and export."""
 
-import csv
 import json
 import os
 import subprocess
@@ -8,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 # Ensure the training module is importable
@@ -44,51 +44,51 @@ DUMMY_SUB_TYPES = [
 ]
 
 
-def _make_dummy_csv(path: Path, n_rows: int = 200) -> None:
-    """Write a small but valid training CSV with known structure."""
+def _make_dummy_parquet(path: Path, n_rows: int = 200) -> None:
+    """Write a small but valid training Parquet file with known structure."""
     import random
 
     random.seed(42)
     categories = list(CATEGORY_MAP.keys())
     rows_per_cat = n_rows // len(categories)
 
-    with open(path, "w", newline="") as f:
-        writer = csv.writer(f)
-        header = list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type"]
-        writer.writerow(header)
-        for cat in categories:
-            for _ in range(rows_per_cat):
-                features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
-                line_count = random.randint(1, 500)
-                sub_type = random.choice(DUMMY_SUB_TYPES)
-                writer.writerow(features + [line_count, cat, sub_type])
+    data: dict[str, list] = {col: [] for col in list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type"]}
+    for cat in categories:
+        for _ in range(rows_per_cat):
+            for col in FEATURE_COLUMNS:
+                data[col].append(round(random.uniform(0.0, 1.0), 4))
+            data["line_count"].append(random.randint(1, 500))
+            data["category"].append(cat)
+            data["sub_type"].append(random.choice(DUMMY_SUB_TYPES))
+
+    pl.DataFrame(data).write_parquet(str(path))
 
 
-def _make_source_csv(path: Path, source_sizes: dict[str, int], seed: int = 123) -> None:
-    """Write training CSV with explicit source-group sizes."""
+def _make_source_parquet(path: Path, source_sizes: dict[str, int], seed: int = 123) -> None:
+    """Write training Parquet with explicit source-group sizes."""
     import random
 
     random.seed(seed)
     categories = list(CATEGORY_MAP.keys())
-    header = list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type", "source"]
 
-    with open(path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(header)
-        for source, size in source_sizes.items():
-            for i in range(size):
-                features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
-                line_count = random.randint(1, 500)
-                category = categories[i % len(categories)]
-                sub_type = DUMMY_SUB_TYPES[i % len(DUMMY_SUB_TYPES)]
-                writer.writerow(features + [line_count, category, sub_type, source])
+    data: dict[str, list] = {col: [] for col in list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type", "source"]}
+    for source, size in source_sizes.items():
+        for i in range(size):
+            for col in FEATURE_COLUMNS:
+                data[col].append(round(random.uniform(0.0, 1.0), 4))
+            data["line_count"].append(random.randint(1, 500))
+            data["category"].append(categories[i % len(categories)])
+            data["sub_type"].append(DUMMY_SUB_TYPES[i % len(DUMMY_SUB_TYPES)])
+            data["source"].append(source)
+
+    pl.DataFrame(data).write_parquet(str(path))
 
 
 @pytest.fixture
-def dummy_csv(tmp_path: Path) -> Path:
-    csv_path = tmp_path / "combined.csv"
-    _make_dummy_csv(csv_path)
-    return csv_path
+def dummy_parquet(tmp_path: Path) -> Path:
+    data_path = tmp_path / "combined.parquet"
+    _make_dummy_parquet(data_path)
+    return data_path
 
 
 @pytest.fixture
@@ -199,12 +199,12 @@ class TestModel:
 class TestDeviceFlag:
     def test_device_argument_accepted_by_parser(self):
         """The --device argument should be accepted by the parser."""
-        args = parse_args(["--data", "dummy.csv", "--output", "out", "--device", "cpu"])
+        args = parse_args(["--data", "dummy.parquet", "--output", "out", "--device", "cpu"])
         assert args.device == "cpu"
 
     def test_device_default_is_auto(self):
         """Default value for --device should be 'auto'."""
-        args = parse_args(["--data", "dummy.csv", "--output", "out"])
+        args = parse_args(["--data", "dummy.parquet", "--output", "out"])
         assert args.device == "auto"
 
     def test_device_resolution_cpu(self):
@@ -239,11 +239,11 @@ class TestDeviceFlag:
         device = resolve_device("cuda:0")
         assert device == torch.device("cuda:0")
 
-    def test_train_model_accepts_device_argument(self, dummy_csv):
+    def test_train_model_accepts_device_argument(self, dummy_parquet):
         """train_model should accept and use a device parameter."""
         import torch
 
-        data = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+        data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
         n_sub_types = len(data["sub_type_map"])
         model, metrics = train_model(
             data, n_sub_types=n_sub_types, epochs=1, patience=2, device=torch.device("cpu")
@@ -255,19 +255,19 @@ class TestDeviceFlag:
 class TestTrainingDefaults:
     def test_default_epochs_200(self):
         """Default epochs should be 200."""
-        args = parse_args(["--data", "dummy.csv", "--output", "out"])
+        args = parse_args(["--data", "dummy.parquet", "--output", "out"])
         assert args.epochs == 200
 
     def test_default_patience_15(self):
         """Default patience should be 15."""
-        args = parse_args(["--data", "dummy.csv", "--output", "out"])
+        args = parse_args(["--data", "dummy.parquet", "--output", "out"])
         assert args.patience == 15
 
-    def test_lr_scheduler_used_in_training(self, dummy_csv):
+    def test_lr_scheduler_used_in_training(self, dummy_parquet):
         """Training should use ReduceLROnPlateau scheduler."""
         import unittest.mock as mock
 
-        data = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+        data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
         n_sub_types = len(data["sub_type_map"])
 
         with mock.patch("torch.optim.lr_scheduler.ReduceLROnPlateau") as mock_sched_cls:
@@ -287,14 +287,14 @@ class TestTrainingDefaults:
             assert mock_scheduler.step.call_count == 3
 
     def test_group_val_by_source_flag_default_off(self):
-        args = parse_args(["--data", "dummy.csv", "--output", "out"])
+        args = parse_args(["--data", "dummy.parquet", "--output", "out"])
         assert args.group_val_by_source is False
 
     def test_group_val_by_source_flag_can_be_enabled(self):
         args = parse_args(
             [
                 "--data",
-                "dummy.csv",
+                "dummy.parquet",
                 "--output",
                 "out",
                 "--group-val-by-source",
@@ -308,7 +308,7 @@ class TestTrainingDefaults:
             parse_args(
                 [
                     "--data",
-                    "dummy.csv",
+                    "dummy.parquet",
                     "--output",
                     "out",
                     "--balance-artifact-subtypes",
@@ -321,7 +321,7 @@ class TestFeatureAblation:
         args = parse_args(
             [
                 "--data",
-                "dummy.csv",
+                "dummy.parquet",
                 "--output",
                 "out",
                 "--drop-features",
@@ -334,7 +334,7 @@ class TestFeatureAblation:
         args = parse_args(
             [
                 "--data",
-                "dummy.csv",
+                "dummy.parquet",
                 "--output",
                 "out",
                 "--drop-features",
@@ -361,8 +361,8 @@ class TestFeatureAblation:
 
 
 class TestDataLoading:
-    def test_load_returns_expected_keys(self, dummy_csv):
-        result = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+    def test_load_returns_expected_keys(self, dummy_parquet):
+        result = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
         expected_keys = {
             "X_train",
             "X_val",
@@ -378,10 +378,10 @@ class TestDataLoading:
         }
         assert set(result.keys()) == expected_keys
 
-    def test_features_are_standardized(self, dummy_csv):
+    def test_features_are_standardized(self, dummy_parquet):
         import numpy as np
 
-        result = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+        result = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
         X_train = result["X_train"]
         # After z-score, training set should have ~0 mean and ~1 std
         means = np.mean(X_train, axis=0)
@@ -389,23 +389,23 @@ class TestDataLoading:
         assert np.allclose(means, 0.0, atol=0.1)
         assert np.allclose(stds, 1.0, atol=0.2)
 
-    def test_train_val_split_proportions(self, dummy_csv):
-        result = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+    def test_train_val_split_proportions(self, dummy_parquet):
+        result = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
         n_train = len(result["X_train"])
         n_val = len(result["X_val"])
         total = n_train + n_val
         assert 0.15 <= n_val / total <= 0.25
 
-    def test_sub_type_map_covers_data(self, dummy_csv):
-        result = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+    def test_sub_type_map_covers_data(self, dummy_parquet):
+        result = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
         sub_map = result["sub_type_map"]
         # All sub_type labels should be non-negative integers
         assert all(isinstance(v, int) and v >= 0 for v in sub_map.values())
         assert len(sub_map) == len(DUMMY_SUB_TYPES)
 
-    def test_class_weights_length(self, dummy_csv):
+    def test_class_weights_length(self, dummy_parquet):
         """class_weights array should have length NUM_CATEGORIES."""
-        result = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+        result = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
         weights = result["class_weights"]
         assert len(weights) == NUM_CATEGORIES
 
@@ -414,21 +414,21 @@ class TestDataLoading:
         import random
 
         random.seed(99)
-        csv_path = tmp_path / "imbalanced.csv"
+        data_path = tmp_path / "imbalanced.parquet"
         counts_per_cat = {"prose": 100, "code": 10, "structured": 10}
 
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.writer(f)
-            header = list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type"]
-            writer.writerow(header)
-            for cat in CATEGORY_MAP:
-                for _ in range(counts_per_cat[cat]):
-                    features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
-                    line_count = random.randint(1, 500)
-                    sub_type = random.choice(DUMMY_SUB_TYPES)
-                    writer.writerow(features + [line_count, cat, sub_type])
+        data: dict[str, list] = {col: [] for col in list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type"]}
+        for cat in CATEGORY_MAP:
+            for _ in range(counts_per_cat[cat]):
+                for col in FEATURE_COLUMNS:
+                    data[col].append(round(random.uniform(0.0, 1.0), 4))
+                data["line_count"].append(random.randint(1, 500))
+                data["category"].append(cat)
+                data["sub_type"].append(random.choice(DUMMY_SUB_TYPES))
 
-        result = load_and_prepare_data(csv_path, val_fraction=0.2, seed=42)
+        pl.DataFrame(data).write_parquet(str(data_path))
+
+        result = load_and_prepare_data(data_path, val_fraction=0.2, seed=42)
         weights = result["class_weights"]
 
         prose_weight = weights[CATEGORY_MAP["prose"]]
@@ -438,9 +438,9 @@ class TestDataLoading:
             f"weight than majority class 'prose' (weight={prose_weight:.4f})"
         )
 
-    def test_class_weights_all_positive(self, dummy_csv):
+    def test_class_weights_all_positive(self, dummy_parquet):
         """All class weights should be positive."""
-        result = load_and_prepare_data(dummy_csv, val_fraction=0.2, seed=42)
+        result = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
         weights = result["class_weights"]
         assert all(w > 0 for w in weights), f"All weights should be positive, got {weights}"
 
@@ -448,21 +448,22 @@ class TestDataLoading:
         import random
 
         random.seed(123)
-        csv_path = tmp_path / "with_source.csv"
-        header = list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type", "source"]
-        rows = []
+        data_path = tmp_path / "with_source.parquet"
+
+        data: dict[str, list] = {col: [] for col in list(FEATURE_COLUMNS) + ["line_count", "category", "sub_type", "source"]}
         for category in CATEGORY_MAP:
             for source_idx in range(10):
                 source = f"source-{source_idx}"
-                features = [round(random.uniform(0.0, 1.0), 4) for _ in FEATURE_COLUMNS]
-                rows.append(features + [source_idx + 1, category, "pdf_dump", source])
+                for col in FEATURE_COLUMNS:
+                    data[col].append(round(random.uniform(0.0, 1.0), 4))
+                data["line_count"].append(source_idx + 1)
+                data["category"].append(category)
+                data["sub_type"].append("pdf_dump")
+                data["source"].append(source)
 
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
-            writer.writerows(rows)
+        pl.DataFrame(data).write_parquet(str(data_path))
 
-        result = load_and_prepare_data(csv_path, val_fraction=0.3, seed=42, group_val_by_source=True)
+        result = load_and_prepare_data(data_path, val_fraction=0.3, seed=42, group_val_by_source=True)
         train_sources = set(result["source_train"])
         val_sources = set(result["source_val"])
         assert train_sources
@@ -470,11 +471,11 @@ class TestDataLoading:
         assert train_sources.isdisjoint(val_sources)
 
     def test_group_val_by_source_single_source_falls_back_without_error(self, tmp_path):
-        csv_path = tmp_path / "single_source.csv"
-        _make_source_csv(csv_path, {"golden_train": 120})
+        data_path = tmp_path / "single_source.parquet"
+        _make_source_parquet(data_path, {"golden_train": 120})
 
         result = load_and_prepare_data(
-            csv_path,
+            data_path,
             val_fraction=0.2,
             seed=42,
             group_val_by_source=True,
@@ -489,9 +490,9 @@ class TestDataLoading:
         assert set(result["source_val"]) == {"golden_train"}
 
     def test_group_val_by_source_targets_row_fraction_for_uneven_groups(self, tmp_path):
-        csv_path = tmp_path / "uneven_sources.csv"
-        _make_source_csv(
-            csv_path,
+        data_path = tmp_path / "uneven_sources.parquet"
+        _make_source_parquet(
+            data_path,
             {
                 "source-large": 70,
                 "source-target": 20,
@@ -500,7 +501,7 @@ class TestDataLoading:
         )
 
         result = load_and_prepare_data(
-            csv_path,
+            data_path,
             val_fraction=0.2,
             seed=42,
             group_val_by_source=True,
@@ -512,9 +513,9 @@ class TestDataLoading:
         assert set(result["source_train"]).isdisjoint(set(result["source_val"]))
 
     def test_group_val_by_source_falls_back_when_group_drift_is_extreme(self, tmp_path):
-        csv_path = tmp_path / "extreme_uneven_sources.csv"
-        _make_source_csv(
-            csv_path,
+        data_path = tmp_path / "extreme_uneven_sources.parquet"
+        _make_source_parquet(
+            data_path,
             {
                 "dominant-source": 96,
                 "tiny-source-a": 2,
@@ -523,7 +524,7 @@ class TestDataLoading:
         )
 
         result = load_and_prepare_data(
-            csv_path,
+            data_path,
             val_fraction=0.2,
             seed=42,
             group_val_by_source=True,
@@ -537,9 +538,9 @@ class TestDataLoading:
         assert train_sources.intersection(val_sources)
 
     def test_group_val_by_source_falls_back_when_best_disjoint_ratio_is_too_far(self, tmp_path):
-        csv_path = tmp_path / "coarse_groups.csv"
-        _make_source_csv(
-            csv_path,
+        data_path = tmp_path / "coarse_groups.parquet"
+        _make_source_parquet(
+            data_path,
             {
                 "source-a": 45,
                 "source-b": 45,
@@ -548,7 +549,7 @@ class TestDataLoading:
         )
 
         result = load_and_prepare_data(
-            csv_path,
+            data_path,
             val_fraction=0.2,
             seed=42,
             group_val_by_source=True,
@@ -561,7 +562,7 @@ class TestDataLoading:
         assert 0.15 <= val_ratio <= 0.25
         assert train_sources.intersection(val_sources)
 
-    def test_load_and_prepare_data_no_balance_artifact_param(self, dummy_csv):
+    def test_load_and_prepare_data_no_balance_artifact_param(self, dummy_parquet):
         """load_and_prepare_data should no longer accept balance_artifact_subtypes."""
         import inspect
 
@@ -575,14 +576,14 @@ class TestDataLoading:
 
 
 class TestEndToEnd:
-    def test_script_produces_output_files(self, dummy_csv, output_dir):
+    def test_script_produces_output_files(self, dummy_parquet, output_dir):
         """Run the training script as a subprocess and check outputs."""
         result = subprocess.run(
             [
                 sys.executable,
                 str(Path(__file__).parent / "train.py"),
                 "--data",
-                str(dummy_csv),
+                str(dummy_parquet),
                 "--output",
                 str(output_dir),
                 "--epochs",
@@ -603,14 +604,14 @@ class TestEndToEnd:
         assert (output_dir / "model_config.json").exists(), "model_config.json not found"
         assert (output_dir / "metrics.json").exists(), "metrics.json not found"
 
-    def test_model_config_structure(self, dummy_csv, output_dir):
+    def test_model_config_structure(self, dummy_parquet, output_dir):
         """Verify model_config.json has the expected keys and structure."""
         subprocess.run(
             [
                 sys.executable,
                 str(Path(__file__).parent / "train.py"),
                 "--data",
-                str(dummy_csv),
+                str(dummy_parquet),
                 "--output",
                 str(output_dir),
                 "--epochs",
@@ -634,14 +635,14 @@ class TestEndToEnd:
         assert len(config["feature_mean"]) == len(FEATURE_COLUMNS)
         assert len(config["feature_std"]) == len(FEATURE_COLUMNS)
 
-    def test_model_config_uses_active_feature_names_after_drops(self, dummy_csv, output_dir):
+    def test_model_config_uses_active_feature_names_after_drops(self, dummy_parquet, output_dir):
         dropped = ["tab_density", "page_number_density", "table_fragment_score"]
         result = subprocess.run(
             [
                 sys.executable,
                 str(Path(__file__).parent / "train.py"),
                 "--data",
-                str(dummy_csv),
+                str(dummy_parquet),
                 "--output",
                 str(output_dir),
                 "--epochs",
@@ -665,14 +666,14 @@ class TestEndToEnd:
         assert len(config["feature_mean"]) == len(expected_active)
         assert len(config["feature_std"]) == len(expected_active)
 
-    def test_metrics_json_structure(self, dummy_csv, output_dir):
+    def test_metrics_json_structure(self, dummy_parquet, output_dir):
         """Verify metrics.json has expected fields."""
         subprocess.run(
             [
                 sys.executable,
                 str(Path(__file__).parent / "train.py"),
                 "--data",
-                str(dummy_csv),
+                str(dummy_parquet),
                 "--output",
                 str(output_dir),
                 "--epochs",
@@ -693,14 +694,14 @@ class TestEndToEnd:
         assert "val_category_accuracy" in metrics
         assert "val_sub_type_accuracy" in metrics
 
-    def test_onnx_model_loadable(self, dummy_csv, output_dir):
+    def test_onnx_model_loadable(self, dummy_parquet, output_dir):
         """Verify the exported ONNX model can be loaded and has correct I/O."""
         subprocess.run(
             [
                 sys.executable,
                 str(Path(__file__).parent / "train.py"),
                 "--data",
-                str(dummy_csv),
+                str(dummy_parquet),
                 "--output",
                 str(output_dir),
                 "--epochs",

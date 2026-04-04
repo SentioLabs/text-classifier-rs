@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["torch", "pandas", "numpy", "onnx", "onnxscript", "onnxruntime", "scikit-learn"]
+# dependencies = ["torch", "polars", "numpy", "onnx", "onnxscript", "onnxruntime", "scikit-learn"]
 # ///
 """Train a dual-head feedforward neural network on structural text features.
 
-Reads CSV files produced by generate.py and exports the trained model to ONNX
+Reads Parquet files produced by generate.py and exports the trained model to ONNX
 format along with configuration and metrics JSON files.
 
 Usage:
-    python training/train.py --data data/curated/train/golden_train.csv \
+    python training/train.py --data data/curated/train/golden_train.parquet \
         --output training/models/ [--epochs 200] [--batch-size 64] \
         [--lr 0.001] [--patience 15]
 """
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import torch
 import torch.nn as nn
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
@@ -180,32 +180,32 @@ def _grouped_train_val_split(
 
 
 def load_and_prepare_data(
-    csv_path: Path | str,
+    data_path: Path | str,
     feature_columns: tuple[str, ...] = FEATURE_COLUMNS,
     val_fraction: float = 0.2,
     seed: int = 42,
     group_val_by_source: bool = False,
 ) -> dict:
-    """Load CSV, encode labels, standardize features, and split."""
-    df = pd.read_csv(csv_path)
+    """Load Parquet data, encode labels, standardize features, and split."""
+    df = pl.read_parquet(data_path)
 
     # Extract feature matrix
-    X = df[list(feature_columns)].values.astype(np.float32)
+    X = df.select(list(feature_columns)).to_numpy().astype(np.float32)
 
     # Encode category labels
-    y_cat = df["category"].map(CATEGORY_MAP).values.astype(np.int64)
+    y_cat = df.get_column("category").replace_strict(CATEGORY_MAP).cast(pl.Int64).to_numpy()
 
     # Fill missing sub_type values with "unknown"
-    df["sub_type"] = df["sub_type"].fillna("unknown")
+    df = df.with_columns(pl.col("sub_type").fill_null("unknown"))
 
     # Build sub_type label map from unique values in the data
-    unique_sub_types = sorted(df["sub_type"].unique())
+    unique_sub_types = df.get_column("sub_type").unique().sort().to_list()
     sub_type_map: dict[str, int] = {st: i for i, st in enumerate(unique_sub_types)}
-    y_sub = df["sub_type"].map(sub_type_map).values.astype(np.int64)
+    y_sub = df.get_column("sub_type").replace_strict(sub_type_map).cast(pl.Int64).to_numpy()
 
     indices = np.arange(len(df))
     source_values = (
-        df["source"].fillna("unknown_source").astype(str).values if "source" in df.columns else None
+        df.get_column("source").fill_null("unknown_source").cast(pl.Utf8).to_numpy() if "source" in df.columns else None
     )
 
     # Split by grouped source when requested and viable; otherwise use row-level split.
@@ -521,7 +521,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--data",
         type=Path,
         required=True,
-        help="Path to combined CSV training data.",
+        help="Path to combined Parquet training data.",
     )
     parser.add_argument(
         "--output",
