@@ -18,7 +18,5 @@
 Thumbs.db
 
 # Training pipeline
-training/data/*.csv
-training/data/*.jsonl
 training/models/*.onnx
 .a.key
