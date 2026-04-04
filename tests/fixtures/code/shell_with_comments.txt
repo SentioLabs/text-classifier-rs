@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Deploy script for the production environment.
+# This script handles the full deployment lifecycle:
+#   1. Build the Docker image
+#   2. Run database migrations
+#   3. Deploy to Kubernetes
+#   4. Verify health checks
+#   5. Notify the team on Slack
+#
+# Usage: ./deploy.sh [staging|production] [--dry-run] [--skip-tests]
+# Requirements: docker, kubectl, aws-cli, jq, curl
+
+set -euo pipefail
+
+# Configuration — override via environment variables
+APP_NAME="${APP_NAME:-api-gateway}"
+REGISTRY="${DOCKER_REGISTRY:-123456789.dkr.ecr.us-east-1.amazonaws.com}"
+CLUSTER="${K8S_CLUSTER:-prod-us-east-1}"
+NAMESPACE="${K8S_NAMESPACE:-default}"
+SLACK_WEBHOOK="${SLACK_DEPLOY_WEBHOOK:-}"
+HEALTH_CHECK_RETRIES=30
+HEALTH_CHECK_INTERVAL=10
+
+# Parse arguments
+ENVIRONMENT="${1:-staging}"
+DRY_RUN=false
+SKIP_TESTS=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)   DRY_RUN=true ;;
+        --skip-tests) SKIP_TESTS=true ;;
+    esac
+done
+
+# Derived values
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+IMAGE="${REGISTRY}/${APP_NAME}:${VERSION}"
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+log() {
+    echo "[$(date -u +"%H:%M:%S")] $*"
+}
+
+error() {
+    echo "[$(date -u +"%H:%M:%S")] ERROR: $*" >&2
+    exit 1
+}
+
+# Step 1: Build and push Docker image
+log "Building Docker image: ${IMAGE}"
+if [ "$DRY_RUN" = true ]; then
+    log "(dry-run) Would build: docker build -t ${IMAGE} ."
+else
+    docker build -t "${IMAGE}" \
+        --build-arg VERSION="${VERSION}" \
+        --build-arg BUILD_DATE="${TIMESTAMP}" \
+        --label "git.commit=$(git rev-parse HEAD)" \
+        .
+
+    log "Pushing image to registry..."
+    docker push "${IMAGE}"
+fi
+
+# Step 2: Run database migrations
+log "Running database migrations..."
+if [ "$DRY_RUN" = false ]; then
+    kubectl --context="${CLUSTER}" -n "${NAMESPACE}" \
+        run "migrate-${VERSION}" \
+        --image="${IMAGE}" \
+        --restart=Never \
+        --rm -i \
+        -- /app/migrate up
+fi
+
+# Step 3: Deploy to Kubernetes
+log "Deploying to ${ENVIRONMENT} (cluster: ${CLUSTER})..."
+if [ "$DRY_RUN" = true ]; then
+    log "(dry-run) Would apply: kubectl set image deployment/${APP_NAME}"
+else
+    kubectl --context="${CLUSTER}" -n "${NAMESPACE}" \
+        set image "deployment/${APP_NAME}" \
+        "${APP_NAME}=${IMAGE}"
+
+    kubectl --context="${CLUSTER}" -n "${NAMESPACE}" \
+        rollout status "deployment/${APP_NAME}" \
+        --timeout=300s
+fi
+
+log "Deployment complete: ${APP_NAME}@${VERSION} → ${ENVIRONMENT}"

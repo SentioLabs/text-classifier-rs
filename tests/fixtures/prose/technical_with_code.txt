@@ -1,0 +1,30 @@
+The authentication middleware processes each incoming request through a series of
+validation steps before forwarding it to the route handler. First, the middleware
+extracts the JWT token from the Authorization header. If no token is present, it
+returns a 401 Unauthorized response immediately.
+
+Once the token is extracted, it is decoded using the RS256 algorithm with the
+server's public key. The payload contains the user ID, role, and expiration
+timestamp. If decoding fails due to an invalid signature or malformed token, the
+middleware logs the attempt with the client IP and returns a 403 Forbidden response.
+
+The session validation step checks whether the user's session is still active in
+the Redis cache. Sessions expire after 24 hours of inactivity, but active sessions
+are extended by 30 minutes on each request. This sliding window approach balances
+security with user experience.
+
+After successful authentication, the middleware injects the user context into the
+request extensions. Downstream handlers can access this context using the
+`extract_user()` helper function, which returns a Result containing the User struct
+or an AuthError if the context is missing.
+
+Rate limiting is applied per-user using a token bucket algorithm. Each authenticated
+user is allowed 100 requests per minute for standard endpoints, and 10 requests per
+minute for write operations. Rate limit headers (X-RateLimit-Remaining and
+X-RateLimit-Reset) are included in every response.
+
+Error handling follows a consistent pattern throughout the middleware chain. All
+errors are converted to a standardized ErrorResponse struct containing a machine-
+readable error code, a human-readable message, and an optional details field for
+validation errors. The error response is always JSON-formatted regardless of the
+Accept header.

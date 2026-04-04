@@ -1,0 +1,85 @@
+"""Data pipeline for processing customer transaction records.
+
+This module handles the ETL process for raw transaction data from
+multiple payment providers. It normalizes formats, validates fields,
+and writes clean records to the data warehouse.
+"""
+
+import logging
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Optional
+
+from pydantic import BaseModel, Field, validator
+
+logger = logging.getLogger(__name__)
+
+
+class Transaction(BaseModel):
+    """Represents a single payment transaction.
+
+    Attributes:
+        transaction_id: Unique identifier from the payment provider.
+        amount: Transaction amount in the original currency.
+        currency: ISO 4217 currency code (e.g., USD, EUR).
+        customer_id: Internal customer identifier.
+        timestamp: When the transaction occurred (UTC).
+        status: One of: pending, completed, failed, refunded.
+    """
+
+    transaction_id: str
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    currency: str = Field(min_length=3, max_length=3)
+    customer_id: int
+    timestamp: datetime
+    status: str = Field(default="pending")
+    metadata: Optional[dict] = None
+
+    @validator("currency")
+    def validate_currency(cls, v):
+        """Ensure the currency code is uppercase and recognized."""
+        v = v.upper()
+        valid_currencies = {"USD", "EUR", "GBP", "JPY", "CAD", "AUD"}
+        if v not in valid_currencies:
+            raise ValueError(f"Unsupported currency: {v}")
+        return v
+
+    @validator("status")
+    def validate_status(cls, v):
+        """Ensure the status is one of the allowed values."""
+        allowed = {"pending", "completed", "failed", "refunded"}
+        if v not in allowed:
+            raise ValueError(f"Invalid status: {v}. Must be one of {allowed}")
+        return v
+
+
+def process_batch(transactions: list[Transaction]) -> dict:
+    """Process a batch of transactions and return summary statistics.
+
+    Args:
+        transactions: List of validated Transaction objects.
+
+    Returns:
+        Dictionary with keys: total_count, total_amount, by_currency,
+        by_status, failed_count, processing_time_ms.
+    """
+    start = datetime.now(timezone.utc)
+    by_currency = {}
+    by_status = {}
+
+    for txn in transactions:
+        by_currency.setdefault(txn.currency, Decimal("0"))
+        by_currency[txn.currency] += txn.amount
+        by_status.setdefault(txn.status, 0)
+        by_status[txn.status] += 1
+
+    elapsed = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+
+    return {
+        "total_count": len(transactions),
+        "total_amount": sum(t.amount for t in transactions),
+        "by_currency": {k: str(v) for k, v in by_currency.items()},
+        "by_status": by_status,
+        "failed_count": by_status.get("failed", 0),
+        "processing_time_ms": round(elapsed, 2),
+    }
