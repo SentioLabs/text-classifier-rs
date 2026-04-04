@@ -68,7 +68,7 @@ _WORDLIST: frozenset[str] | None = None
 def _load_wordlist() -> frozenset[str]:
     global _WORDLIST
     if _WORDLIST is None:
-        path = Path(__file__).parent / "data" / "wordlist.txt"
+        path = Path(__file__).parent / "data" / "manual" / "wordlist.txt"
         _WORDLIST = frozenset(path.read_text().splitlines())
     return _WORDLIST
 
