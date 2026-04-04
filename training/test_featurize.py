@@ -826,11 +826,11 @@ class TestExtractAll:
 
 class TestCli:
     def test_main_produces_output(self, tmp_path):
-        """Run featurize.py as a script with a small CSV."""
+        """Run featurize.py as a script with a small parquet file."""
         pl = pytest.importorskip("polars")
 
-        input_csv = tmp_path / "input.csv"
-        output_csv = tmp_path / "output.csv"
+        input_path = tmp_path / "input.parquet"
+        output_path = tmp_path / "output.parquet"
 
         df = pl.DataFrame(
             {
@@ -844,7 +844,7 @@ class TestCli:
                 "source": ["test", "test", "test"],
             }
         )
-        df.write_csv(str(input_csv))
+        df.write_parquet(str(input_path))
 
         import subprocess
 
@@ -853,16 +853,16 @@ class TestCli:
                 sys.executable,
                 str(Path(__file__).parent / "featurize.py"),
                 "--input",
-                str(input_csv),
+                str(input_path),
                 "--output",
-                str(output_csv),
+                str(output_path),
             ],
             capture_output=True,
             text=True,
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
 
-        output_df = pl.read_csv(str(output_csv))
+        output_df = pl.read_parquet(str(output_path))
         assert len(output_df) == 3
         # Should have original 4 cols + 28 feature cols
         assert len(output_df.columns) == 32
@@ -874,17 +874,16 @@ class TestCli:
         pl = pytest.importorskip("polars")
         from featurize import main
 
-        input_csv = tmp_path / "input.csv"
-        output_csv = tmp_path / "output.csv"
+        input_path = tmp_path / "input.parquet"
+        output_path = tmp_path / "output.parquet"
 
         df = pl.DataFrame({"text": ["Hello world."]})
-        df.write_csv(str(input_csv))
+        df.write_parquet(str(input_path))
 
-        main(["--input", str(input_csv), "--output", str(output_csv)])
+        main(["--input", str(input_path), "--output", str(output_path)])
 
-        output_df = pl.read_csv(str(output_csv))
-        # Re-read with schema overrides won't help; instead, test via main internals
-        # Actually, CSV loses dtype info. Let's test the DataFrame construction directly.
+        output_df = pl.read_parquet(str(output_path))
+        # Also verify via direct DataFrame construction for completeness.
         from featurize import extract_all
 
         rows = [extract_all("Hello world.")]
