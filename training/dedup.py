@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["faiss-cpu", "sentence-transformers", "pandas", "numpy"]
+# dependencies = ["faiss-cpu", "sentence-transformers", "polars", "numpy"]
 # ///
 """FAISS two-layer deduplication pipeline.
 
@@ -15,16 +15,17 @@ import sys
 
 import faiss
 import numpy as np
-import pandas as pd
+import polars as pl
+import polars.selectors as cs
 
 logger = logging.getLogger(__name__)
 
 
 def feature_dedup(
-    df: pd.DataFrame,
+    df: pl.DataFrame,
     feature_cols: list[str],
     threshold: float = 0.1,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """Remove near-duplicate samples based on L2 distance in feature space.
 
     Builds a FAISS IndexFlatL2 from the specified feature columns. For each
@@ -44,9 +45,9 @@ def feature_dedup(
     if n <= 1 or threshold <= 0:
         logger.info("Feature dedup: removed 0 of %d samples (0.0%%) %s", n,
                      "(disabled)" if threshold <= 0 else "")
-        return df.copy()
+        return df.clone()
 
-    features = df[feature_cols].values.astype(np.float32)
+    features = df.select(feature_cols).to_numpy().astype(np.float32)
     index = faiss.IndexFlatL2(features.shape[1])
     index.add(features)
 
@@ -82,14 +83,14 @@ def feature_dedup(
     pct = removed / n * 100
     logger.info("Feature dedup: removed %d of %d samples (%.1f%%)", removed, n, pct)
 
-    return df.loc[keep].reset_index(drop=True)
+    return df.filter(pl.Series(keep))
 
 
 def semantic_dedup(
-    df: pd.DataFrame,
+    df: pl.DataFrame,
     text_col: str = "text",
     threshold: float = 0.9,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """Remove near-duplicate samples based on cosine similarity of embeddings.
 
     Loads the ``all-MiniLM-L6-v2`` sentence-transformer, encodes all texts to
@@ -111,10 +112,10 @@ def semantic_dedup(
     n = len(df)
     if n <= 1:
         logger.info("Semantic dedup: removed 0 of %d samples (0.0%%)", n)
-        return df.copy()
+        return df.clone()
 
     model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-    texts = [str(t) if not isinstance(t, str) else t for t in df[text_col].tolist()]
+    texts = [str(t) for t in df.get_column(text_col).fill_null("").to_list()]
     embeddings = model.encode(texts, convert_to_numpy=True).astype(np.float32)
 
     # L2 normalize so inner product == cosine similarity
@@ -152,7 +153,7 @@ def semantic_dedup(
     pct = removed / n * 100
     logger.info("Semantic dedup: removed %d of %d samples (%.1f%%)", removed, n, pct)
 
-    return df.loc[keep].reset_index(drop=True)
+    return df.filter(pl.Series(keep))
 
 
 def dedup_pipeline(
@@ -169,17 +170,17 @@ def dedup_pipeline(
     and prints a summary.
 
     Args:
-        input_csv: Path to input CSV file.
-        output_csv: Path to write deduplicated CSV.
+        input_csv: Path to input parquet file.
+        output_csv: Path to write deduplicated parquet.
         feature_threshold: L2 distance threshold for feature dedup.
         semantic_threshold: Cosine similarity threshold for semantic dedup.
     """
-    df = pd.read_csv(input_csv)
+    df = pl.read_parquet(input_csv)
     original_count = len(df)
 
     # Detect feature columns: all numeric columns except 'text'
     feature_cols = [
-        c for c in df.select_dtypes(include=[np.number]).columns if c != "text"
+        c for c in df.select(cs.numeric()).columns if c != "text"
     ]
 
     if feature_cols:
@@ -194,7 +195,7 @@ def dedup_pipeline(
     )
     final_count = len(df_after_sem)
 
-    df_after_sem.to_csv(output_csv, index=False)
+    df_after_sem.write_parquet(output_csv)
 
     print(f"Original count: {original_count}")
     print(f"After feature dedup: {after_feature_count}")
@@ -209,13 +210,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--input",
-        default="data/curated/train/golden_featurized.csv",
-        help="Path to input CSV (default: data/curated/train/golden_featurized.csv)",
+        default="data/curated/train/golden_featurized.parquet",
+        help="Path to input parquet (default: data/curated/train/golden_featurized.parquet)",
     )
     parser.add_argument(
         "--output",
-        default="data/curated/train/golden_train.csv",
-        help="Path to output CSV (default: data/curated/train/golden_train.csv)",
+        default="data/curated/train/golden_train.parquet",
+        help="Path to output parquet (default: data/curated/train/golden_train.parquet)",
     )
     parser.add_argument(
         "--feature-threshold",
