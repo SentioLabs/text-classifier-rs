@@ -73,9 +73,6 @@ pub enum ContentSubType {
     Shell,
     Css,
     // Code > Config
-    Yaml,
-    Toml,
-    Ini,
     Dockerfile,
     Makefile,
     // Code > Markup
@@ -92,6 +89,10 @@ pub enum ContentSubType {
     Jsonl,
     KeyValue,
     LogLines,
+    // Structured > Config
+    Yaml,
+    Toml,
+    Ini,
     // Artifact
     PdfDump,
     OcrGarbage,
@@ -124,9 +125,6 @@ impl ContentSubType {
             | ContentSubType::Sql
             | ContentSubType::Shell
             | ContentSubType::Css
-            | ContentSubType::Yaml
-            | ContentSubType::Toml
-            | ContentSubType::Ini
             | ContentSubType::Dockerfile
             | ContentSubType::Makefile
             | ContentSubType::Html
@@ -141,7 +139,11 @@ impl ContentSubType {
             | ContentSubType::Json
             | ContentSubType::Jsonl
             | ContentSubType::KeyValue
-            | ContentSubType::LogLines => TextCategory::Structured,
+            | ContentSubType::LogLines
+            // Structured > Config
+            | ContentSubType::Yaml
+            | ContentSubType::Toml
+            | ContentSubType::Ini => TextCategory::Structured,
 
             // Artifact
             ContentSubType::PdfDump | ContentSubType::OcrGarbage | ContentSubType::Boilerplate => {

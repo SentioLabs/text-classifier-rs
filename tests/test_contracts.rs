@@ -34,7 +34,7 @@ fn contract_content_sub_type_category_mapping() {
     assert_eq!(ContentSubType::Plain.category(), TextCategory::Prose);
     assert_eq!(ContentSubType::Markdown.category(), TextCategory::Prose);
     assert_eq!(ContentSubType::Python.category(), TextCategory::Code);
-    assert_eq!(ContentSubType::Yaml.category(), TextCategory::Code);
+    assert_eq!(ContentSubType::Yaml.category(), TextCategory::Structured);
     assert_eq!(ContentSubType::Html.category(), TextCategory::Code);
     assert_eq!(ContentSubType::Csv.category(), TextCategory::Structured);
     assert_eq!(ContentSubType::Json.category(), TextCategory::Structured);
@@ -164,9 +164,6 @@ fn contract_content_sub_type_all_category_mappings() {
     assert_eq!(ContentSubType::Css.category(), TextCategory::Code);
 
     // Code > Config
-    assert_eq!(ContentSubType::Yaml.category(), TextCategory::Code);
-    assert_eq!(ContentSubType::Toml.category(), TextCategory::Code);
-    assert_eq!(ContentSubType::Ini.category(), TextCategory::Code);
     assert_eq!(ContentSubType::Dockerfile.category(), TextCategory::Code);
     assert_eq!(ContentSubType::Makefile.category(), TextCategory::Code);
 
@@ -198,6 +195,11 @@ fn contract_content_sub_type_all_category_mappings() {
         ContentSubType::LogLines.category(),
         TextCategory::Structured
     );
+
+    // Structured > Config
+    assert_eq!(ContentSubType::Yaml.category(), TextCategory::Structured);
+    assert_eq!(ContentSubType::Toml.category(), TextCategory::Structured);
+    assert_eq!(ContentSubType::Ini.category(), TextCategory::Structured);
 
     // Artifact
     assert_eq!(ContentSubType::PdfDump.category(), TextCategory::Artifact);
