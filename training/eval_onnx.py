@@ -52,6 +52,9 @@ def load_eval_samples(paths: list[str]) -> list[dict[str, Any]]:
             import polars as pl
 
             df = pl.read_parquet(p)
+            # Training Parquet uses "category"; eval pipeline expects "expected_category"
+            if "category" in df.columns and "expected_category" not in df.columns:
+                df = df.rename({"category": "expected_category"})
             samples.extend(df.to_dicts())
         else:
             # Existing JSONL logic unchanged
