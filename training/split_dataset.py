@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = []
+# dependencies = ["polars"]
 # ///
 """Split a raw JSONL dataset into eval and training sets.
 
 Produces three output files:
   - eval clear JSONL   (stratified by expected_category)
   - eval boundary JSONL (stratified by boundary_pair)
-  - training CSV        (all remaining samples)
+  - training Parquet    (all remaining samples)
 
 Stratified sampling preserves model diversity within each stratum.
 """
 
 import argparse
-import csv
 import json
 import random
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+import polars as pl
 
 
 # ---------------------------------------------------------------------------
@@ -242,21 +243,18 @@ def split_dataset(
     if eval_boundary_path is not None:
         _write_jsonl(eval_boundary_path, eval_boundary)
 
-    # Write training CSV — preserve original source and model provenance
+    # Write training Parquet — preserve original source and model provenance
     Path(train_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(train_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["text", "category", "sub_type", "source", "model"])
-        writer.writeheader()
-        for s in training:
-            writer.writerow(
-                {
-                    "text": s.get("text", ""),
-                    "category": s.get("expected_category", ""),
-                    "sub_type": s.get("sub_type", ""),
-                    "source": s.get("source", "unknown"),
-                    "model": s.get("model", "unknown"),
-                }
-            )
+    pl.DataFrame([
+        {
+            "text": s.get("text", ""),
+            "category": s.get("expected_category", ""),
+            "sub_type": s.get("sub_type", ""),
+            "source": s.get("source", "unknown"),
+            "model": s.get("model", "unknown"),
+        }
+        for s in training
+    ]).write_parquet(train_path)
 
     # Print summary
     _print_summary(all_samples, eval_clear, eval_boundary, training)
@@ -349,8 +347,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--train-output",
-        default="data/curated/train/golden_raw.csv",
-        help="Path for training output CSV",
+        default="data/curated/train/golden_raw.parquet",
+        help="Path for training output Parquet",
     )
     parser.add_argument(
         "--eval-per-category",

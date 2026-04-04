@@ -1,12 +1,12 @@
 """Tests for training/split_dataset.py"""
 
-import csv
 import json
 import os
 import sys
 import tempfile
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 # Ensure the training directory is importable
@@ -230,7 +230,7 @@ class TestSplitDataset:
         input_path = str(tmp_path / "input.jsonl")
         eval_clear = str(tmp_path / "eval_clear.jsonl")
         eval_boundary = str(tmp_path / "eval_boundary.jsonl")
-        train_path = str(tmp_path / "train.csv")
+        train_path = str(tmp_path / "train.parquet")
 
         _write_jsonl(input_path, samples)
 
@@ -256,16 +256,14 @@ class TestSplitDataset:
         # 2 per pair (prose_code) = 2
         assert len(eval_boundary_data) == 2
 
-        # Check training CSV
-        with open(train_path) as f:
-            reader = csv.DictReader(f)
-            train_rows = list(reader)
+        # Check training Parquet
+        train_df = pl.read_parquet(train_path)
         # Remaining: (5-2) + (5-2) + (5-2) = 9
-        assert len(train_rows) == 9
-        # Verify CSV columns include provenance fields
-        assert set(train_rows[0].keys()) == {"text", "category", "sub_type", "source", "model"}
+        assert len(train_df) == 9
+        # Verify Parquet columns include provenance fields
+        assert set(train_df.columns) == {"text", "category", "sub_type", "source", "model"}
         # Sources should be preserved from input (not hardcoded)
-        assert all(r["source"] != "" for r in train_rows)
+        assert all(v != "" for v in train_df.get_column("source").to_list())
 
     def test_split_writes_valid_jsonl(self, tmp_path):
         from split_dataset import split_dataset
@@ -274,7 +272,7 @@ class TestSplitDataset:
         input_path = str(tmp_path / "input.jsonl")
         eval_clear = str(tmp_path / "eval_clear.jsonl")
         eval_boundary = str(tmp_path / "eval_boundary.jsonl")
-        train_path = str(tmp_path / "train.csv")
+        train_path = str(tmp_path / "train.parquet")
 
         _write_jsonl(input_path, samples)
 
@@ -377,7 +375,7 @@ class TestDownsampling:
         input_path = str(tmp_path / "input.jsonl")
         eval_clear = str(tmp_path / "eval_clear.jsonl")
         eval_boundary = str(tmp_path / "eval_boundary.jsonl")
-        train_path = str(tmp_path / "train.csv")
+        train_path = str(tmp_path / "train.parquet")
 
         _write_jsonl(input_path, samples)
 
@@ -392,9 +390,8 @@ class TestDownsampling:
             max_per_category=5,
         )
 
-        with open(train_path) as f:
-            reader = csv.DictReader(f)
-            train_rows = list(reader)
+        train_df = pl.read_parquet(train_path)
+        train_rows = train_df.to_dicts()
 
         from collections import Counter
 
@@ -419,7 +416,7 @@ class TestDownsampling:
         input_path = str(tmp_path / "input.jsonl")
         eval_clear = str(tmp_path / "eval_clear.jsonl")
         eval_boundary = str(tmp_path / "eval_boundary.jsonl")
-        train_path = str(tmp_path / "train.csv")
+        train_path = str(tmp_path / "train.parquet")
 
         _write_jsonl(input_path, samples)
 
@@ -434,11 +431,9 @@ class TestDownsampling:
             max_per_category=0,
         )
 
-        with open(train_path) as f:
-            reader = csv.DictReader(f)
-            train_rows = list(reader)
+        train_df = pl.read_parquet(train_path)
 
-        assert len(train_rows) == 10
+        assert len(train_df) == 10
 
     def test_downsampling_is_deterministic(self, tmp_path):
         from split_dataset import split_dataset
@@ -461,7 +456,7 @@ class TestDownsampling:
         for run in range(2):
             eval_clear = str(tmp_path / f"eval_clear_{run}.jsonl")
             eval_boundary = str(tmp_path / f"eval_boundary_{run}.jsonl")
-            train_path = str(tmp_path / f"train_{run}.csv")
+            train_path = str(tmp_path / f"train_{run}.parquet")
 
             split_dataset(
                 input_path=input_path,
@@ -474,9 +469,8 @@ class TestDownsampling:
                 max_per_category=5,
             )
 
-            with open(train_path) as f:
-                reader = csv.DictReader(f)
-                results.append([r["text"] for r in reader])
+            train_df = pl.read_parquet(train_path)
+            results.append(train_df.get_column("text").to_list())
 
         assert results[0] == results[1]
 
@@ -589,7 +583,7 @@ class TestReclassificationInSplit:
             )
 
         input_path = str(tmp_path / "input.jsonl")
-        train_path = str(tmp_path / "train.csv")
+        train_path = str(tmp_path / "train.parquet")
 
         _write_jsonl(input_path, samples)
 
@@ -603,12 +597,10 @@ class TestReclassificationInSplit:
             seed=42,
         )
 
-        with open(train_path) as f:
-            reader = csv.DictReader(f)
-            train_rows = list(reader)
+        train_df = pl.read_parquet(train_path)
 
         # No training row should have category "artifact"
-        categories = {r["category"] for r in train_rows}
+        categories = set(train_df.get_column("category").to_list())
         assert "artifact" not in categories
         assert categories.issubset({"prose", "code", "structured"})
 
@@ -636,7 +628,7 @@ class TestReclassificationInSplit:
             )
 
         input_path = str(tmp_path / "input.jsonl")
-        train_path = str(tmp_path / "train.csv")
+        train_path = str(tmp_path / "train.parquet")
 
         _write_jsonl(input_path, samples)
 
@@ -650,11 +642,9 @@ class TestReclassificationInSplit:
             seed=42,
         )
 
-        with open(train_path) as f:
-            reader = csv.DictReader(f)
-            train_rows = list(reader)
+        train_df = pl.read_parquet(train_path)
 
-        categories = {r["category"] for r in train_rows}
+        categories = set(train_df.get_column("category").to_list())
         assert "skip" not in categories
         assert categories.issubset({"prose", "code", "structured"})
 
@@ -684,7 +674,7 @@ class TestReclassificationInSplit:
         )
 
         input_path = str(tmp_path / "input.jsonl")
-        train_path = str(tmp_path / "train.csv")
+        train_path = str(tmp_path / "train.parquet")
 
         _write_jsonl(input_path, samples)
 
@@ -698,11 +688,9 @@ class TestReclassificationInSplit:
             seed=42,
         )
 
-        with open(train_path) as f:
-            reader = csv.DictReader(f)
-            train_rows = list(reader)
+        train_df = pl.read_parquet(train_path)
 
         # The unknown category sample should be dropped
-        categories = {r["category"] for r in train_rows}
+        categories = set(train_df.get_column("category").to_list())
         assert "unknown_garbage" not in categories
-        assert len(train_rows) == 5
+        assert len(train_df) == 5
