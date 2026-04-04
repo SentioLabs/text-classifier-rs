@@ -115,21 +115,27 @@ async def _classify_one_openrouter(client, text, model, sem):
 
 
 async def _classify_dual_llm(client, text, haiku_model, gpt_model, sem):
-    """Call both LLMs concurrently via OpenRouter, return (haiku_cat, gpt_cat)."""
-    async with sem:
-        haiku_task = client.chat.completions.create(
-            model=haiku_model, max_tokens=16,
-            messages=[{"role": "user", "content": CLASSIFY_PROMPT.format(text=text[:MAX_TEXT_LEN])}],
-        )
-        gpt_task = client.chat.completions.create(
-            model=gpt_model, max_tokens=16,
-            messages=[{"role": "user", "content": CLASSIFY_PROMPT.format(text=text[:MAX_TEXT_LEN])}],
-        )
-        haiku_r, gpt_r = await asyncio.gather(haiku_task, gpt_task)
-        return (
-            _parse_llm_answer(haiku_r.choices[0].message.content or ""),
-            _parse_llm_answer(gpt_r.choices[0].message.content or ""),
-        )
+    """Call both LLMs concurrently via OpenRouter, return (haiku_cat, gpt_cat).
+
+    Each LLM call acquires its own semaphore slot so --concurrency reflects
+    the actual number of in-flight API requests (not pairs).
+    """
+    prompt = CLASSIFY_PROMPT.format(text=text[:MAX_TEXT_LEN])
+
+    async def _call(model_name):
+        async with sem:
+            try:
+                r = await client.chat.completions.create(
+                    model=model_name, max_tokens=16,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return _parse_llm_answer(r.choices[0].message.content or "")
+            except Exception as e:
+                print(f"  Dual-LLM error ({model_name}): {e}", file=sys.stderr)
+                return "unknown"
+
+    haiku_cat, gpt_cat = await asyncio.gather(_call(haiku_model), _call(gpt_model))
+    return (haiku_cat, gpt_cat)
 
 
 async def classify_batch(backend, client, texts, model, concurrency):
@@ -177,8 +183,8 @@ async def async_main(argv=None):
     args = parser.parse_args(argv)
 
     # Validate mutual exclusivity
-    if args.dual_llm and args.model:
-        parser.error("--dual-llm and --model are mutually exclusive")
+    if args.dual_llm and (args.model or args.backend != "openrouter"):
+        parser.error("--dual-llm is mutually exclusive with --backend and --model")
 
     # Set ties-output default
     if args.ties_output is None:
@@ -190,6 +196,7 @@ async def async_main(argv=None):
         filter_subtypes = {s.strip() for s in args.filter_subtypes.split(",")}
 
     # Set up client
+    model = ""  # overwritten below; silences type-checker for single-LLM path
     if args.dual_llm:
         api_key = os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
