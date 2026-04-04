@@ -286,19 +286,20 @@ class TextClassifier(nn.Module):
         n_features: int = len(FEATURE_COLUMNS),
         n_categories: int = NUM_CATEGORIES,
         n_sub_types: int = 33,
+        hidden_dim: int = 256,
+        dropout: float = 0.15,
+        use_batchnorm: bool = True,
     ):
         super().__init__()
-        self.shared = nn.Sequential(
-            nn.Linear(n_features, 128),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-        )
+        layers: list[nn.Module] = []
+        dims = [n_features, hidden_dim, 64, 32]
+        for in_dim, out_dim in zip(dims[:-1], dims[1:]):
+            layers.append(nn.Linear(in_dim, out_dim))
+            if use_batchnorm:
+                layers.append(nn.BatchNorm1d(out_dim))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(dropout))
+        self.shared = nn.Sequential(*layers)
         self.category_head = nn.Linear(32, n_categories)
         self.sub_type_head = nn.Linear(32, n_sub_types)
 
@@ -336,6 +337,11 @@ def train_model(
     lr: float = 0.001,
     patience: int = 15,
     device: torch.device | None = None,
+    sub_type_weight: float = 0.5,
+    warmup_epochs: int = 10,
+    hidden_dim: int = 256,
+    dropout: float = 0.15,
+    use_batchnorm: bool = True,
 ) -> tuple[TextClassifier, dict]:
     """Train the model and return it along with metrics."""
     if device is None:
@@ -353,12 +359,24 @@ def train_model(
         n_features=len(data["feature_names"]),
         n_categories=NUM_CATEGORIES,
         n_sub_types=n_sub_types,
+        hidden_dim=hidden_dim,
+        dropout=dropout,
+        use_batchnorm=use_batchnorm,
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5
     )
+
+    # LR warmup: linearly ramp from lr/10 to lr over warmup_epochs
+    if warmup_epochs > 0:
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer, start_factor=0.1, total_iters=warmup_epochs
+        )
+    else:
+        warmup_scheduler = None
+
     weight_tensor = torch.tensor(data["class_weights"], dtype=torch.float32).to(device)
     cat_criterion = nn.CrossEntropyLoss(weight=weight_tensor)
     sub_criterion = nn.CrossEntropyLoss()
@@ -384,7 +402,7 @@ def train_model(
         for batch_x, batch_y_cat, batch_y_sub in loader:
             optimizer.zero_grad()
             cat_logits, sub_logits = model(batch_x)
-            loss = cat_criterion(cat_logits, batch_y_cat) + 0.3 * sub_criterion(
+            loss = cat_criterion(cat_logits, batch_y_cat) + sub_type_weight * sub_criterion(
                 sub_logits, batch_y_sub
             )
             loss.backward()
@@ -398,12 +416,12 @@ def train_model(
         train_acc = train_cat_correct / train_count
 
         # --- Validate ---
-        model.eval()
+        model.eval()  # noqa: eval – nn.Module.eval(), not builtin
         with torch.no_grad():
             val_cat_logits, val_sub_logits = model(X_val)
             val_loss = (
                 cat_criterion(val_cat_logits, y_cat_val)
-                + 0.3 * sub_criterion(val_sub_logits, y_sub_val)
+                + sub_type_weight * sub_criterion(val_sub_logits, y_sub_val)
             ).item()
             val_cat_acc = (val_cat_logits.argmax(dim=1) == y_cat_val).float().mean().item()
             val_sub_acc = (val_sub_logits.argmax(dim=1) == y_sub_val).float().mean().item()
@@ -417,7 +435,10 @@ def train_model(
         )
 
         # --- Learning rate scheduling ---
-        scheduler.step(val_loss)
+        if warmup_scheduler is not None and epoch <= warmup_epochs:
+            warmup_scheduler.step()
+        else:
+            plateau_scheduler.step(val_loss)
 
         # --- Early stopping ---
         if val_loss < best_val_loss:
@@ -575,6 +596,35 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="auto",
         help="Device for training: auto, cpu, cuda, cuda:0, etc. (default: auto)",
     )
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.15,
+        help="Dropout rate (default: 0.15).",
+    )
+    parser.add_argument(
+        "--hidden-dim",
+        type=int,
+        default=256,
+        help="First hidden layer width (default: 256).",
+    )
+    parser.add_argument(
+        "--sub-type-weight",
+        type=float,
+        default=0.5,
+        help="Sub-type loss weight (default: 0.5).",
+    )
+    parser.add_argument(
+        "--no-batchnorm",
+        action="store_true",
+        help="Disable BatchNorm layers.",
+    )
+    parser.add_argument(
+        "--warmup-epochs",
+        type=int,
+        default=10,
+        help="LR warmup epochs (default: 10, 0 to disable).",
+    )
     return parser.parse_args(argv)
 
 
@@ -608,6 +658,11 @@ def main(argv: list[str] | None = None) -> None:
         lr=args.lr,
         patience=args.patience,
         device=device,
+        sub_type_weight=args.sub_type_weight,
+        warmup_epochs=args.warmup_epochs,
+        hidden_dim=args.hidden_dim,
+        dropout=args.dropout,
+        use_batchnorm=not args.no_batchnorm,
     )
 
     onnx_path = args.output / "model.onnx"

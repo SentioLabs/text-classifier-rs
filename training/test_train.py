@@ -156,7 +156,8 @@ class TestConstants:
 
 
 class TestModel:
-    def test_forward_shapes(self):
+    def test_forward_shapes_with_batchnorm(self):
+        """Forward pass with BatchNorm (default) should produce correct shapes."""
         import torch
 
         model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
@@ -165,6 +166,38 @@ class TestModel:
         assert cat_logits.shape == (4, 3)
         assert sub_logits.shape == (4, 10)
 
+    def test_forward_shapes_without_batchnorm(self):
+        """Forward pass without BatchNorm (--no-batchnorm) should produce correct shapes."""
+        import torch
+
+        model = TextClassifier(
+            n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10,
+            use_batchnorm=False,
+        )
+        x = torch.randn(4, len(FEATURE_COLUMNS))
+        cat_logits, sub_logits = model(x)
+        assert cat_logits.shape == (4, 3)
+        assert sub_logits.shape == (4, 10)
+
+    def test_batchnorm_layers_present_by_default(self):
+        """Default model should contain BatchNorm1d layers."""
+        import torch.nn as nn
+
+        model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
+        bn_layers = [m for m in model.shared if isinstance(m, nn.BatchNorm1d)]
+        assert len(bn_layers) == 3, f"Expected 3 BatchNorm1d layers, got {len(bn_layers)}"
+
+    def test_no_batchnorm_layers_when_disabled(self):
+        """Model with use_batchnorm=False should have no BatchNorm1d layers."""
+        import torch.nn as nn
+
+        model = TextClassifier(
+            n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10,
+            use_batchnorm=False,
+        )
+        bn_layers = [m for m in model.shared if isinstance(m, nn.BatchNorm1d)]
+        assert len(bn_layers) == 0, f"Expected 0 BatchNorm1d layers, got {len(bn_layers)}"
+
     def test_shared_layers_exist(self):
         model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
         assert hasattr(model, "shared")
@@ -172,28 +205,43 @@ class TestModel:
         assert hasattr(model, "sub_type_head")
 
     def test_three_shared_linear_layers(self):
-        """Model should have 3 linear layers: 28->128, 128->64, 64->32."""
+        """Model should have 3 linear layers: 28->256, 256->64, 64->32."""
         import torch.nn as nn
 
         model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
         linear_layers = [m for m in model.shared if isinstance(m, nn.Linear)]
         assert len(linear_layers) == 3, f"Expected 3 Linear layers, got {len(linear_layers)}"
         assert linear_layers[0].in_features == len(FEATURE_COLUMNS)
-        assert linear_layers[0].out_features == 128
-        assert linear_layers[1].in_features == 128
+        assert linear_layers[0].out_features == 256
+        assert linear_layers[1].in_features == 256
         assert linear_layers[1].out_features == 64
         assert linear_layers[2].in_features == 64
         assert linear_layers[2].out_features == 32
 
-    def test_dropout_rate_is_0_3(self):
-        """Dropout layers should use p=0.3."""
+    def test_default_dropout_rate_is_0_15(self):
+        """Default dropout layers should use p=0.15."""
         import torch.nn as nn
 
         model = TextClassifier(n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10)
         dropout_layers = [m for m in model.shared if isinstance(m, nn.Dropout)]
         assert len(dropout_layers) >= 1, "No Dropout layers found"
         for d in dropout_layers:
-            assert d.p == pytest.approx(0.3), f"Expected dropout p=0.3, got {d.p}"
+            assert d.p == pytest.approx(0.15), f"Expected dropout p=0.15, got {d.p}"
+
+    def test_custom_hidden_dim_and_dropout(self):
+        """Custom hidden_dim and dropout should be respected."""
+        import torch
+        import torch.nn as nn
+
+        model = TextClassifier(
+            n_features=len(FEATURE_COLUMNS), n_categories=3, n_sub_types=10,
+            hidden_dim=512, dropout=0.25,
+        )
+        linear_layers = [m for m in model.shared if isinstance(m, nn.Linear)]
+        assert linear_layers[0].out_features == 512
+        dropout_layers = [m for m in model.shared if isinstance(m, nn.Dropout)]
+        for d in dropout_layers:
+            assert d.p == pytest.approx(0.25)
 
 
 class TestDeviceFlag:
@@ -264,7 +312,7 @@ class TestTrainingDefaults:
         assert args.patience == 15
 
     def test_lr_scheduler_used_in_training(self, dummy_parquet):
-        """Training should use ReduceLROnPlateau scheduler."""
+        """Training should use ReduceLROnPlateau scheduler after warmup."""
         import unittest.mock as mock
 
         data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
@@ -274,7 +322,11 @@ class TestTrainingDefaults:
             mock_scheduler = mock.MagicMock()
             mock_sched_cls.return_value = mock_scheduler
 
-            train_model(data, n_sub_types=n_sub_types, epochs=3, patience=5)
+            # Use warmup_epochs=0 so plateau scheduler is called every epoch
+            train_model(
+                data, n_sub_types=n_sub_types, epochs=3, patience=5,
+                warmup_epochs=0,
+            )
 
             # Scheduler should be created with correct params
             mock_sched_cls.assert_called_once()
@@ -283,7 +335,7 @@ class TestTrainingDefaults:
             assert kwargs.get("factor") == 0.5
             assert kwargs.get("patience") == 5
 
-            # scheduler.step should be called once per epoch
+            # scheduler.step should be called once per epoch (no warmup)
             assert mock_scheduler.step.call_count == 3
 
     def test_group_val_by_source_flag_default_off(self):
@@ -314,6 +366,87 @@ class TestTrainingDefaults:
                     "--balance-artifact-subtypes",
                 ]
             )
+
+
+class TestNewArchitectureCLI:
+    """Tests for new CLI flags: --dropout, --hidden-dim, --sub-type-weight, --no-batchnorm, --warmup-epochs."""
+
+    def test_cli_parsing_all_new_flags(self):
+        """All new CLI flags should parse correctly."""
+        args = parse_args([
+            "--data", "dummy.parquet",
+            "--output", "out",
+            "--dropout", "0.15",
+            "--hidden-dim", "256",
+            "--sub-type-weight", "0.5",
+            "--warmup-epochs", "10",
+            "--no-batchnorm",
+        ])
+        assert args.dropout == pytest.approx(0.15)
+        assert args.hidden_dim == 256
+        assert args.sub_type_weight == pytest.approx(0.5)
+        assert args.warmup_epochs == 10
+        assert args.no_batchnorm is True
+
+    def test_default_args_new_architecture(self):
+        """Default args should produce the new architecture values."""
+        args = parse_args(["--data", "dummy.parquet", "--output", "out"])
+        assert args.dropout == pytest.approx(0.15)
+        assert args.hidden_dim == 256
+        assert args.sub_type_weight == pytest.approx(0.5)
+        assert args.warmup_epochs == 10
+        assert args.no_batchnorm is False
+
+    def test_sub_type_weight_used_in_training(self, dummy_parquet):
+        """train_model should accept and use sub_type_weight parameter."""
+        import torch
+
+        data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
+        n_sub_types = len(data["sub_type_map"])
+        model, metrics = train_model(
+            data, n_sub_types=n_sub_types, epochs=2, patience=5,
+            device=torch.device("cpu"), sub_type_weight=0.5,
+        )
+        assert model is not None
+        assert "best_val_loss" in metrics
+
+    def test_warmup_epochs_used_in_training(self, dummy_parquet):
+        """train_model should accept warmup_epochs parameter."""
+        import torch
+
+        data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
+        n_sub_types = len(data["sub_type_map"])
+        model, metrics = train_model(
+            data, n_sub_types=n_sub_types, epochs=5, patience=10,
+            device=torch.device("cpu"), warmup_epochs=3,
+        )
+        assert model is not None
+        assert "best_val_loss" in metrics
+
+    def test_warmup_zero_disables_warmup(self, dummy_parquet):
+        """warmup_epochs=0 should work (no warmup)."""
+        import torch
+
+        data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
+        n_sub_types = len(data["sub_type_map"])
+        model, metrics = train_model(
+            data, n_sub_types=n_sub_types, epochs=2, patience=5,
+            device=torch.device("cpu"), warmup_epochs=0,
+        )
+        assert model is not None
+
+    def test_model_with_new_params_in_train_model(self, dummy_parquet):
+        """train_model should construct model with hidden_dim, dropout, use_batchnorm."""
+        import torch
+
+        data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
+        n_sub_types = len(data["sub_type_map"])
+        model, metrics = train_model(
+            data, n_sub_types=n_sub_types, epochs=2, patience=5,
+            device=torch.device("cpu"),
+            hidden_dim=128, dropout=0.3, use_batchnorm=False,
+        )
+        assert model is not None
 
 
 class TestFeatureAblation:
