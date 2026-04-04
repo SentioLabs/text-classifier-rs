@@ -3,14 +3,14 @@
 # requires-python = ">=3.10"
 # dependencies = ["polars", "tqdm"]
 # ///
-"""Compute 28 structural text features and enrich a training CSV.
+"""Compute 28 structural text features and enrich a training dataset.
 
 Ports the feature extraction logic from src/features.rs to Python.
 Each feature is a standalone ``str -> float`` function with exact parity
 to the Rust implementation, including edge cases and Unicode handling.
 
 Usage:
-    uv run featurize.py --input data/curated/train/golden_raw.csv --output data/curated/train/golden_featurized.csv
+    uv run featurize.py --input data/curated/train/golden_raw.parquet --output data/curated/train/golden_featurized.parquet
 """
 
 from __future__ import annotations
@@ -696,17 +696,17 @@ def extract_all(text: str) -> dict[str, float]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compute 28 structural text features and enrich a CSV."
+        description="Compute 28 structural text features and enrich a dataset."
     )
     parser.add_argument(
         "--input",
-        default="data/curated/train/golden_raw.csv",
-        help="Input CSV path (default: data/curated/train/golden_raw.csv)",
+        default="data/curated/train/golden_raw.parquet",
+        help="Input parquet path (default: data/curated/train/golden_raw.parquet)",
     )
     parser.add_argument(
         "--output",
-        default="data/curated/train/golden_featurized.csv",
-        help="Output CSV path (default: data/curated/train/golden_featurized.csv)",
+        default="data/curated/train/golden_featurized.parquet",
+        help="Output parquet path (default: data/curated/train/golden_featurized.parquet)",
     )
     return parser.parse_args(argv)
 
@@ -720,7 +720,7 @@ def main(argv: list[str] | None = None) -> None:
     input_path = Path(args.input)
     output_path = Path(args.output)
 
-    df = pl.read_csv(str(input_path))
+    df = pl.read_parquet(str(input_path))
 
     texts = df.get_column("text").to_list()
 
@@ -731,7 +731,7 @@ def main(argv: list[str] | None = None) -> None:
 
     features_df = pl.DataFrame(rows, schema={name: pl.Float32 for name in FEATURES})
     result = pl.concat([df, features_df], how="horizontal")
-    result.write_csv(str(output_path))
+    result.write_parquet(str(output_path))
 
     print(f"Wrote {len(result)} rows x {len(result.columns)} columns to {output_path}")
 
