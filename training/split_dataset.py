@@ -30,7 +30,52 @@ SUBTYPE_CATEGORY_OVERRIDES = {
     "yaml": "structured",
     "toml": "structured",
     "ini": "structured",
+    "pdf_dump": None,      # reclassified by heuristic
+    "ocr_garbage": None,   # reclassified by heuristic
+    "boilerplate": None,   # reclassified by heuristic
+    "skip": None,          # reclassified by heuristic
 }
+
+VALID_CATEGORIES = frozenset({"prose", "code", "structured"})
+
+# ---------------------------------------------------------------------------
+# Content-based reclassification
+# ---------------------------------------------------------------------------
+
+
+def reclassify_by_content(text: str) -> str:
+    """Reclassify a sample using structural text features.
+
+    Used for samples whose original category was ``"artifact"`` or ``"skip"``.
+    Returns one of ``"prose"``, ``"code"``, or ``"structured"``.
+    """
+    from featurize import (
+        sentence_coherence_score,
+        dictionary_word_ratio,
+        alpha_ratio,
+        key_value_ratio,
+        comment_ratio,
+        delimiter_consistency,
+    )
+
+    scs = sentence_coherence_score(text)
+    dwr = dictionary_word_ratio(text)
+    ar = alpha_ratio(text)
+    kvr = key_value_ratio(text)
+    cr = comment_ratio(text)
+    dc = delimiter_consistency(text)
+
+    if scs > 0.3 and dwr > 0.5:
+        return "prose"
+    elif kvr > 0.3 or dc > 0.5:
+        return "structured"
+    elif cr > 0.2:
+        return "code"
+    elif dwr > 0.5 and ar > 0.8:
+        return "prose"
+    else:
+        return "structured"
+
 
 # ---------------------------------------------------------------------------
 # Core functions
@@ -141,6 +186,18 @@ def split_dataset(
         override = SUBTYPE_CATEGORY_OVERRIDES.get(sub_type)
         if override is not None:
             s["expected_category"] = override
+
+    # Reclassify artifact/skip samples using content-based heuristics
+    for s in all_samples:
+        cat = s.get("expected_category", "")
+        if cat in ("artifact", "skip"):
+            s["expected_category"] = reclassify_by_content(s.get("text", ""))
+
+    # Drop samples whose category is not in the valid 3-category set
+    all_samples = [
+        s for s in all_samples
+        if s.get("expected_category", "") in VALID_CATEGORIES
+    ]
 
     # Separate clear vs boundary
     clear: list[dict] = []

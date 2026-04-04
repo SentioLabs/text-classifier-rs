@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 # Helpers
 # ---------------------------------------------------------------------------
 
-CATEGORY_MAP = {"prose": 0, "code": 1, "structured": 2, "artifact": 3}
+CATEGORY_MAP = {"prose": 0, "code": 1, "structured": 2}
 SUB_TYPE_MAP = {"plain": 0, "markdown": 1, "python": 2, "csv": 3}
 FEATURE_NAMES = [
     "line_length_cv",
@@ -353,7 +353,7 @@ class TestPredictionRecords:
         }
 
         mock_session = MagicMock()
-        cat_logits = np.array([[0.0, 0.0, 10.0, 0.0]], dtype=np.float32)
+        cat_logits = np.array([[0.0, 0.0, 10.0]], dtype=np.float32)
         sub_logits = np.zeros((1, len(SUB_TYPE_MAP)), dtype=np.float32)
         mock_session.run.return_value = [cat_logits, sub_logits]
 
@@ -475,7 +475,7 @@ class TestRunEvaluation:
 
         # Mock ONNX session: always predict category index 0 (prose)
         mock_session = MagicMock()
-        cat_logits = np.array([[10.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+        cat_logits = np.array([[10.0, 0.0, 0.0]], dtype=np.float32)
         sub_logits = np.zeros((1, len(SUB_TYPE_MAP)), dtype=np.float32)
         mock_session.run.return_value = [cat_logits, sub_logits]
 
@@ -507,7 +507,7 @@ class TestRunEvaluation:
             features = inputs["features"]
             # We'll just alternate: first call prose, second call code
             return [
-                np.array([[0.0] * 4], dtype=np.float32),
+                np.array([[0.0] * 3], dtype=np.float32),
                 np.zeros((1, len(SUB_TYPE_MAP)), dtype=np.float32),
             ]
 
@@ -516,7 +516,7 @@ class TestRunEvaluation:
         def smart_side_effect(output_names, inputs):
             idx = call_count[0]
             call_count[0] += 1
-            logits = np.zeros((1, 4), dtype=np.float32)
+            logits = np.zeros((1, 3), dtype=np.float32)
             if idx == 0:
                 logits[0, 0] = 10.0  # prose
             else:

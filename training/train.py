@@ -42,8 +42,6 @@ CATEGORY_MAP: dict[str, int] = {
     "prose": 0,
     "code": 1,
     "structured": 2,
-    "artifact": 3,
-    "skip": 4,
 }
 
 NUM_CATEGORIES = len(CATEGORY_MAP)
@@ -187,7 +185,6 @@ def load_and_prepare_data(
     val_fraction: float = 0.2,
     seed: int = 42,
     group_val_by_source: bool = False,
-    balance_artifact_subtypes: bool = False,
 ) -> dict:
     """Load CSV, encode labels, standardize features, and split."""
     df = pd.read_csv(csv_path)
@@ -257,33 +254,6 @@ def load_and_prepare_data(
     class_weights = 1.0 / (class_counts + 1)
     class_weights = class_weights / class_weights.sum() * len(class_weights)
 
-    # Optional sampler weights for balancing category frequency and rare artifact sub-types.
-    sample_weights_train = None
-    if balance_artifact_subtypes:
-        cat_counts_for_samples = np.bincount(y_cat_train, minlength=NUM_CATEGORIES).astype(np.float64)
-        cat_counts_for_samples[cat_counts_for_samples == 0] = 1.0
-        sample_weights_train = 1.0 / cat_counts_for_samples[y_cat_train]
-
-        artifact_id = CATEGORY_MAP["artifact"]
-        artifact_mask = y_cat_train == artifact_id
-        if artifact_mask.any():
-            artifact_sub_counts = np.bincount(
-                y_sub_train[artifact_mask], minlength=len(sub_type_map)
-            ).astype(np.float64)
-            artifact_sub_counts[artifact_sub_counts == 0] = 1.0
-            artifact_sub_weight = np.ones_like(sample_weights_train, dtype=np.float64)
-            artifact_sub_weight[artifact_mask] = (
-                1.0 / artifact_sub_counts[y_sub_train[artifact_mask]]
-            )
-
-            artifact_mean = artifact_sub_weight[artifact_mask].mean()
-            if artifact_mean > 0:
-                artifact_sub_weight[artifact_mask] /= artifact_mean
-            sample_weights_train *= artifact_sub_weight
-
-        sample_weights_train = sample_weights_train.astype(np.float32)
-        sample_weights_train /= sample_weights_train.mean()
-
     result = {
         "X_train": X_train,
         "X_val": X_val,
@@ -300,8 +270,6 @@ def load_and_prepare_data(
     if source_values is not None:
         result["source_train"] = source_values[train_idx]
         result["source_val"] = source_values[val_idx]
-    if sample_weights_train is not None:
-        result["sample_weights_train"] = sample_weights_train
     return result
 
 
@@ -367,7 +335,6 @@ def train_model(
     batch_size: int = 64,
     lr: float = 0.001,
     patience: int = 15,
-    balance_artifact_subtypes: bool = False,
     device: torch.device | None = None,
 ) -> tuple[TextClassifier, dict]:
     """Train the model and return it along with metrics."""
@@ -403,16 +370,7 @@ def train_model(
     total_epochs = 0
 
     dataset = torch.utils.data.TensorDataset(X_train, y_cat_train, y_sub_train)
-    if balance_artifact_subtypes and "sample_weights_train" in data:
-        sample_weights = torch.as_tensor(data["sample_weights_train"], dtype=torch.double)
-        sampler = torch.utils.data.WeightedRandomSampler(
-            weights=sample_weights,
-            num_samples=len(sample_weights),
-            replacement=True,
-        )
-        loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=sampler)
-    else:
-        loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     for epoch in range(1, epochs + 1):
         total_epochs = epoch
@@ -613,14 +571,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--balance-artifact-subtypes",
-        action="store_true",
-        help=(
-            "Use a weighted sampler to rebalance categories and upweight rare artifact sub-types "
-            "during minibatch sampling (default: off)."
-        ),
-    )
-    parser.add_argument(
         "--device",
         default="auto",
         help="Device for training: auto, cpu, cuda, cuda:0, etc. (default: auto)",
@@ -639,7 +589,6 @@ def main(argv: list[str] | None = None) -> None:
         args.data,
         feature_columns=active_feature_columns,
         group_val_by_source=args.group_val_by_source,
-        balance_artifact_subtypes=args.balance_artifact_subtypes,
     )
     n_sub_types = len(data["sub_type_map"])
 
@@ -658,7 +607,6 @@ def main(argv: list[str] | None = None) -> None:
         batch_size=args.batch_size,
         lr=args.lr,
         patience=args.patience,
-        balance_artifact_subtypes=args.balance_artifact_subtypes,
         device=device,
     )
 
