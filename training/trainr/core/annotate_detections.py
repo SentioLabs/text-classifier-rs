@@ -131,28 +131,55 @@ def parse_response(response: str) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
+MAX_RETRIES = 3
+RETRY_BACKOFF = [2, 5, 15]
+
+
 def call_llm(text: str, model: str, api_key: str) -> dict[str, int]:
     """Call the LLM to annotate a single text sample.
 
+    Retries on transient errors (connection, rate-limit, server errors).
     Returns a dict of label -> 0/1.
     """
+    import time
+
     if openai is None:
         raise RuntimeError("openai package is not installed. Run: pip install openai")
 
     client = openai.OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=api_key,
+        timeout=30.0,
     )
 
     prompt = build_prompt(text)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-    )
+    last_err: Exception | None = None
 
-    content = response.choices[0].message.content or ""
-    return parse_response(content)
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+            )
+            content = response.choices[0].message.content or ""
+            return parse_response(content)
+        except (
+            openai.APIConnectionError,
+            openai.APITimeoutError,
+            openai.RateLimitError,
+            openai.InternalServerError,
+        ) as e:
+            last_err = e
+            backoff = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
+            print(
+                f"  Retry {attempt + 1}/{MAX_RETRIES} after {type(e).__name__}: "
+                f"waiting {backoff}s",
+                file=sys.stderr,
+            )
+            time.sleep(backoff)
+
+    raise RuntimeError(f"Failed after {MAX_RETRIES} retries: {last_err}") from last_err
 
 
 # ---------------------------------------------------------------------------
