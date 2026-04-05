@@ -1,0 +1,2237 @@
+task: [train:pilot] uv run generate_openrouter.py --output data/pilot_samples.jsonl --total-samples 500 --pilot
+
+Generating clear samples (40/sub-type, 33 sub-types, 4 workers):
+Sub-types:   0%|          | 0/33 [00:00<?, ?type/s]
+  plain:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  plain:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=mistral-large-2512][A
+
+  markdown:   0%|          | 0/40 [00:00<?, ?sample/s][A[A
+
+  markdown:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=mistral-large-2512][A[A
+
+
+  rst:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  rst:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=grok-4-fast][A[A[A
+
+
+
+  latex:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[A
+
+
+
+  latex:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=claude-sonnet-4.6][A[A[A[A
+
+
+  rst:   2%|▎         | 1/40 [00:12<08:13, 12.66s/sample, domain=astronomy, model=grok-4-fast][A[A[A
+
+
+  rst:  25%|██▌       | 10/40 [00:12<06:19, 12.66s/sample, domain=biology, model=gpt-5]       [A[A[A
+  plain:   2%|▎         | 1/40 [00:16<10:36, 16.33s/sample, domain=astronomy, model=mistral-large-2512][A
+  plain:  25%|██▌       | 10/40 [00:16<08:09, 16.33s/sample, domain=biology, model=gpt-5.4]            [A
+
+  markdown:   2%|▎         | 1/40 [00:27<17:49, 27.43s/sample, domain=astronomy, model=mistral-large-2512][A[A
+
+  markdown:  25%|██▌       | 10/40 [00:27<13:42, 27.43s/sample, domain=biology, model=gpt-5]              [A[A
+
+
+
+  latex:   2%|▎         | 1/40 [00:33<22:01, 33.90s/sample, domain=astronomy, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  latex:  25%|██▌       | 10/40 [00:33<16:56, 33.90s/sample, domain=biology, model=gpt-5.4]           [A[A[A[A
+
+  markdown:  28%|██▊       | 11/40 [01:34<03:54,  8.10s/sample, domain=biology, model=gpt-5][A[A
+
+  markdown:  50%|█████     | 20/40 [01:34<02:41,  8.10s/sample, domain=chemistry, model=command-a][A[A
+  plain:  28%|██▊       | 11/40 [01:39<04:16,  8.84s/sample, domain=biology, model=gpt-5.4][A
+  plain:  50%|█████     | 20/40 [01:39<02:56,  8.84s/sample, domain=chemistry, model=claude-sonnet-4.6][A
+
+
+  rst:  28%|██▊       | 11/40 [01:48<04:44,  9.80s/sample, domain=biology, model=gpt-5][A[A[A
+
+
+  rst:  50%|█████     | 20/40 [01:48<03:15,  9.80s/sample, domain=chemistry, model=command-a][A[A[A
+
+  markdown:  52%|█████▎    | 21/40 [01:49<01:22,  4.32s/sample, domain=chemistry, model=command-a][A[A
+
+  markdown:  52%|█████▎    | 21/40 [01:49<01:22,  4.32s/sample, domain=climate scie, model=grok-4-fast][A[A
+
+  markdown:  55%|█████▌    | 22/40 [01:57<01:22,  4.59s/sample, domain=climate scie, model=grok-4-fast][A[A
+
+  markdown:  78%|███████▊  | 31/40 [01:57<00:41,  4.59s/sample, domain=genetics, model=gpt-5.4]        [A[A
+
+
+
+  latex:  28%|██▊       | 11/40 [01:58<04:53, 10.11s/sample, domain=biology, model=gpt-5.4][A[A[A[A
+
+
+
+  latex:  50%|█████     | 20/40 [01:58<03:22, 10.11s/sample, domain=chemistry, model=claude-sonnet-4.6][A[A[A[A
+
+  markdown:  80%|████████  | 32/40 [02:44<00:36,  4.62s/sample, domain=genetics, model=gpt-5.4][A[A
+
+                                                                                               [A[A
+
+  python:   0%|          | 0/40 [00:00<?, ?sample/s][A[A
+
+  python:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gemini-2.5-flash][A[ASub-types:   3%|▎         | 1/33 [02:44<1:27:33, 164.18s/type]
+
+  python:   2%|▎         | 1/40 [00:07<04:34,  7.05s/sample, domain=astronomy, model=gemini-2.5-flash][A[A
+
+  python:  25%|██▌       | 10/40 [00:07<03:31,  7.05s/sample, domain=biology, model=deepseek-v3.2]    [A[A
+
+
+  rst:  52%|█████▎    | 21/40 [02:58<02:35,  8.18s/sample, domain=chemistry, model=command-a][A[A[A
+
+
+  rst:  75%|███████▌  | 30/40 [02:58<01:21,  8.18s/sample, domain=climate scie, model=mistral-large-2512][A[A[A
+
+
+  rst:  78%|███████▊  | 31/40 [03:27<00:52,  5.80s/sample, domain=climate scie, model=mistral-large-2512][A[A[A
+
+
+                                                                                                         [A[A[A
+
+
+  javascript:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  javascript:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gemini-2.5-flash][A[A[ASub-types:   6%|▌         | 2/33 [03:27<48:01, 92.95s/type]   
+
+
+  javascript:   2%|▎         | 1/40 [00:06<04:17,  6.59s/sample, domain=astronomy, model=gemini-2.5-flash][A[A[A
+
+
+  javascript:  25%|██▌       | 10/40 [00:06<03:17,  6.59s/sample, domain=biology, model=claude-sonnet-4.6][A[A[A
+
+
+  javascript:  28%|██▊       | 11/40 [00:59<02:36,  5.41s/sample, domain=biology, model=claude-sonnet-4.6][A[A[A
+
+
+  javascript:  50%|█████     | 20/40 [00:59<01:48,  5.41s/sample, domain=chemistry, model=gpt-5.4]        [A[A[A
+  plain:  52%|█████▎    | 21/40 [06:20<06:17, 19.85s/sample, domain=chemistry, model=claude-sonnet-4.6][A
+  plain:  75%|███████▌  | 30/40 [06:20<03:18, 19.85s/sample, domain=climate scie, model=gpt-5]         [A
+  plain:  78%|███████▊  | 31/40 [06:53<01:51, 12.39s/sample, domain=climate scie, model=gpt-5][A
+                                                                                              [A
+  typescript:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  typescript:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gpt-5.4][ASub-types:   9%|▉         | 3/33 [06:53<1:12:13, 144.45s/type]
+
+
+
+  latex:  52%|█████▎    | 21/40 [07:03<06:53, 21.76s/sample, domain=chemistry, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  latex:  75%|███████▌  | 30/40 [07:03<03:37, 21.76s/sample, domain=climate scie, model=gpt-5.4]       [A[A[A[A
+  typescript:   2%|▎         | 1/40 [00:11<07:18, 11.24s/sample, domain=astronomy, model=gpt-5.4][A
+  typescript:  25%|██▌       | 10/40 [00:11<05:37, 11.24s/sample, domain=biology, model=deepseek-v3.2][A
+
+
+
+  latex:  78%|███████▊  | 31/40 [07:22<01:55, 12.87s/sample, domain=climate scie, model=gpt-5.4][A[A[A[A
+
+
+
+                                                                                                [A[A[A[A
+
+
+
+  rust:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[A
+
+
+
+  rust:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=codestral-2508][A[A[A[ASub-types:  12%|█▏        | 4/33 [07:22<47:58, 99.26s/type]   
+
+
+  javascript:  52%|█████▎    | 21/40 [03:59<03:58, 12.56s/sample, domain=chemistry, model=gpt-5.4][A[A[A
+
+
+  javascript:  75%|███████▌  | 30/40 [03:59<02:05, 12.56s/sample, domain=climate scie, model=deepseek-v3.2][A[A[A
+
+
+
+  rust:   2%|▎         | 1/40 [00:03<02:14,  3.44s/sample, domain=astronomy, model=codestral-2508][A[A[A[A
+
+
+
+  rust:  25%|██▌       | 10/40 [00:03<01:43,  3.44s/sample, domain=biology, model=gemini-2.5-flash][A[A[A[A
+
+
+
+  rust:  28%|██▊       | 11/40 [00:26<01:07,  2.34s/sample, domain=biology, model=gemini-2.5-flash][A[A[A[A
+
+
+
+  rust:  50%|█████     | 20/40 [00:26<00:46,  2.34s/sample, domain=chemistry, model=deepseek-v3.2] [A[A[A[A
+
+
+  javascript:  78%|███████▊  | 31/40 [04:58<01:26,  9.61s/sample, domain=climate scie, model=deepseek-v3.2][A[A[A
+
+
+                                                                                                           [A[A[A
+
+
+  go:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  go:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gemini-2.5-flash][A[A[ASub-types:  15%|█▌        | 5/33 [08:26<40:15, 86.26s/type]
+
+
+  go:   2%|▎         | 1/40 [00:07<04:34,  7.04s/sample, domain=astronomy, model=gemini-2.5-flash][A[A[A
+
+
+  go:  25%|██▌       | 10/40 [00:07<03:31,  7.04s/sample, domain=biology, model=codestral-2508]   [A[A[A
+
+
+  go:  28%|██▊       | 11/40 [00:24<01:00,  2.07s/sample, domain=biology, model=codestral-2508][A[A[A
+
+
+  go:  50%|█████     | 20/40 [00:24<00:41,  2.07s/sample, domain=chemistry, model=codestral-2508][A[A[A
+
+
+  go:  52%|█████▎    | 21/40 [00:54<00:50,  2.64s/sample, domain=chemistry, model=codestral-2508][A[A[A
+
+
+  go:  75%|███████▌  | 30/40 [00:54<00:26,  2.64s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A
+
+
+  go:  78%|███████▊  | 31/40 [01:13<00:20,  2.28s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A
+
+
+                                                                                                     [A[A[A
+
+
+  java:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  java:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=codestral-2508][A[A[ASub-types:  18%|█▊        | 6/33 [09:39<36:51, 81.90s/type]
+
+
+  java:   2%|▎         | 1/40 [00:02<01:39,  2.56s/sample, domain=astronomy, model=codestral-2508][A[A[A
+
+
+  java:  25%|██▌       | 10/40 [00:02<01:16,  2.56s/sample, domain=biology, model=gpt-5.4]        [A[A[A
+
+
+  java:  28%|██▊       | 11/40 [00:37<01:38,  3.39s/sample, domain=biology, model=gpt-5.4][A[A[A
+
+
+  java:  50%|█████     | 20/40 [00:37<01:07,  3.39s/sample, domain=chemistry, model=gemini-2.5-flash][A[A[A
+
+
+  java:  52%|█████▎    | 21/40 [02:12<02:11,  6.94s/sample, domain=chemistry, model=gemini-2.5-flash][A[A[A
+
+
+  java:  52%|█████▎    | 21/40 [02:12<02:11,  6.94s/sample, domain=climate scie, model=codestral-2508][A[A[A
+
+
+  java:  55%|█████▌    | 22/40 [02:16<02:00,  6.71s/sample, domain=climate scie, model=codestral-2508][A[A[A
+
+
+  java:  78%|███████▊  | 31/40 [02:16<01:00,  6.71s/sample, domain=genetics, model=gpt-5.4]           [A[A[A
+
+
+  java:  80%|████████  | 32/40 [02:49<00:39,  4.93s/sample, domain=genetics, model=gpt-5.4][A[A[A
+
+
+                                                                                           [A[A[A
+
+
+  sql:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  sql:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=codestral-2508][A[A[ASub-types:  21%|██        | 7/33 [12:29<47:56, 110.64s/type]
+
+
+  sql:   2%|▎         | 1/40 [00:05<03:26,  5.30s/sample, domain=astronomy, model=codestral-2508][A[A[A
+
+
+  sql:  25%|██▌       | 10/40 [00:05<02:38,  5.30s/sample, domain=biology, model=claude-sonnet-4.6][A[A[A
+
+
+  sql:  28%|██▊       | 11/40 [01:02<02:46,  5.73s/sample, domain=biology, model=claude-sonnet-4.6][A[A[A
+
+
+  sql:  50%|█████     | 20/40 [01:02<01:54,  5.73s/sample, domain=chemistry, model=qwen3-235b-a22b][A[A[A
+
+
+  sql:  52%|█████▎    | 21/40 [03:55<03:54, 12.32s/sample, domain=chemistry, model=qwen3-235b-a22b][A[A[A
+
+
+  sql:  52%|█████▎    | 21/40 [03:55<03:54, 12.32s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A
+
+
+  sql:  55%|█████▌    | 22/40 [04:14<03:50, 12.81s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A
+
+
+  sql:  78%|███████▊  | 31/40 [04:14<01:55, 12.81s/sample, domain=genetics, model=gpt-5.4]            [A[A[A
+  typescript:  28%|██▊       | 11/40 [10:20<27:51, 57.65s/sample, domain=biology, model=deepseek-v3.2][A
+  typescript:  52%|█████▎    | 21/40 [10:20<18:15, 57.65s/sample, domain=chemistry, model=gpt-5.4]    [A
+
+
+  sql:  80%|████████  | 32/40 [05:05<01:10,  8.82s/sample, domain=genetics, model=gpt-5.4][A[A[A
+
+
+                                                                                          [A[A[A
+
+
+  shell:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  shell:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=deepseek-v3.2][A[A[ASub-types:  24%|██▍       | 8/33 [17:34<1:11:56, 172.68s/type]
+  typescript:  55%|█████▌    | 22/40 [12:15<08:53, 29.61s/sample, domain=chemistry, model=gpt-5.4][A
+  typescript:  78%|███████▊  | 31/40 [12:15<04:26, 29.61s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A
+  typescript:  80%|████████  | 32/40 [12:22<02:15, 16.99s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A
+                                                                                                                    [A
+  css:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  css:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=llama-3.3-70b-instruct][ASub-types:  27%|██▋       | 9/33 [19:15<1:00:03, 150.16s/type]
+  css:   2%|▎         | 1/40 [00:05<03:35,  5.52s/sample, domain=astronomy, model=llama-3.3-70b-instruct][A
+  css:  25%|██▌       | 10/40 [00:05<02:45,  5.52s/sample, domain=biology, model=gemini-2.5-flash]       [A
+  css:  28%|██▊       | 11/40 [00:17<00:43,  1.49s/sample, domain=biology, model=gemini-2.5-flash][A
+  css:  50%|█████     | 20/40 [00:17<00:29,  1.49s/sample, domain=chemistry, model=deepseek-v3.2] [A
+
+
+  shell:   2%|▎         | 1/40 [02:36<1:42:02, 156.99s/sample, domain=astronomy, model=deepseek-v3.2][A[A[A
+
+
+  shell:  25%|██▌       | 10/40 [02:36<1:18:29, 156.99s/sample, domain=biology, model=codestral-2508][A[A[A
+
+
+  shell:  28%|██▊       | 11/40 [02:49<05:32, 11.46s/sample, domain=biology, model=codestral-2508]   [A[A[A
+
+
+  shell:  28%|██▊       | 11/40 [02:49<05:32, 11.46s/sample, domain=chemistry, model=codestral-2508][A[A[A
+
+
+  shell:  30%|███       | 12/40 [03:05<05:34, 11.95s/sample, domain=chemistry, model=codestral-2508][A[A[A
+
+
+  shell:  52%|█████▎    | 21/40 [03:05<03:47, 11.95s/sample, domain=climate scie, model=gemini-2.5-flash][A[A[A
+
+
+  shell:  55%|█████▌    | 22/40 [03:09<01:24,  4.72s/sample, domain=climate scie, model=gemini-2.5-flash][A[A[A
+
+
+  shell:  78%|███████▊  | 31/40 [03:09<00:42,  4.72s/sample, domain=genetics, model=qwen3-235b-a22b]     [A[A[A
+
+
+  shell:  80%|████████  | 32/40 [04:17<00:45,  5.70s/sample, domain=genetics, model=qwen3-235b-a22b][A[A[A
+
+
+                                                                                                    [A[A[A
+
+
+  yaml:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  yaml:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gpt-5.4][A[A[ASub-types:  30%|███       | 10/33 [21:52<58:21, 152.22s/type] 
+
+
+  yaml:   2%|▎         | 1/40 [00:11<07:14, 11.14s/sample, domain=astronomy, model=gpt-5.4][A[A[A
+
+
+  yaml:  25%|██▌       | 10/40 [00:11<05:34, 11.14s/sample, domain=biology, model=llama-3.3-70b-instruct][A[A[A
+
+
+  yaml:  28%|██▊       | 11/40 [00:19<00:43,  1.50s/sample, domain=biology, model=llama-3.3-70b-instruct][A[A[A
+
+
+  yaml:  50%|█████     | 20/40 [00:19<00:29,  1.50s/sample, domain=chemistry, model=qwen3-235b-a22b]     [A[A[A
+
+
+  yaml:  52%|█████▎    | 21/40 [03:26<03:35, 11.33s/sample, domain=chemistry, model=qwen3-235b-a22b][A[A[A
+
+
+  yaml:  52%|█████▎    | 21/40 [03:26<03:35, 11.33s/sample, domain=climate scie, model=codestral-2508][A[A[A
+
+
+  yaml:  55%|█████▌    | 22/40 [03:30<03:13, 10.77s/sample, domain=climate scie, model=codestral-2508][A[A[A
+
+
+  yaml:  78%|███████▊  | 31/40 [03:30<01:36, 10.77s/sample, domain=genetics, model=llama-3.3-70b-instruct][A[A[A
+
+  python:  28%|██▊       | 11/40 [22:42<1:01:26, 127.13s/sample, domain=biology, model=deepseek-v3.2][A[A
+
+  python:  28%|██▊       | 11/40 [22:42<1:01:26, 127.13s/sample, domain=chemistry, model=claude-sonnet-4.6][A[A
+
+
+  yaml:  80%|████████  | 32/40 [03:37<00:44,  5.54s/sample, domain=genetics, model=llama-3.3-70b-instruct][A[A[A
+
+
+                                                                                                          [A[A[A
+
+
+  toml:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  toml:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=llama-3.3-70b-instruct][A[A[ASub-types:  33%|███▎      | 11/33 [25:29<1:03:06, 172.10s/type]
+
+
+  toml:   2%|▎         | 1/40 [00:05<03:32,  5.46s/sample, domain=astronomy, model=llama-3.3-70b-instruct][A[A[A
+
+
+  toml:  25%|██▌       | 10/40 [00:05<02:43,  5.46s/sample, domain=biology, model=llama-3.3-70b-instruct] [A[A[A
+
+
+  toml:  28%|██▊       | 11/40 [00:12<00:29,  1.01s/sample, domain=biology, model=llama-3.3-70b-instruct][A[A[A
+
+
+  toml:  50%|█████     | 20/40 [00:12<00:20,  1.01s/sample, domain=chemistry, model=gemini-2.5-flash]    [A[A[A
+
+
+  toml:  52%|█████▎    | 21/40 [00:47<00:45,  2.42s/sample, domain=chemistry, model=gemini-2.5-flash][A[A[A
+
+
+  toml:  78%|███████▊  | 31/40 [00:47<00:21,  2.42s/sample, domain=climate scie, model=claude-sonnet-4.6][A[A[A
+
+
+  toml:  80%|████████  | 32/40 [01:02<00:15,  1.92s/sample, domain=climate scie, model=claude-sonnet-4.6][A[A[A
+
+
+                                                                                                         [A[A[A
+
+
+  ini:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  ini:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=codestral-2508][A[A[ASub-types:  36%|███▋      | 12/33 [26:31<48:32, 138.67s/type]  
+
+
+  ini:   2%|▎         | 1/40 [00:04<03:06,  4.78s/sample, domain=astronomy, model=codestral-2508][A[A[A
+
+
+  ini:  25%|██▌       | 10/40 [00:04<02:23,  4.78s/sample, domain=biology, model=claude-sonnet-4.6][A[A[A
+
+
+  ini:  28%|██▊       | 11/40 [01:19<03:32,  7.31s/sample, domain=biology, model=claude-sonnet-4.6][A[A[A
+
+
+  ini:  50%|█████     | 20/40 [01:19<02:26,  7.31s/sample, domain=chemistry, model=deepseek-v3.2]  [A[A[A
+
+  python:  30%|███       | 12/40 [26:26<1:04:39, 138.56s/sample, domain=chemistry, model=claude-sonnet-4.6][A[A
+
+  python:  52%|█████▎    | 21/40 [26:26<43:52, 138.56s/sample, domain=climate scie, model=gemini-2.5-flash][A[A
+
+  python:  55%|█████▌    | 22/40 [26:31<15:35, 51.99s/sample, domain=climate scie, model=gemini-2.5-flash] [A[A
+
+  python:  78%|███████▊  | 31/40 [26:31<07:47, 51.99s/sample, domain=genetics, model=gemini-2.5-flash]    [A[A
+
+  python:  80%|████████  | 32/40 [26:47<03:45, 28.17s/sample, domain=genetics, model=gemini-2.5-flash][A[A
+
+                                                                                                      [A[A
+
+  dockerfile:   0%|          | 0/40 [00:00<?, ?sample/s][A[A
+
+  dockerfile:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gemini-2.5-flash][A[ASub-types:  39%|███▉      | 13/33 [29:32<50:25, 151.27s/type]
+
+  dockerfile:   2%|▎         | 1/40 [00:03<02:30,  3.86s/sample, domain=astronomy, model=gemini-2.5-flash][A[A
+
+  dockerfile:  25%|██▌       | 10/40 [00:03<01:55,  3.86s/sample, domain=biology, model=claude-sonnet-4.6][A[A
+
+  dockerfile:  28%|██▊       | 11/40 [01:09<03:06,  6.43s/sample, domain=biology, model=claude-sonnet-4.6][A[A
+
+  dockerfile:  50%|█████     | 20/40 [01:09<02:08,  6.43s/sample, domain=chemistry, model=deepseek-v3.2]  [A[A
+
+
+
+  rust:  52%|█████▎    | 21/40 [27:44<29:58, 94.68s/sample, domain=chemistry, model=deepseek-v3.2][A[A[A[A
+
+
+
+  rust:  52%|█████▎    | 21/40 [27:44<29:58, 94.68s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  rust:  55%|█████▌    | 22/40 [28:14<26:55, 89.77s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  rust:  55%|█████▌    | 22/40 [28:14<26:55, 89.77s/sample, domain=genetics, model=llama-3.3-70b-instruct][A[A[A[A
+
+
+
+  rust:  57%|█████▊    | 23/40 [28:27<23:19, 82.34s/sample, domain=genetics, model=llama-3.3-70b-instruct][A[A[A[A
+
+
+
+  rust:  80%|████████  | 32/40 [28:27<10:58, 82.34s/sample, domain=marine biolo, model=qwen3-235b-a22b]   [A[A[A[A
+
+
+
+  rust:  82%|████████▎ | 33/40 [29:15<04:20, 37.20s/sample, domain=marine biolo, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  rust:  82%|████████▎ | 33/40 [29:15<04:20, 37.20s/sample, domain=mathematics, model=gemini-2.5-flash][A[A[A[A
+
+
+
+  rust:  85%|████████▌ | 34/40 [29:20<03:28, 34.74s/sample, domain=mathematics, model=gemini-2.5-flash][A[A[A[A
+
+
+
+                                                                                                       [A[A[A[A
+
+
+
+  makefile:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[A
+
+
+
+  makefile:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=codestral-2508][A[A[A[ASub-types:  42%|████▏     | 14/33 [36:43<1:14:40, 235.79s/type]
+
+
+
+  makefile:   2%|▎         | 1/40 [00:03<02:01,  3.11s/sample, domain=astronomy, model=codestral-2508][A[A[A[A
+
+
+
+  makefile:  25%|██▌       | 10/40 [00:03<01:33,  3.11s/sample, domain=biology, model=codestral-2508] [A[A[A[A
+
+
+
+  makefile:  28%|██▊       | 11/40 [00:16<00:42,  1.45s/sample, domain=biology, model=codestral-2508][A[A[A[A
+
+
+
+  makefile:  50%|█████     | 20/40 [00:16<00:29,  1.45s/sample, domain=chemistry, model=gpt-5.4]     [A[A[A[A
+  css:  52%|█████▎    | 21/40 [19:00<20:32, 64.86s/sample, domain=chemistry, model=deepseek-v3.2][A
+  css:  52%|█████▎    | 21/40 [19:00<20:32, 64.86s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A
+  css:  55%|█████▌    | 22/40 [19:34<18:45, 62.51s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A
+  css:  78%|███████▊  | 31/40 [19:34<09:22, 62.51s/sample, domain=genetics, model=codestral-2508]            [A
+  css:  80%|████████  | 32/40 [19:48<04:06, 30.82s/sample, domain=genetics, model=codestral-2508][A
+                                                                                                 [A
+  html:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  html:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=claude-sonnet-4.6][ASub-types:  45%|████▌     | 15/33 [39:04<1:02:12, 207.34s/type]
+  html:   2%|▎         | 1/40 [00:24<15:38, 24.07s/sample, domain=astronomy, model=claude-sonnet-4.6][A
+  html:  25%|██▌       | 10/40 [00:24<12:01, 24.07s/sample, domain=biology, model=claude-sonnet-4.6] [A
+
+
+
+  makefile:  52%|█████▎    | 21/40 [03:45<03:59, 12.59s/sample, domain=chemistry, model=gpt-5.4][A[A[A[A
+
+
+
+  makefile:  75%|███████▌  | 30/40 [03:45<02:05, 12.59s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A[A
+  html:  28%|██▊       | 11/40 [01:35<04:00,  8.29s/sample, domain=biology, model=claude-sonnet-4.6][A
+  html:  50%|█████     | 20/40 [01:35<02:45,  8.29s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A
+
+
+
+  makefile:  78%|███████▊  | 31/40 [04:19<01:16,  8.46s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+                                                                                                           [A[A[A[A
+
+
+
+  xml:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[A
+
+
+
+  xml:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=llama-3.3-70b-instruct][A[A[A[ASub-types:  48%|████▊     | 16/33 [41:03<51:10, 180.60s/type]  
+
+
+
+  xml:   2%|▎         | 1/40 [00:27<17:37, 27.12s/sample, domain=astronomy, model=llama-3.3-70b-instruct][A[A[A[A
+
+
+
+  xml:  25%|██▌       | 10/40 [00:27<13:33, 27.12s/sample, domain=biology, model=qwen3-235b-a22b]        [A[A[A[A
+
+
+
+  xml:  28%|██▊       | 11/40 [01:06<02:39,  5.49s/sample, domain=biology, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  xml:  50%|█████     | 20/40 [01:06<01:49,  5.49s/sample, domain=chemistry, model=codestral-2508][A[A[A[A
+
+
+
+  xml:  52%|█████▎    | 21/40 [01:32<01:12,  3.80s/sample, domain=chemistry, model=codestral-2508][A[A[A[A
+
+
+
+  xml:  75%|███████▌  | 30/40 [01:32<00:37,  3.80s/sample, domain=climate scie, model=deepseek-v3.2][A[A[A[A
+  html:  52%|█████▎    | 21/40 [03:37<03:19, 10.50s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A
+  html:  75%|███████▌  | 30/40 [03:37<01:44, 10.50s/sample, domain=climate scie, model=qwen3-235b-a22b]    [A
+
+
+
+  xml:  78%|███████▊  | 31/40 [01:53<00:27,  3.05s/sample, domain=climate scie, model=deepseek-v3.2][A[A[A[A
+
+
+
+                                                                                                    [A[A[A[A
+
+
+
+  sgml:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[A
+
+
+
+  sgml:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=deepseek-v3.2][A[A[A[ASub-types:  52%|█████▏    | 17/33 [42:56<42:46, 160.41s/type]
+  html:  78%|███████▊  | 31/40 [03:59<01:00,  6.77s/sample, domain=climate scie, model=qwen3-235b-a22b][A
+                                                                                                       [A
+  csv:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  csv:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=claude-sonnet-4.6][ASub-types:  55%|█████▍    | 18/33 [43:04<28:37, 114.48s/type]
+
+
+
+  sgml:   2%|▎         | 1/40 [00:34<22:37, 34.80s/sample, domain=astronomy, model=deepseek-v3.2][A[A[A[A
+
+
+
+  sgml:  25%|██▌       | 10/40 [00:34<17:24, 34.80s/sample, domain=biology, model=gemini-2.5-flash][A[A[A[A
+
+
+
+  sgml:  28%|██▊       | 11/40 [00:54<01:59,  4.11s/sample, domain=biology, model=gemini-2.5-flash][A[A[A[A
+
+
+
+  sgml:  50%|█████     | 20/40 [00:54<01:22,  4.11s/sample, domain=chemistry, model=deepseek-v3.2] [A[A[A[A
+  csv:   2%|▎         | 1/40 [00:56<36:29, 56.13s/sample, domain=astronomy, model=claude-sonnet-4.6][A
+  csv:  25%|██▌       | 10/40 [00:56<28:03, 56.13s/sample, domain=biology, model=claude-sonnet-4.6] [A
+
+
+  ini:  52%|█████▎    | 21/40 [19:08<20:20, 64.23s/sample, domain=chemistry, model=deepseek-v3.2][A[A[A
+
+
+  ini:  75%|███████▌  | 30/40 [19:08<10:42, 64.23s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A
+
+
+  ini:  78%|███████▊  | 31/40 [19:33<05:28, 36.48s/sample, domain=climate scie, model=qwen3-235b-a22b][A[A[A
+
+
+                                                                                                      [A[A[A
+
+
+  tsv:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A
+
+
+  tsv:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=claude-sonnet-4.6][A[A[ASub-types:  58%|█████▊    | 19/33 [46:05<31:22, 134.48s/type]
+  csv:  28%|██▊       | 11/40 [03:08<07:45, 16.06s/sample, domain=biology, model=claude-sonnet-4.6][A
+  csv:  50%|█████     | 20/40 [03:08<05:21, 16.06s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A
+
+
+  tsv:   2%|▎         | 1/40 [00:58<37:43, 58.04s/sample, domain=astronomy, model=claude-sonnet-4.6][A[A[A
+
+
+  tsv:  25%|██▌       | 10/40 [00:58<29:01, 58.04s/sample, domain=biology, model=gpt-5.4]           [A[A[A
+
+
+
+  sgml:  52%|█████▎    | 21/40 [04:22<04:19, 13.64s/sample, domain=chemistry, model=deepseek-v3.2][A[A[A[A
+
+
+
+  sgml:  75%|███████▌  | 30/40 [04:22<02:16, 13.64s/sample, domain=climate scie, model=gemini-2.5-flash][A[A[A[A
+
+
+
+  sgml:  78%|███████▊  | 31/40 [04:28<01:10,  7.81s/sample, domain=climate scie, model=gemini-2.5-flash][A[A[A[A
+
+
+
+                                                                                                        [A[A[A[A
+
+
+
+  pipe_table:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[ASub-types:  61%|██████    | 20/33 [47:25<25:36, 118.19s/type]
+
+
+
+  pipe_table:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=deepseek-v3.2][A[A[A[A
+
+
+
+  pipe_table:   2%|▎         | 1/40 [00:28<18:25, 28.36s/sample, domain=astronomy, model=deepseek-v3.2][A[A[A[A
+
+
+
+  pipe_table:  25%|██▌       | 10/40 [00:28<14:10, 28.36s/sample, domain=biology, model=gemini-2.5-flash][A[A[A[A
+
+
+  tsv:  28%|██▊       | 11/40 [01:51<04:14,  8.78s/sample, domain=biology, model=gpt-5.4][A[A[A
+
+
+  tsv:  50%|█████     | 20/40 [01:51<02:55,  8.78s/sample, domain=chemistry, model=mistral-large-2512][A[A[A
+
+
+
+  pipe_table:  28%|██▊       | 11/40 [01:04<02:32,  5.27s/sample, domain=biology, model=gemini-2.5-flash][A[A[A[A
+
+
+
+  pipe_table:  50%|█████     | 20/40 [01:04<01:45,  5.27s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A[A[A[A
+  csv:  52%|█████▎    | 21/40 [06:22<05:41, 17.99s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A
+  csv:  75%|███████▌  | 30/40 [06:22<02:59, 17.99s/sample, domain=climate scie, model=gemini-2.5-flash]   [A
+  csv:  78%|███████▊  | 31/40 [06:31<01:32, 10.30s/sample, domain=climate scie, model=gemini-2.5-flash][A
+                                                                                                       [A
+  fixed_width:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  fixed_width:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=qwen3-235b-a22b][ASub-types:  64%|██████▎   | 21/33 [49:36<24:23, 121.93s/type]
+  fixed_width:   2%|▎         | 1/40 [01:24<55:11, 84.90s/sample, domain=astronomy, model=qwen3-235b-a22b][A
+  fixed_width:  25%|██▌       | 10/40 [01:24<42:27, 84.90s/sample, domain=biology, model=qwen3-235b-a22b] [A
+
+
+
+  pipe_table:  52%|█████▎    | 21/40 [05:02<05:00, 15.82s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A[A[A[A
+
+
+
+  pipe_table:  75%|███████▌  | 30/40 [05:02<02:38, 15.82s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A[A[A[A
+
+
+
+  pipe_table:  78%|███████▊  | 31/40 [05:14<01:23,  9.24s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A[A[A[A
+
+
+
+                                                                                                                    [A[A[A[A
+
+
+
+  json:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[A
+
+
+
+  json:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gemini-2.5-flash][A[A[A[ASub-types:  67%|██████▋   | 22/33 [52:39<25:44, 140.38s/type]
+
+
+
+  json:   2%|▎         | 1/40 [00:05<03:45,  5.78s/sample, domain=astronomy, model=gemini-2.5-flash][A[A[A[A
+
+
+
+  json:  25%|██▌       | 10/40 [00:05<02:53,  5.78s/sample, domain=biology, model=qwen3-235b-a22b]  [A[A[A[A
+  fixed_width:  28%|██▊       | 11/40 [03:10<07:26, 15.38s/sample, domain=biology, model=qwen3-235b-a22b][A
+  fixed_width:  50%|█████     | 20/40 [03:10<05:07, 15.38s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A
+  fixed_width:  52%|█████▎    | 21/40 [03:52<02:51,  9.03s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A
+  fixed_width:  75%|███████▌  | 30/40 [03:52<01:30,  9.03s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A
+  fixed_width:  78%|███████▊  | 31/40 [04:07<00:50,  5.62s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A
+                                                                                                                     [A
+  jsonl:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  jsonl:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=claude-sonnet-4.6][ASub-types:  70%|██████▉   | 23/33 [53:43<19:34, 117.45s/type]
+
+
+
+  json:  28%|██▊       | 11/40 [01:13<03:14,  6.72s/sample, domain=biology, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  json:  50%|█████     | 20/40 [01:13<02:14,  6.72s/sample, domain=chemistry, model=qwen3-235b-a22b][A[A[A[A
+  jsonl:   2%|▎         | 1/40 [00:20<13:27, 20.69s/sample, domain=astronomy, model=claude-sonnet-4.6][A
+  jsonl:  25%|██▌       | 10/40 [00:20<10:20, 20.69s/sample, domain=biology, model=gemini-2.5-flash]  [A
+  jsonl:  28%|██▊       | 11/40 [00:35<01:18,  2.72s/sample, domain=biology, model=gemini-2.5-flash][A
+  jsonl:  50%|█████     | 20/40 [00:35<00:54,  2.72s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A
+  jsonl:  52%|█████▎    | 21/40 [00:54<00:42,  2.24s/sample, domain=chemistry, model=llama-3.3-70b-instruct][A
+  jsonl:  75%|███████▌  | 30/40 [00:54<00:22,  2.24s/sample, domain=climate scie, model=qwen3-235b-a22b]    [A
+
+
+
+  json:  52%|█████▎    | 21/40 [02:37<02:26,  7.70s/sample, domain=chemistry, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  json:  75%|███████▌  | 30/40 [02:37<01:16,  7.70s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A[A[A[A
+  jsonl:  78%|███████▊  | 31/40 [01:39<00:29,  3.27s/sample, domain=climate scie, model=qwen3-235b-a22b][A
+                                                                                                        [A
+  key_value:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  key_value:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=deepseek-v3.2][ASub-types:  73%|███████▎  | 24/33 [55:22<16:48, 112.02s/type]
+
+
+
+  json:  78%|███████▊  | 31/40 [02:52<00:44,  4.90s/sample, domain=climate scie, model=llama-3.3-70b-instruct][A[A[A[A
+
+
+
+                                                                                                              [A[A[A[A
+
+
+
+  log_lines:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[ASub-types:  76%|███████▌  | 25/33 [55:32<10:49, 81.20s/type] 
+
+
+
+  log_lines:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  log_lines:   2%|▎         | 1/40 [00:29<19:15, 29.62s/sample, domain=astronomy, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  log_lines:  25%|██▌       | 10/40 [00:29<14:48, 29.62s/sample, domain=biology, model=deepseek-v3.2]     [A[A[A[A
+  key_value:   2%|▎         | 1/40 [01:21<52:40, 81.03s/sample, domain=astronomy, model=deepseek-v3.2][A
+  key_value:  25%|██▌       | 10/40 [01:21<40:30, 81.03s/sample, domain=biology, model=mistral-large-2512][A
+
+
+
+  log_lines:  28%|██▊       | 11/40 [02:20<05:58, 12.35s/sample, domain=biology, model=deepseek-v3.2][A[A[A[A
+
+
+
+  log_lines:  50%|█████     | 20/40 [02:20<04:06, 12.35s/sample, domain=chemistry, model=deepseek-v3.2][A[A[A[A
+  key_value:  28%|██▊       | 11/40 [02:46<06:26, 13.32s/sample, domain=biology, model=mistral-large-2512][A
+  key_value:  28%|██▊       | 11/40 [02:46<06:26, 13.32s/sample, domain=chemistry, model=gemini-2.5-flash][A
+
+  dockerfile:  52%|█████▎    | 21/40 [29:45<31:55, 100.84s/sample, domain=chemistry, model=deepseek-v3.2][A[A
+
+  dockerfile:  75%|███████▌  | 30/40 [29:45<16:48, 100.84s/sample, domain=climate scie, model=deepseek-v3.2][A[A
+  key_value:  30%|███       | 12/40 [04:14<10:17, 22.06s/sample, domain=chemistry, model=gemini-2.5-flash][A
+  key_value:  68%|██████▊   | 27/40 [04:14<04:46, 22.06s/sample, domain=climate scie, model=mistral-large-2512][A
+  key_value:  68%|██████▊   | 27/40 [04:31<04:46, 22.06s/sample, domain=genetics, model=llama-3.3-70b-instruct][A
+
+  dockerfile:  78%|███████▊  | 31/40 [30:33<08:38, 57.65s/sample, domain=climate scie, model=deepseek-v3.2] [A[A
+
+                                                                                                           [A[A
+
+  pdf_dump:   0%|          | 0/40 [00:00<?, ?sample/s][A[A
+
+  pdf_dump:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gpt-5.4-nano][A[ASub-types:  79%|███████▉  | 26/33 [1:00:05<16:11, 138.81s/type]
+  key_value:  70%|███████   | 28/40 [04:48<01:30,  7.52s/sample, domain=genetics, model=llama-3.3-70b-instruct][A
+  key_value:  92%|█████████▎| 37/40 [04:48<00:22,  7.52s/sample, domain=marine biolo, model=llama-3.3-70b-instruct][A
+
+  pdf_dump:   2%|▎         | 1/40 [00:07<04:40,  7.20s/sample, domain=astronomy, model=gpt-5.4-nano][A[A
+
+  pdf_dump:  25%|██▌       | 10/40 [00:07<03:35,  7.20s/sample, domain=biology, model=llama-3.1-8b-instruct][A[A
+  key_value:  95%|█████████▌| 38/40 [05:00<00:10,  5.05s/sample, domain=marine biolo, model=llama-3.3-70b-instruct][A
+                                                                                                                   [A
+  ocr_garbage:   0%|          | 0/40 [00:00<?, ?sample/s][A
+  ocr_garbage:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gpt-5][ASub-types:  82%|████████▏ | 27/33 [1:00:23<10:15, 102.64s/type]
+  ocr_garbage:   2%|▎         | 1/40 [00:55<36:04, 55.49s/sample, domain=astronomy, model=gpt-5][A
+  ocr_garbage:  25%|██▌       | 10/40 [00:55<27:44, 55.49s/sample, domain=biology, model=phi-4] [A
+
+  pdf_dump:  28%|██▊       | 11/40 [01:14<03:17,  6.80s/sample, domain=biology, model=llama-3.1-8b-instruct][A[A
+
+  pdf_dump:  50%|█████     | 20/40 [01:14<02:16,  6.80s/sample, domain=chemistry, model=gpt-5.4-nano]       [A[A
+  ocr_garbage:  28%|██▊       | 11/40 [01:16<02:41,  5.57s/sample, domain=biology, model=phi-4][A
+  ocr_garbage:  50%|█████     | 20/40 [01:16<01:51,  5.57s/sample, domain=chemistry, model=gpt-5][A
+
+
+
+  log_lines:  52%|█████▎    | 21/40 [06:20<06:01, 19.01s/sample, domain=chemistry, model=deepseek-v3.2][A[A[A[A
+
+
+
+  log_lines:  75%|███████▌  | 30/40 [06:20<03:10, 19.01s/sample, domain=climate scie, model=gpt-5.4]   [A[A[A[A
+
+
+
+  log_lines:  78%|███████▊  | 31/40 [16:43<05:46, 38.45s/sample, domain=climate scie, model=gpt-5.4][A[A[A[A
+
+
+
+                                                                                                    [A[A[A[A
+
+
+
+  boilerplate:   0%|          | 0/40 [00:00<?, ?sample/s][A[A[A[A
+
+
+
+  boilerplate:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gpt-5.4][A[A[A[ASub-types:  85%|████████▍ | 28/33 [1:12:15<23:47, 285.48s/type]
+
+
+
+  boilerplate:   2%|▎         | 1/40 [00:26<16:54, 26.02s/sample, domain=astronomy, model=gpt-5.4][A[A[A[A
+
+
+
+  boilerplate:  25%|██▌       | 10/40 [00:26<13:00, 26.02s/sample, domain=biology, model=llama-3.1-8b-instruct][A[A[A[A
+
+  pdf_dump:  52%|█████▎    | 21/40 [12:50<13:30, 42.66s/sample, domain=chemistry, model=gpt-5.4-nano][A[A
+
+  pdf_dump:  75%|███████▌  | 30/40 [12:50<07:06, 42.66s/sample, domain=climate scie, model=deepseek-r1-0528][A[A
+
+  pdf_dump:  78%|███████▊  | 31/40 [13:07<03:38, 24.26s/sample, domain=climate scie, model=deepseek-r1-0528][A[A
+
+                                                                                                            [A[A
+
+  skip:   0%|          | 0/40 [00:00<?, ?sample/s][A[A
+
+  skip:   0%|          | 0/40 [00:00<?, ?sample/s, domain=astronomy, model=gpt-5.4][A[ASub-types:  88%|████████▊ | 29/33 [1:13:12<14:27, 216.94s/type]
+
+  skip:   2%|▎         | 1/40 [00:06<04:08,  6.36s/sample, domain=astronomy, model=gpt-5.4][A[A
+
+  skip:  25%|██▌       | 10/40 [00:06<03:10,  6.36s/sample, domain=biology, model=claude-sonnet-4.6][A[A
+  ocr_garbage:  52%|█████▎    | 21/40 [16:56<17:46, 56.13s/sample, domain=chemistry, model=gpt-5][A
+  ocr_garbage:  82%|████████▎ | 33/40 [16:56<06:32, 56.13s/sample, domain=climate scie, model=deepseek-r1-0528][A
+
+
+
+  boilerplate:  28%|██▊       | 11/40 [05:16<13:56, 28.86s/sample, domain=biology, model=llama-3.1-8b-instruct][A[A[A[A
+
+
+
+  boilerplate:  28%|██▊       | 11/40 [05:16<13:56, 28.86s/sample, domain=chemistry, model=claude-sonnet-4.6]  [A[A[A[A
+  ocr_garbage:  85%|████████▌ | 34/40 [17:12<02:47, 27.87s/sample, domain=climate scie, model=deepseek-r1-0528][A
+                                                                                                               [ASub-types:  91%|█████████ | 30/33 [1:17:36<11:32, 230.91s/type]
+
+  skip:  28%|██▊       | 11/40 [04:45<12:48, 26.49s/sample, domain=biology, model=claude-sonnet-4.6][A[A
+
+  skip:  50%|█████     | 20/40 [04:45<08:49, 26.49s/sample, domain=chemistry, model=gpt-5.4]        [A[A
+
+  skip:  52%|█████▎    | 21/40 [05:32<04:26, 14.03s/sample, domain=chemistry, model=gpt-5.4][A[A
+
+  skip:  75%|███████▌  | 30/40 [05:32<02:20, 14.03s/sample, domain=climate scie, model=phi-4][A[A
+
+  skip:  78%|███████▊  | 31/40 [05:38<01:11,  7.99s/sample, domain=climate scie, model=phi-4][A[A
+
+                                                                                             [A[ASub-types:  94%|█████████▍| 31/33 [1:18:50<06:08, 184.04s/type]
+
+
+
+  boilerplate:  30%|███       | 12/40 [09:20<25:18, 54.23s/sample, domain=chemistry, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  boilerplate:  52%|█████▎    | 21/40 [09:20<17:10, 54.23s/sample, domain=climate scie, model=phi-4]         [A[A[A[A
+
+
+
+  boilerplate:  55%|█████▌    | 22/40 [09:38<06:23, 21.33s/sample, domain=climate scie, model=phi-4][A[A[A[A
+
+
+
+  boilerplate:  55%|█████▌    | 22/40 [09:38<06:23, 21.33s/sample, domain=genetics, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  boilerplate:  57%|█████▊    | 23/40 [11:48<08:34, 30.28s/sample, domain=genetics, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  boilerplate:  57%|█████▊    | 23/40 [11:48<08:34, 30.28s/sample, domain=marine biolo, model=deepseek-r1-0528][A[A[A[A
+
+
+
+  boilerplate:  60%|██████    | 24/40 [14:10<11:11, 41.99s/sample, domain=marine biolo, model=deepseek-r1-0528][A[A[A[A
+
+
+
+  boilerplate:  82%|████████▎ | 33/40 [14:10<04:53, 41.99s/sample, domain=mathematics, model=gpt-5]            [A[A[A[A
+
+
+
+  boilerplate:  85%|████████▌ | 34/40 [14:58<01:57, 19.66s/sample, domain=mathematics, model=gpt-5][A[A[A[A
+
+
+
+                                                                                                   [A[A[A[ASub-types:  97%|█████████▋| 32/33 [1:27:14<04:39, 279.80s/type]
+
+
+  tsv:  52%|█████▎    | 21/40 [51:09<54:45, 172.90s/sample, domain=chemistry, model=mistral-large-2512][A[A[A
+
+
+  tsv:  75%|███████▌  | 30/40 [51:09<28:49, 172.90s/sample, domain=climate scie, model=gemini-2.5-flash][A[A[A
+
+
+  tsv:  78%|███████▊  | 31/40 [51:18<14:20, 95.59s/sample, domain=climate scie, model=gemini-2.5-flash] [A[A[A
+
+
+                                                                                                       [A[A[ASub-types: 100%|██████████| 33/33 [1:37:24<00:00, 378.89s/type]Sub-types: 100%|██████████| 33/33 [1:37:24<00:00, 177.10s/type]
+
+Generating boundary samples (113/pair, 6 pairs, 4 workers):
+Pairs:   0%|          | 0/6 [00:00<?, ?pair/s]
+  prose/code:   0%|          | 0/113 [00:00<?, ?sample/s][A
+  prose/code:   0%|          | 0/113 [00:00<?, ?sample/s, label=prose, model=gpt-5.4][A
+
+  prose/structured:   0%|          | 0/113 [00:00<?, ?sample/s][A[A
+
+  prose/structured:   0%|          | 0/113 [00:00<?, ?sample/s, label=prose, model=gpt-5][A[A
+
+
+  prose/artifact:   0%|          | 0/113 [00:00<?, ?sample/s][A[A[A
+
+
+
+  code/structured:   0%|          | 0/113 [00:00<?, ?sample/s][A[A[A[A
+
+
+  prose/artifact:   0%|          | 0/113 [00:00<?, ?sample/s, label=prose, model=deepseek-v3.2][A[A[A
+
+
+
+  code/structured:   0%|          | 0/113 [00:00<?, ?sample/s, label=code, model=gpt-5.4][A[A[A[A
+
+
+
+  code/structured:   1%|          | 1/113 [00:09<17:56,  9.61s/sample, label=code, model=gpt-5.4][A[A[A[A
+
+
+
+  code/structured:   9%|▉         | 10/113 [00:09<16:30,  9.61s/sample, label=code, model=mistral-large-2512][A[A[A[A
+  prose/code:   1%|          | 1/113 [00:17<32:50, 17.59s/sample, label=prose, model=gpt-5.4][A
+  prose/code:   9%|▉         | 10/113 [00:17<30:11, 17.59s/sample, label=prose, model=llama-3.3-70b-instruct][A
+  prose/code:  10%|▉         | 11/113 [00:41<05:46,  3.40s/sample, label=prose, model=llama-3.3-70b-instruct][A
+  prose/code:  18%|█▊        | 20/113 [00:41<05:16,  3.40s/sample, label=prose, model=gpt-5]                 [A
+
+
+  prose/artifact:   1%|          | 1/113 [00:41<1:18:05, 41.84s/sample, label=prose, model=deepseek-v3.2][A[A[A
+
+
+  prose/artifact:   9%|▉         | 10/113 [00:41<1:11:49, 41.84s/sample, label=prose, model=qwen3-235b-a22b][A[A[A
+
+  prose/structured:   1%|          | 1/113 [00:42<1:19:46, 42.74s/sample, label=prose, model=gpt-5][A[A
+
+  prose/structured:   9%|▉         | 10/113 [00:42<1:13:21, 42.74s/sample, label=prose, model=llama-3.3-70b-instruct][A[A
+
+
+  prose/artifact:  10%|▉         | 11/113 [02:03<17:37, 10.37s/sample, label=prose, model=qwen3-235b-a22b]  [A[A[A
+
+
+  prose/artifact:  18%|█▊        | 20/113 [02:03<16:04, 10.37s/sample, label=prose, model=deepseek-v3.2]  [A[A[A
+
+
+
+  code/structured:  10%|▉         | 11/113 [02:28<23:06, 13.59s/sample, label=code, model=mistral-large-2512][A[A[A[A
+
+
+
+  code/structured:  18%|█▊        | 20/113 [02:28<21:03, 13.59s/sample, label=code, model=deepseek-v3.2]     [A[A[A[A
+
+  prose/structured:  10%|▉         | 11/113 [03:12<28:32, 16.79s/sample, label=prose, model=llama-3.3-70b-instruct]  [A[A
+
+  prose/structured:  18%|█▊        | 20/113 [03:12<26:01, 16.79s/sample, label=prose, model=mistral-large-2512]    [A[A
+  prose/code:  19%|█▊        | 21/113 [04:04<20:02, 13.07s/sample, label=prose, model=gpt-5][A
+  prose/code:  27%|██▋       | 30/113 [04:04<18:05, 13.07s/sample, label=prose, model=llama-3.3-70b-instruct][A
+  prose/code:  27%|██▋       | 31/113 [04:10<10:10,  7.44s/sample, label=prose, model=llama-3.3-70b-instruct][A
+  prose/code:  35%|███▌      | 40/113 [04:10<09:03,  7.44s/sample, label=prose, model=mistral-large-2512]    [A
+  prose/code:  36%|███▋      | 41/113 [06:12<11:11,  9.33s/sample, label=prose, model=mistral-large-2512][A
+  prose/code:  36%|███▋      | 41/113 [06:12<11:11,  9.33s/sample, label=prose, model=gpt-5.4]           [A
+
+
+  prose/artifact:  19%|█▊        | 21/113 [07:18<34:23, 22.43s/sample, label=prose, model=deepseek-v3.2][A[A[A
+
+
+  prose/artifact:  27%|██▋       | 30/113 [07:18<31:01, 22.43s/sample, label=prose, model=llama-3.3-70b-instruct][A[A[A
+
+
+  prose/artifact:  27%|██▋       | 31/113 [07:26<17:24, 12.74s/sample, label=prose, model=llama-3.3-70b-instruct][A[A[A
+
+
+  prose/artifact:  35%|███▌      | 40/113 [07:26<15:29, 12.74s/sample, label=prose, model=llama-3.3-70b-instruct][A[A[A
+
+  prose/structured:  19%|█▊        | 21/113 [07:36<34:08, 22.27s/sample, label=prose, model=mistral-large-2512][A[A
+
+  prose/structured:  27%|██▋       | 31/113 [07:36<30:25, 22.27s/sample, label=prose, model=gpt-5]             [A[A
+
+
+  prose/artifact:  36%|███▋      | 41/113 [07:58<10:47,  9.00s/sample, label=prose, model=llama-3.3-70b-instruct][A[A[A
+
+
+  prose/artifact:  44%|████▍     | 50/113 [07:58<09:26,  9.00s/sample, label=prose, model=gpt-5.4]               [A[A[A
+
+  prose/structured:  28%|██▊       | 32/113 [08:13<18:00, 13.34s/sample, label=prose, model=gpt-5][A[A
+
+  prose/structured:  36%|███▋      | 41/113 [08:13<16:00, 13.34s/sample, label=prose, model=claude-sonnet-4.6][A[A
+  prose/code:  37%|███▋      | 42/113 [11:32<30:27, 25.74s/sample, label=prose, model=gpt-5.4][A
+  prose/code:  45%|████▌     | 51/113 [11:32<26:36, 25.74s/sample, label=prose, model=gpt-5]  [A
+
+  prose/structured:  37%|███▋      | 42/113 [11:38<19:00, 16.06s/sample, label=prose, model=claude-sonnet-4.6][A[A
+
+  prose/structured:  45%|████▌     | 51/113 [11:38<16:35, 16.06s/sample, label=prose, model=gpt-5.4]          [A[A
+
+
+  prose/artifact:  45%|████▌     | 51/113 [11:43<14:17, 13.83s/sample, label=prose, model=gpt-5.4][A[A[A
+
+
+  prose/artifact:  50%|█████     | 57/113 [11:43<12:54, 13.83s/sample, label=artifact, model=mistral-large-2512][A[A[A
+  prose/code:  46%|████▌     | 52/113 [11:57<16:00, 15.74s/sample, label=prose, model=gpt-5][A
+  prose/code:  50%|█████     | 57/113 [11:57<14:41, 15.74s/sample, label=code, model=qwen3-235b-a22b][A
+
+
+  prose/artifact:  51%|█████▏    | 58/113 [12:07<10:09, 11.08s/sample, label=artifact, model=mistral-large-2512][A[A[A
+
+
+  prose/artifact:  59%|█████▉    | 67/113 [12:07<08:29, 11.08s/sample, label=artifact, model=gpt-5]             [A[A[A
+  prose/code:  51%|█████▏    | 58/113 [13:06<13:22, 14.60s/sample, label=code, model=qwen3-235b-a22b][A
+  prose/code:  59%|█████▉    | 67/113 [13:06<11:11, 14.60s/sample, label=code, model=mistral-large-2512][A
+
+
+  prose/artifact:  60%|██████    | 68/113 [14:08<08:35, 11.45s/sample, label=artifact, model=gpt-5][A[A[A
+
+
+  prose/artifact:  68%|██████▊   | 77/113 [14:08<06:52, 11.45s/sample, label=artifact, model=gpt-5][A[A[A
+
+  prose/structured:  46%|████▌     | 52/113 [16:22<20:44, 20.40s/sample, label=prose, model=gpt-5.4][A[A
+
+  prose/structured:  50%|█████     | 57/113 [16:22<19:02, 20.40s/sample, label=structured, model=gpt-5][A[A
+
+
+  prose/artifact:  69%|██████▉   | 78/113 [16:26<07:08, 12.25s/sample, label=artifact, model=gpt-5][A[A[A
+
+
+  prose/artifact:  77%|███████▋  | 87/113 [16:27<05:18, 12.25s/sample, label=artifact, model=deepseek-v3.2][A[A[A
+  prose/code:  60%|██████    | 68/113 [17:04<13:38, 18.18s/sample, label=code, model=mistral-large-2512][A
+  prose/code:  68%|██████▊   | 77/113 [17:04<10:54, 18.18s/sample, label=code, model=qwen3-235b-a22b]   [A
+
+  prose/structured:  51%|█████▏    | 58/113 [17:25<16:36, 18.12s/sample, label=structured, model=gpt-5][A[A
+
+  prose/structured:  59%|█████▉    | 67/113 [17:25<13:53, 18.12s/sample, label=structured, model=gpt-5][A[A
+  prose/code:  69%|██████▉   | 78/113 [17:27<07:18, 12.52s/sample, label=code, model=qwen3-235b-a22b][A
+  prose/code:  77%|███████▋  | 87/113 [17:27<05:25, 12.52s/sample, label=code, model=qwen3-235b-a22b][A
+
+
+  prose/artifact:  78%|███████▊  | 88/113 [17:43<04:29, 10.78s/sample, label=artifact, model=deepseek-v3.2][A[A[A
+
+
+  prose/artifact:  86%|████████▌ | 97/113 [17:43<02:52, 10.78s/sample, label=artifact, model=gpt-5]        [A[A[A
+  prose/code:  78%|███████▊  | 88/113 [18:51<04:37, 11.10s/sample, label=code, model=qwen3-235b-a22b][A
+  prose/code:  86%|████████▌ | 97/113 [18:51<02:57, 11.10s/sample, label=code, model=deepseek-v3.2]  [A
+
+  prose/structured:  60%|██████    | 68/113 [19:07<11:27, 15.28s/sample, label=structured, model=gpt-5][A[A
+
+  prose/structured:  68%|██████▊   | 77/113 [19:07<09:10, 15.28s/sample, label=structured, model=gpt-5.4][A[A
+
+
+  prose/artifact:  87%|████████▋ | 98/113 [19:50<02:50, 11.36s/sample, label=artifact, model=gpt-5][A[A[A
+
+
+  prose/artifact:  95%|█████████▍| 107/113 [19:50<01:08, 11.36s/sample, label=artifact, model=llama-3.3-70b-instruct][A[A[A
+
+
+  prose/artifact:  96%|█████████▌| 108/113 [20:57<00:49,  9.92s/sample, label=artifact, model=llama-3.3-70b-instruct][A[A[A
+
+
+                                                                                                                     [A[A[A
+
+
+  code/artifact:   0%|          | 0/113 [00:00<?, ?sample/s][A[A[APairs:  17%|█▋        | 1/6 [20:57<1:44:47, 1257.49s/pair]
+
+
+  code/artifact:   0%|          | 0/113 [00:00<?, ?sample/s, label=code, model=llama-3.3-70b-instruct][A[A[A
+
+
+  code/artifact:   1%|          | 1/113 [00:20<39:05, 20.94s/sample, label=code, model=llama-3.3-70b-instruct][A[A[A
+
+
+  code/artifact:   9%|▉         | 10/113 [00:20<35:57, 20.94s/sample, label=code, model=gpt-5]                [A[A[A
+
+
+  code/artifact:  10%|▉         | 11/113 [01:42<15:14,  8.97s/sample, label=code, model=gpt-5][A[A[A
+
+
+  code/artifact:  18%|█▊        | 20/113 [01:42<13:53,  8.97s/sample, label=code, model=gpt-5.4][A[A[A
+
+
+
+  code/structured:  19%|█▊        | 21/113 [22:42<1:55:23, 75.26s/sample, label=code, model=deepseek-v3.2][A[A[A[A
+
+
+
+  code/structured:  19%|█▊        | 21/113 [22:42<1:55:23, 75.26s/sample, label=code, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  code/structured:  19%|█▉        | 22/113 [23:06<1:48:16, 71.39s/sample, label=code, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  code/structured:  27%|██▋       | 31/113 [23:06<1:37:33, 71.39s/sample, label=code, model=gpt-5.4]          [A[A[A[A
+
+
+
+  code/structured:  28%|██▊       | 32/113 [23:36<48:25, 35.88s/sample, label=code, model=gpt-5.4]  [A[A[A[A
+
+
+
+  code/structured:  36%|███▋      | 41/113 [23:36<43:03, 35.88s/sample, label=code, model=mistral-large-2512][A[A[A[A
+  prose/code:  87%|████████▋ | 98/113 [24:06<04:26, 17.77s/sample, label=code, model=deepseek-v3.2][A
+  prose/code:  95%|█████████▍| 107/113 [24:06<01:46, 17.77s/sample, label=code, model=llama-3.3-70b-instruct][A
+  prose/code:  96%|█████████▌| 108/113 [24:20<01:02, 12.54s/sample, label=code, model=llama-3.3-70b-instruct][A
+                                                                                                             [A
+  structured/artifact:   0%|          | 0/113 [00:00<?, ?sample/s][A
+  structured/artifact:   0%|          | 0/113 [00:00<?, ?sample/s, label=structured, model=llama-3.3-70b-instruct][APairs:  33%|███▎      | 2/6 [24:20<42:27, 636.94s/pair]   
+  structured/artifact:   1%|          | 1/113 [00:20<38:57, 20.87s/sample, label=structured, model=llama-3.3-70b-instruct][A
+  structured/artifact:   9%|▉         | 10/113 [00:20<35:49, 20.87s/sample, label=structured, model=llama-3.3-70b-instruct][A
+  structured/artifact:  10%|▉         | 11/113 [00:42<05:44,  3.38s/sample, label=structured, model=llama-3.3-70b-instruct][A
+  structured/artifact:  18%|█▊        | 20/113 [00:42<05:13,  3.38s/sample, label=structured, model=gpt-5.4]               [A
+
+  prose/structured:  69%|██████▉   | 78/113 [25:55<13:56, 23.90s/sample, label=structured, model=gpt-5.4][A[A
+
+  prose/structured:  77%|███████▋  | 87/113 [25:55<10:21, 23.90s/sample, label=structured, model=gpt-5]  [A[A
+
+  prose/structured:  78%|███████▊  | 88/113 [26:26<07:08, 17.12s/sample, label=structured, model=gpt-5][A[A
+
+  prose/structured:  86%|████████▌ | 97/113 [26:26<04:33, 17.12s/sample, label=structured, model=qwen3-235b-a22b][A[A
+
+
+  code/artifact:  19%|█▊        | 21/113 [05:53<27:55, 18.22s/sample, label=code, model=gpt-5.4][A[A[A
+
+
+  code/artifact:  27%|██▋       | 31/113 [05:53<24:53, 18.22s/sample, label=code, model=llama-3.3-70b-instruct][A[A[A
+  structured/artifact:  19%|█▊        | 21/113 [02:32<11:52,  7.75s/sample, label=structured, model=gpt-5.4][A
+  structured/artifact:  27%|██▋       | 30/113 [02:32<10:43,  7.75s/sample, label=structured, model=gpt-5.4][A
+
+
+  code/artifact:  28%|██▊       | 32/113 [05:58<13:12,  9.78s/sample, label=code, model=llama-3.3-70b-instruct][A[A[A
+
+
+  code/artifact:  36%|███▋      | 41/113 [05:58<11:44,  9.78s/sample, label=code, model=claude-sonnet-4.6]     [A[A[A
+  structured/artifact:  27%|██▋       | 31/113 [02:47<06:43,  4.92s/sample, label=structured, model=gpt-5.4][A
+  structured/artifact:  35%|███▌      | 40/113 [02:47<05:59,  4.92s/sample, label=structured, model=llama-3.3-70b-instruct][A
+
+  prose/structured:  87%|████████▋ | 98/113 [27:07<03:15, 13.02s/sample, label=structured, model=qwen3-235b-a22b][A[A
+
+  prose/structured:  95%|█████████▍| 107/113 [27:07<01:18, 13.02s/sample, label=structured, model=claude-sonnet-4.6][A[A
+  structured/artifact:  36%|███▋      | 41/113 [03:17<05:02,  4.20s/sample, label=structured, model=llama-3.3-70b-instruct][A
+  structured/artifact:  44%|████▍     | 50/113 [03:17<04:24,  4.20s/sample, label=structured, model=mistral-large-2512]    [A
+
+
+  code/artifact:  37%|███▋      | 42/113 [07:43<11:55, 10.08s/sample, label=code, model=claude-sonnet-4.6][A[A[A
+
+
+  code/artifact:  45%|████▌     | 51/113 [07:43<10:24, 10.08s/sample, label=code, model=mistral-large-2512][A[A[A
+
+  prose/structured:  96%|█████████▌| 108/113 [32:02<01:30, 18.13s/sample, label=structured, model=claude-sonnet-4.6][A[A
+
+                                                                                                                    [A[APairs:  50%|█████     | 3/6 [32:02<27:51, 557.06s/pair]
+  structured/artifact:  45%|████▌     | 51/113 [09:01<15:31, 15.02s/sample, label=structured, model=mistral-large-2512][A
+  structured/artifact:  50%|█████     | 57/113 [09:01<14:00, 15.02s/sample, label=artifact, model=qwen3-235b-a22b]     [A
+  structured/artifact:  51%|█████▏    | 58/113 [09:26<11:00, 12.00s/sample, label=artifact, model=qwen3-235b-a22b][A
+  structured/artifact:  59%|█████▉    | 67/113 [09:26<09:12, 12.00s/sample, label=artifact, model=gpt-5.4]        [A
+
+
+  code/artifact:  46%|████▌     | 52/113 [13:15<18:31, 18.22s/sample, label=code, model=mistral-large-2512][A[A[A
+
+
+  code/artifact:  50%|█████     | 57/113 [13:15<17:00, 18.22s/sample, label=artifact, model=qwen3-235b-a22b][A[A[A
+  structured/artifact:  60%|██████    | 68/113 [10:27<07:26,  9.91s/sample, label=artifact, model=gpt-5.4][A
+  structured/artifact:  68%|██████▊   | 77/113 [10:27<05:56,  9.91s/sample, label=artifact, model=llama-3.3-70b-instruct][A
+
+
+  code/artifact:  51%|█████▏    | 58/113 [13:58<14:19, 15.63s/sample, label=artifact, model=qwen3-235b-a22b][A[A[A
+
+
+  code/artifact:  59%|█████▉    | 67/113 [13:58<11:59, 15.63s/sample, label=artifact, model=qwen3-235b-a22b][A[A[A
+  structured/artifact:  69%|██████▉   | 78/113 [11:03<04:34,  7.83s/sample, label=artifact, model=llama-3.3-70b-instruct][A
+  structured/artifact:  77%|███████▋  | 87/113 [11:03<03:23,  7.83s/sample, label=artifact, model=claude-sonnet-4.6]     [A
+
+
+  code/artifact:  60%|██████    | 68/113 [14:52<09:00, 12.01s/sample, label=artifact, model=qwen3-235b-a22b][A[A[A
+
+
+  code/artifact:  68%|██████▊   | 77/113 [14:52<07:12, 12.01s/sample, label=artifact, model=qwen3-235b-a22b][A[A[A
+  structured/artifact:  78%|███████▊  | 88/113 [11:32<02:35,  6.22s/sample, label=artifact, model=claude-sonnet-4.6][A
+  structured/artifact:  86%|████████▌ | 97/113 [11:32<01:39,  6.22s/sample, label=artifact, model=gpt-5.4]          [A
+  structured/artifact:  87%|████████▋ | 98/113 [12:44<01:38,  6.55s/sample, label=artifact, model=gpt-5.4][A
+  structured/artifact:  95%|█████████▍| 107/113 [12:44<00:39,  6.55s/sample, label=artifact, model=llama-3.3-70b-instruct][A
+  structured/artifact:  96%|█████████▌| 108/113 [13:15<00:27,  5.45s/sample, label=artifact, model=llama-3.3-70b-instruct][A
+                                                                                                                          [APairs:  67%|██████▋   | 4/6 [37:35<15:37, 468.67s/pair]
+
+
+  code/artifact:  69%|██████▉   | 78/113 [16:45<06:52, 11.79s/sample, label=artifact, model=qwen3-235b-a22b][A[A[A
+
+
+  code/artifact:  77%|███████▋  | 87/113 [16:45<05:06, 11.79s/sample, label=artifact, model=gpt-5.4]        [A[A[A
+
+
+  code/artifact:  78%|███████▊  | 88/113 [17:02<03:32,  8.48s/sample, label=artifact, model=gpt-5.4][A[A[A
+
+
+  code/artifact:  86%|████████▌ | 97/113 [17:02<02:15,  8.48s/sample, label=artifact, model=gpt-5]  [A[A[A
+
+
+  code/artifact:  87%|████████▋ | 98/113 [18:25<02:06,  8.45s/sample, label=artifact, model=gpt-5][A[A[A
+
+
+  code/artifact:  95%|█████████▍| 107/113 [18:25<00:50,  8.45s/sample, label=artifact, model=mistral-large-2512][A[A[A
+
+
+
+  code/structured:  37%|███▋      | 42/113 [41:31<1:18:32, 66.37s/sample, label=code, model=mistral-large-2512][A[A[A[A
+
+
+
+  code/structured:  44%|████▍     | 50/113 [41:31<1:09:41, 66.37s/sample, label=code, model=qwen3-235b-a22b]   [A[A[A[A
+
+
+
+  code/structured:  45%|████▌     | 51/113 [42:01<45:31, 44.06s/sample, label=code, model=qwen3-235b-a22b]  [A[A[A[A
+
+
+
+  code/structured:  50%|█████     | 57/113 [42:01<41:07, 44.06s/sample, label=structured, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  code/structured:  51%|█████▏    | 58/113 [43:10<31:34, 34.44s/sample, label=structured, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  code/structured:  59%|█████▉    | 67/113 [43:10<26:24, 34.44s/sample, label=structured, model=deepseek-v3.2]  [A[A[A[A
+
+
+  code/artifact:  96%|█████████▌| 108/113 [28:36<02:04, 24.86s/sample, label=artifact, model=mistral-large-2512][A[A[A
+
+
+                                                                                                                [A[A[APairs:  83%|████████▎ | 5/6 [49:34<09:18, 559.00s/pair]  [WARN] deepseek/deepseek-v3.2: JSON parse error on attempt 1/3: Expecting value: line 2799 column 1 (char 15389). Response: (no content)
+
+
+
+
+  code/structured:  60%|██████    | 68/113 [1:08:51<58:37, 78.16s/sample, label=structured, model=deepseek-v3.2][A[A[A[A
+
+
+
+  code/structured:  69%|██████▉   | 78/113 [1:08:51<45:35, 78.16s/sample, label=structured, model=mistral-large-2512][A[A[A[A
+
+
+
+  code/structured:  70%|██████▉   | 79/113 [1:09:07<28:25, 50.17s/sample, label=structured, model=mistral-large-2512][A[A[A[A
+
+
+
+  code/structured:  78%|███████▊  | 88/113 [1:09:07<20:54, 50.17s/sample, label=structured, model=qwen3-235b-a22b]   [A[A[A[A
+
+
+
+  code/structured:  79%|███████▉  | 89/113 [1:09:36<13:59, 34.98s/sample, label=structured, model=qwen3-235b-a22b][A[A[A[A
+
+
+
+  code/structured:  79%|███████▉  | 89/113 [1:09:36<13:59, 34.98s/sample, label=structured, model=deepseek-v3.2]  [A[A[A[A
+
+
+
+  code/structured:  80%|███████▉  | 90/113 [1:32:06<35:32, 92.72s/sample, label=structured, model=deepseek-v3.2][A[A[A[A
+
+
+
+  code/structured:  80%|███████▉  | 90/113 [1:32:06<35:32, 92.72s/sample, label=structured, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  code/structured:  81%|████████  | 91/113 [1:32:25<32:24, 88.38s/sample, label=structured, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  code/structured:  88%|████████▊ | 100/113 [1:32:25<19:08, 88.38s/sample, label=structured, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  code/structured:  89%|████████▉ | 101/113 [1:34:06<10:30, 52.56s/sample, label=structured, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  code/structured:  97%|█████████▋| 110/113 [1:34:06<02:37, 52.56s/sample, label=structured, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+  code/structured:  98%|█████████▊| 111/113 [1:36:36<01:15, 37.70s/sample, label=structured, model=claude-sonnet-4.6][A[A[A[A
+
+
+
+                                                                                                                     [A[A[A[APairs: 100%|██████████| 6/6 [1:36:36<00:00, 1328.39s/pair]Pairs: 100%|██████████| 6/6 [1:36:36<00:00, 966.05s/pair] 
+Wrote 2004 samples to data/pilot_samples.jsonl
+Total: 2004
+
+========================================================================
+  API CALL STATS (per model)
+========================================================================
+  anthropic/claude-sonnet-4.6: success=26, raw_wrapped=1 (100% yield)
+  cohere/command-a: success=1, raw_wrapped=1 (100% yield)
+  deepseek/deepseek-r1-0528: success=3 (100% yield)
+  deepseek/deepseek-v3.2: success=18, raw_wrapped=5, parse_err=1 (96% yield)
+  google/gemini-2.5-flash: success=19, raw_wrapped=1 (100% yield)
+  meta-llama/llama-3.1-8b-instruct: success=1, raw_wrapped=1 (100% yield)
+  meta-llama/llama-3.3-70b-instruct: success=33 (100% yield)
+  microsoft/phi-4: success=2, raw_wrapped=1 (100% yield)
+  mistralai/codestral-2508: success=13, raw_wrapped=1 (100% yield)
+  mistralai/mistral-large-2512: success=14, raw_wrapped=2 (100% yield)
+  openai/gpt-5: success=18 (100% yield)
+  openai/gpt-5.4: success=30 (100% yield)
+  openai/gpt-5.4-nano: success=2 (100% yield)
+  qwen/qwen3-235b-a22b: success=23, raw_wrapped=5 (100% yield)
+  x-ai/grok-4-fast: success=2 (100% yield)
+========================================================================
+task: [train:pilot] uv run validate_pilot.py --input data/pilot_samples.jsonl
+Loading samples from data/pilot_samples.jsonl ...
+Loaded 2004 samples.
+
+========================================================================
+  DIVERSITY CHECKLIST (per sub-type)
+========================================================================
+
+  [None] (684 samples)
+    [PASS] at_least_5_models: 7 models found
+    [FAIL] no_model_exceeds_15_pct: max is meta-llama/llama-3.3-70b-instruct at 19.2%
+    [PASS] at_least_3_temperatures: 50 temperature values
+    [FAIL] at_least_4_templates: 1 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 15 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [boilerplate] (40 samples)
+    [PASS] at_least_5_models: 6 models found
+    [FAIL] no_model_exceeds_15_pct: max is anthropic/claude-sonnet-4.6 at 27.5%
+    [PASS] at_least_3_temperatures: 7 temperature values
+    [PASS] at_least_4_templates: 7 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 7 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [css] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is meta-llama/llama-3.3-70b-instruct at 50.0%
+    [PASS] at_least_3_temperatures: 5 temperature values
+    [PASS] at_least_4_templates: 5 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 5 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [csv] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is anthropic/claude-sonnet-4.6 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [dockerfile] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is deepseek/deepseek-v3.2 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [fixed_width] (40 samples)
+    [FAIL] at_least_5_models: 2 models found
+    [FAIL] no_model_exceeds_15_pct: max is qwen/qwen3-235b-a22b at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [go] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is mistralai/codestral-2508 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [html] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is anthropic/claude-sonnet-4.6 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [ini] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is mistralai/codestral-2508 at 25.0%
+    [PASS] at_least_3_temperatures: 3 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [java] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is mistralai/codestral-2508 at 50.0%
+    [PASS] at_least_3_temperatures: 5 temperature values
+    [PASS] at_least_4_templates: 5 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 5 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [javascript] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is google/gemini-2.5-flash at 25.0%
+    [PASS] at_least_3_temperatures: 3 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [json] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is qwen/qwen3-235b-a22b at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [jsonl] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is anthropic/claude-sonnet-4.6 at 25.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [key_value] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is google/gemini-2.5-flash at 40.0%
+    [PASS] at_least_3_temperatures: 5 temperature values
+    [PASS] at_least_4_templates: 5 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 5 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [latex] (40 samples)
+    [FAIL] at_least_5_models: 2 models found
+    [FAIL] no_model_exceeds_15_pct: max is anthropic/claude-sonnet-4.6 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [log_lines] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is deepseek/deepseek-v3.2 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [makefile] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is mistralai/codestral-2508 at 50.0%
+    [PASS] at_least_3_temperatures: 3 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [markdown] (40 samples)
+    [PASS] at_least_5_models: 5 models found
+    [FAIL] no_model_exceeds_15_pct: max is mistralai/mistral-large-2512 at 25.0%
+    [PASS] at_least_3_temperatures: 5 temperature values
+    [PASS] at_least_4_templates: 5 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 5 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [ocr_garbage] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is openai/gpt-5 at 57.5%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [pdf_dump] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is openai/gpt-5.4-nano at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [pipe_table] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is meta-llama/llama-3.3-70b-instruct at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [plain] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is mistralai/mistral-large-2512 at 25.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [python] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is google/gemini-2.5-flash at 72.5%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 5 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 5 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [rst] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is x-ai/grok-4-fast at 25.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [rust] (40 samples)
+    [PASS] at_least_5_models: 5 models found
+    [FAIL] no_model_exceeds_15_pct: max is google/gemini-2.5-flash at 42.5%
+    [PASS] at_least_3_temperatures: 6 temperature values
+    [PASS] at_least_4_templates: 6 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 7 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [sgml] (40 samples)
+    [FAIL] at_least_5_models: 2 models found
+    [FAIL] no_model_exceeds_15_pct: max is deepseek/deepseek-v3.2 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [shell] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is mistralai/codestral-2508 at 27.5%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 5 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 5 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [skip] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is openai/gpt-5.4 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [sql] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is qwen/qwen3-235b-a22b at 27.5%
+    [PASS] at_least_3_temperatures: 5 temperature values
+    [PASS] at_least_4_templates: 5 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 5 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [toml] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is meta-llama/llama-3.3-70b-instruct at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [tsv] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is anthropic/claude-sonnet-4.6 at 25.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [typescript] (40 samples)
+    [FAIL] at_least_5_models: 3 models found
+    [FAIL] no_model_exceeds_15_pct: max is openai/gpt-5.4 at 50.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [xml] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is meta-llama/llama-3.3-70b-instruct at 25.0%
+    [PASS] at_least_3_temperatures: 4 temperature values
+    [PASS] at_least_4_templates: 4 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 4 domains
+    [FAIL] reasoning_mode_included: not found
+
+  [yaml] (40 samples)
+    [FAIL] at_least_5_models: 4 models found
+    [FAIL] no_model_exceeds_15_pct: max is meta-llama/llama-3.3-70b-instruct at 47.5%
+    [PASS] at_least_3_temperatures: 5 temperature values
+    [PASS] at_least_4_templates: 5 templates
+    [PASS] all_length_buckets_present: all present
+    [PASS] at_least_3_domains: 5 domains
+    [FAIL] reasoning_mode_included: not found
+
+========================================================================
+  OVERALL: SOME CHECKS FAILED
+========================================================================
+
+Running classifier audit ...
+
+========================================================================
+  CLASSIFIER AUDIT
+========================================================================
+  None: 30.0% (205/684)
+  boilerplate: 0.0% (0/40)
+  css: 2.5% (1/40)
+  csv: 7.5% (3/40)
+  dockerfile: 37.5% (15/40)
+  fixed_width: 67.5% (27/40)
+  go: 10.0% (4/40)
+  html: 27.5% (11/40)
+  ini: 0.0% (0/40)
+  java: 17.5% (7/40)
+  javascript: 27.5% (11/40)
+  json: 0.0% (0/40)
+  jsonl: 2.5% (1/40)
+  key_value: 2.5% (1/40)
+  latex: 100.0% (40/40)
+  log_lines: 7.5% (3/40)
+  makefile: 50.0% (20/40)
+  markdown: 100.0% (40/40)
+  ocr_garbage: 0.0% (0/40)
+  pdf_dump: 0.0% (0/40)
+  pipe_table: 12.5% (5/40)
+  plain: 100.0% (40/40)
+  python: 37.5% (15/40)
+  rst: 100.0% (40/40)
+  rust: 40.0% (16/40)
+  sgml: 30.0% (12/40)
+  shell: 15.0% (6/40)
+  skip: 0.0% (0/40)
+  sql: 2.5% (1/40)
+  toml: 0.0% (0/40)
+  tsv: 40.0% (16/40)
+  typescript: 0.0% (0/40)
+  xml: 47.5% (19/40)
+  yaml: 2.5% (1/40)
+
+  Flags:
+    None: accuracy 30.0% — too hard
+    boilerplate: accuracy 0.0% — too hard
+    css: accuracy 2.5% — too hard
+    csv: accuracy 7.5% — too hard
+    dockerfile: accuracy 37.5% — too hard
+    go: accuracy 10.0% — too hard
+    html: accuracy 27.5% — too hard
+    ini: accuracy 0.0% — too hard
+    java: accuracy 17.5% — too hard
+    javascript: accuracy 27.5% — too hard
+    json: accuracy 0.0% — too hard
+    jsonl: accuracy 2.5% — too hard
+    key_value: accuracy 2.5% — too hard
+    latex: accuracy 100.0% — too easy
+    log_lines: accuracy 7.5% — too hard
+    markdown: accuracy 100.0% — too easy
+    ocr_garbage: accuracy 0.0% — too hard
+    pdf_dump: accuracy 0.0% — too hard
+    pipe_table: accuracy 12.5% — too hard
+    plain: accuracy 100.0% — too easy
+    python: accuracy 37.5% — too hard
+    rst: accuracy 100.0% — too easy
+    rust: accuracy 40.0% — too hard
+    sgml: accuracy 30.0% — too hard
+    shell: accuracy 15.0% — too hard
+    skip: accuracy 0.0% — too hard
+    sql: accuracy 2.5% — too hard
+    toml: accuracy 0.0% — too hard
+    tsv: accuracy 40.0% — too hard
+    typescript: accuracy 0.0% — too hard
+    xml: accuracy 47.5% — too hard
+    yaml: accuracy 2.5% — too hard
+
+========================================================================
+  AUDIT SAMPLES (34 of 2004 total)
+========================================================================
+
+--- Sample 1 ---
+  sub_type:          None
+  expected_category: prose
+  model:             mistralai/mistral-large-2512
+  temperature:       1.0
+  prompt_template:   boundary
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    The air in the storage room was thick with the scent of old paper and chemical preservatives, a smell that always made Daniel think of archives and forgotten things. He had come to retrieve a sample o
+
+--- Sample 2 ---
+  sub_type:          boilerplate
+  expected_category: artifact
+  model:             anthropic/claude-sonnet-4.6
+  temperature:       1.22
+  prompt_template:   Produce a boilerplate template text that mimics boilerplate headers/footers from a {domain} PDF.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    Journal of Synthetic Chemistry and Materials Science
+Volume 47, Issue 3, March 2024
+ISSN 1234-5678 (Print) | ISSN 8765-4321 (Online)
+DOI: 10.1021/jscms.2024.47.3.001
+© 2024 American Chemical Society. 
+
+--- Sample 3 ---
+  sub_type:          css
+  expected_category: code
+  model:             meta-llama/llama-3.3-70b-instruct
+  temperature:       0.57
+  prompt_template:   Write a CSS stylesheet in the appropriate language for {domain}. Include comments.
+  length_bucket:     short
+  content_domain:    astronomy
+  text (preview):    /* Cosmic Font */
+@font-face { font-family: 'Galactic'; src: url('galactic.ttf'); }
+body { font-family: 'Galactic'; }
+
+--- Sample 4 ---
+  sub_type:          csv
+  expected_category: structured
+  model:             anthropic/claude-sonnet-4.6
+  temperature:       0.4
+  prompt_template:   Generate a CSV data file containing {domain} data with realistic field names and values.
+  length_bucket:     short
+  content_domain:    astronomy
+  text (preview):    cluster_id,cluster_name,cluster_type,ra_deg,dec_deg,distance_kpc,age_gyr,metallicity_feh,num_stars,tidal_radius_pc
+CL001,47 Tucanae,Globular,6.0223,-72.0814,4.50,11.75,-0.72,500000,48.0
+CL002,Omega Ce
+
+--- Sample 5 ---
+  sub_type:          dockerfile
+  expected_category: code
+  model:             deepseek/deepseek-v3.2
+  temperature:       0.65
+  prompt_template:   Create a Dockerfile that demonstrates best practices for {domain}.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    # Dockerfile for Chemical Visualization with PyMol and Jupyter
+# Best practices: 3D visualization, interactive plotting, export formats
+
+FROM ubuntu:22.04
+
+# Install system dependencies for PyMol
+RUN 
+
+--- Sample 6 ---
+  sub_type:          fixed_width
+  expected_category: structured
+  model:             meta-llama/llama-3.3-70b-instruct
+  temperature:       0.31
+  prompt_template:   Produce a fixed-width formatted table file with {domain} metrics and measurements.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):          Compound       Molecular  Atomic     Bond      Ionization
+      Name         Weight    Radius   Length    Energy
+---------------------------------------------------------------
+      Thorium    
+
+--- Sample 7 ---
+  sub_type:          go
+  expected_category: code
+  model:             google/gemini-2.5-flash
+  temperature:       0.77
+  prompt_template:   Write a Go program in the appropriate language for {domain}. Include comments.
+  length_bucket:     short
+  content_domain:    astronomy
+  text (preview):    // Function to calculate the sidereal time at Greenwich for a given Julian Date.
+func greenwichSiderealTime(jd float64) float64 {
+	// This is a basic approximation.
+	T := (jd - 2451545.0) / 36525.0
+	G
+
+--- Sample 8 ---
+  sub_type:          html
+  expected_category: code
+  model:             qwen/qwen3-235b-a22b
+  temperature:       0.5
+  prompt_template:   Write a HTML page implementing a common algorithm or utility for {domain}.
+  length_bucket:     short
+  content_domain:    climate science
+  text (preview):    <html><body><h2>CO2 Emission Calculator</h2><input id="kwh" placeholder="Energy (kWh)"><button onclick="calcCO2()">Calculate</button><p id="emissions"></p><script>function calcCO2(){let kwh = +documen
+
+--- Sample 9 ---
+  sub_type:          ini
+  expected_category: code
+  model:             anthropic/claude-sonnet-4.6
+  temperature:       0.76
+  prompt_template:   Generate a well-structured INI configuration file related to {domain} with error handling.
+  length_bucket:     medium
+  content_domain:    biology
+  text (preview):    ; Pathology Laboratory Information System
+; Tissue Sample Processing Configuration
+
+[laboratory]
+lab_name = Regional Pathology Center
+lab_code = RPC_PATH_01
+accreditation = CAP_CLIA
+license_expiry = 2
+
+--- Sample 10 ---
+  sub_type:          java
+  expected_category: code
+  model:             openai/gpt-5.4
+  temperature:       0.5
+  prompt_template:   Generate a well-structured Java class related to {domain} with error handling.
+  length_bucket:     medium
+  content_domain:    biology
+  text (preview):    public class EnzymeReaction {
+    private double substrateConcentration;
+    private final double maxRate;
+
+    public EnzymeReaction(double substrateConcentration, double maxRate) {
+        if (subst
+
+--- Sample 11 ---
+  sub_type:          javascript
+  expected_category: code
+  model:             google/gemini-2.5-flash
+  temperature:       0.31
+  prompt_template:   Write a JavaScript module in the appropriate language for {domain}. Include comments.
+  length_bucket:     short
+  content_domain:    astronomy
+  text (preview):    // Calculate the sidereal time in hours for a given Julian Date and longitude.
+function calculateSiderealTime(julianDate, longitudeDegrees) {
+  const T = (julianDate - 2451545.0) / 36525;
+  let GMST =
+
+--- Sample 12 ---
+  sub_type:          json
+  expected_category: structured
+  model:             qwen/qwen3-235b-a22b
+  temperature:       0.38
+  prompt_template:   Produce a JSON data file file with {domain} metrics and measurements.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    Experiment Title: Electrochemical Cell Potential Analysis
+Date: 2023-10-10
+Objective: Validate Nernst equation predictions for Cu-Zn galvanic cells.
+
+Cell Configurations:
+1. [Zn|Zn²+ (0.1 M)||Cu²+ (0.
+
+--- Sample 13 ---
+  sub_type:          jsonl
+  expected_category: structured
+  model:             anthropic/claude-sonnet-4.6
+  temperature:       0.65
+  prompt_template:   Generate a JSONL data file containing {domain} data with realistic field names and values.
+  length_bucket:     short
+  content_domain:    astronomy
+  text (preview):    cluster_id: M13
+type: Globular Cluster
+constellation: Hercules
+distance_kpc: 7.1
+age_gyr: 11.65
+num_stars: 300000
+apparent_magnitude: 5.8
+core_radius_arcmin: 0.62
+tidal_radius_arcmin: 18.0
+
+--- Sample 14 ---
+  sub_type:          key_value
+  expected_category: structured
+  model:             google/gemini-2.5-flash
+  temperature:       0.38
+  prompt_template:   Produce a key-value configuration dump file with {domain} metrics and measurements.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    {
+  "environmental_monitoring": {
+    "air_quality_sensors": [
+      {"sensor_id": "AQ001", "location": "Lab 1", "parameter": "CO2", "value": 450, "unit": "ppm", "timestamp": "2023-10-26T09:00:00Z"},
+
+
+--- Sample 15 ---
+  sub_type:          latex
+  expected_category: prose
+  model:             anthropic/claude-sonnet-4.6
+  temperature:       1.01
+  prompt_template:   Draft a LaTeX document reviewing recent developments in {domain}.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    \documentclass[12pt,a4paper]{article}
+\usepackage{amsmath}
+\usepackage{chemformula}
+\usepackage{siunitx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{hyperref}
+\usepac
+
+--- Sample 16 ---
+  sub_type:          log_lines
+  expected_category: structured
+  model:             deepseek/deepseek-v3.2
+  temperature:       0.29
+  prompt_template:   Create a structured log file dataset about {domain} with at least 10 records.
+  length_bucket:     medium
+  content_domain:    biology
+  text (preview):    2024-03-08 13:15:40 | INFO | Lab: Plant Physiology | User: Dr. Gonzalez
+Drought stress experiment - Arabidopsis thaliana ecotype Col-0
+Treatment groups: Control (well-watered), Mild stress (50% FC), S
+
+--- Sample 17 ---
+  sub_type:          makefile
+  expected_category: code
+  model:             qwen/qwen3-235b-a22b
+  temperature:       0.85
+  prompt_template:   Write a Makefile implementing a common algorithm or utility for {domain}.
+  length_bucket:     short
+  content_domain:    climate science
+  text (preview):    DATA = model_output.nc
+GRID = regrid.nc
+
+all: $(GRID)
+
+$(GRID): $(DATA)
+	cdo remapcon2,global_2.5deg $< $@
+
+clean:
+	rm $(GRID)
+
+--- Sample 18 ---
+  sub_type:          markdown
+  expected_category: prose
+  model:             x-ai/grok-4-fast
+  temperature:       0.83
+  prompt_template:   Write a detailed explanation of a concept in {domain} for a general audience.
+  length_bucket:     short
+  content_domain:    climate science
+  text (preview):    Sea level rise is one of the most visible impacts of climate change. As global temperatures increase, polar ice sheets and glaciers melt, adding water to the oceans. Thermal expansion, where warmer wa
+
+--- Sample 19 ---
+  sub_type:          ocr_garbage
+  expected_category: artifact
+  model:             openai/gpt-5
+  temperature:       0.88
+  prompt_template:   Generate a OCR text output that looks like {domain} document extraction noise.
+  length_bucket:     short
+  content_domain:    astronomy
+  text (preview):    Table 2 (cont’d): SDSS J1101+0102 photometry†
+u=19.23 g=18.77 r=18.65 i=18.60 z=18.55 mag (AB)
+μ_α cosδ=−12.3±1.1 mas yr⁻¹; μ_δ=+5.6±1.0 mas yr⁻¹
+χ²/ν=1.07 (ν=58) — residuals show 3σ outlier at HJD 24
+
+--- Sample 20 ---
+  sub_type:          pdf_dump
+  expected_category: artifact
+  model:             deepseek/deepseek-r1-0528
+  temperature:       0.89
+  prompt_template:   Write a PDF text extraction dump that simulates garbled text extraction from a {domain} scan.
+  length_bucket:     short
+  content_domain:    climate science
+  text (preview):    Precipitation pattern shifts:
+Wet regions wetter, dry areas
+drier. Monsoon variability
+increases. Crop failures
+rise in breadbasket regions.
+Food security threatened
+worldwide.
+
+--- Sample 21 ---
+  sub_type:          pipe_table
+  expected_category: structured
+  model:             meta-llama/llama-3.3-70b-instruct
+  temperature:       0.68
+  prompt_template:   Write a pipe-delimited table with hierarchical {domain} data including nested fields.
+  length_bucket:     short
+  content_domain:    climate science
+  text (preview):    Category|Subcategory|Location|Temperature|Precipitation
+Climate Change|Global Warming|North Pole|2.5|100
+Climate Change|Global Warming|South Pole|-5.5|50
+
+--- Sample 22 ---
+  sub_type:          plain
+  expected_category: prose
+  model:             mistralai/mistral-large-2512
+  temperature:       0.9
+  prompt_template:   Write a plain text article about {domain}. Use natural paragraphs with varied sentence lengths.
+  length_bucket:     short
+  content_domain:    astronomy
+  text (preview):    Nebulae are vast clouds of gas and dust where stars are born. These cosmic nurseries come in various shapes and sizes, from the iconic Pillars of Creation to the colorful Orion Nebula. Over millions o
+
+--- Sample 23 ---
+  sub_type:          python
+  expected_category: code
+  model:             anthropic/claude-sonnet-4.6
+  temperature:       0.32
+  prompt_template:   Create a Python script that demonstrates best practices for {domain}.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    #!/usr/bin/env python3
+"""
+Chemistry Best Practices: Nuclear Chemistry and Radioactive Decay
+Demonstrates decay calculations, nuclear equations, and radiation safety.
+"""
+
+import math
+from dataclasses
+
+--- Sample 24 ---
+  sub_type:          rst
+  expected_category: prose
+  model:             mistralai/mistral-large-2512
+  temperature:       0.75
+  prompt_template:   Write a detailed explanation of a concept in {domain} for a general audience.
+  length_bucket:     short
+  content_domain:    climate science
+  text (preview):    Climate models are computer simulations that use mathematical equations to represent the interactions between the atmosphere, oceans, land surface, and ice. These models help scientists understand how
+
+--- Sample 25 ---
+  sub_type:          rust
+  expected_category: code
+  model:             meta-llama/llama-3.3-70b-instruct
+  temperature:       0.48
+  prompt_template:   Draft a Rust program with type annotations and documentation for {domain}.
+  length_bucket:     medium
+  content_domain:    genetics
+  text (preview):    /// A Rust program for genetics
+/// ============================
+/// This program demonstrates basic concepts in genetics such as DNA, RNA, and proteins.
+/// 
+/// # DNA
+/// ----
+/// DNA (Deoxyribonucl
+
+--- Sample 26 ---
+  sub_type:          sgml
+  expected_category: code
+  model:             deepseek/deepseek-v3.2
+  temperature:       0.77
+  prompt_template:   Write a SGML document in the appropriate language for {domain}. Include comments.
+  length_bucket:     short
+  content_domain:    astronomy
+  text (preview):    <!DOCTYPE observatory SYSTEM "observatory.dtd">
+<!-- VLBA interferometry observation -->
+<radio_observation>
+  <array>Very Long Baseline Array</array>
+  <target>Sagittarius A*</target>
+  <!-- Galactic
+
+--- Sample 27 ---
+  sub_type:          shell
+  expected_category: code
+  model:             mistralai/codestral-2508
+  temperature:       0.42
+  prompt_template:   Create a shell script that demonstrates best practices for {domain}.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    #!/bin/bash
+
+# Best Practice 2: Use functions to modularize code
+# This script calculates the pH of a solution given the concentration of H+ ions.
+
+# Function to calculate pH
+calculate_ph() {
+    loca
+
+--- Sample 28 ---
+  sub_type:          skip
+  expected_category: artifact
+  model:             anthropic/claude-sonnet-4.6
+  temperature:       1.02
+  prompt_template:   Create a near-empty or too-short text fragment resembling OCR output from a {domain} document with errors.
+  length_bucket:     medium
+  content_domain:    biology
+  text (preview):    Immun ology Rev iew Sheet
+Unit 6 Exam Prep
+
+Innate vs. Adapt ive Immun ity
+
+Inn ate Immun ity:
+• Non-spec ific
+• Rapid resp onse (min utes to ho urs)
+• Comp onents: skin, muc ous membr anes, phag ocyt
+
+--- Sample 29 ---
+  sub_type:          sql
+  expected_category: code
+  model:             openai/gpt-5.4
+  temperature:       0.75
+  prompt_template:   Draft a SQL query or schema with type annotations and documentation for {domain}.
+  length_bucket:     medium
+  content_domain:    genetics
+  text (preview):    -- Example 3: Gene expression matrix schema for transcriptomics studies
+CREATE TABLE genetics.gene_expression_measurements (
+    expression_id BIGSERIAL PRIMARY KEY,                   -- Row identifie
+
+--- Sample 30 ---
+  sub_type:          toml
+  expected_category: code
+  model:             google/gemini-2.5-flash
+  temperature:       0.35
+  prompt_template:   Create a TOML configuration file that demonstrates best practices for {domain}.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    # Configuration for a QM/MM simulation setup
+# This defines the partitioning and interaction between QM and MM regions.
+
+[calculation]
+name = "enzyme_qm_mm"
+description = "QM/MM simulation of an enzym
+
+--- Sample 31 ---
+  sub_type:          tsv
+  expected_category: structured
+  model:             openai/gpt-5.4
+  temperature:       0.29
+  prompt_template:   Create a TSV data file dataset about {domain} with at least 10 records.
+  length_bucket:     medium
+  content_domain:    biology
+  text (preview):    id	field	instrument	used_for
+1	Botany	Light microscope	Observing plant tissues
+2	Zoology	Camera trap	Monitoring wildlife activity
+3	Ecology	Quadrat	Sampling plant populations
+4	Ecology	Transect line	M
+
+--- Sample 32 ---
+  sub_type:          typescript
+  expected_category: code
+  model:             openai/gpt-5.4
+  temperature:       0.51
+  prompt_template:   Create a TypeScript module that demonstrates best practices for {domain}.
+  length_bucket:     long
+  content_domain:    chemistry
+  text (preview):    export interface RateExperiment {
+  reactant: string;
+  concentrationM: number;
+  observedRate: number;
+}
+
+export interface RateLawResult {
+  rateConstant: number;
+  order: number;
+}
+
+export function 
+
+--- Sample 33 ---
+  sub_type:          xml
+  expected_category: code
+  model:             deepseek/deepseek-v3.2
+  temperature:       0.53
+  prompt_template:   Write a XML document implementing a common algorithm or utility for {domain}.
+  length_bucket:     short
+  content_domain:    climate science
+  text (preview):    <algorithm name="EnsembleAverager">
+  <purpose>Combine multiple climate model outputs</purpose>
+  <weights>Equally weighted ensemble members</weights>
+  <output>Multi-model mean with spread</output>
+<
+
+--- Sample 34 ---
+  sub_type:          yaml
+  expected_category: code
+  model:             mistralai/codestral-2508
+  temperature:       0.31
+  prompt_template:   Write a YAML configuration file implementing a common algorithm or utility for {domain}.
+  length_bucket:     short
+  content_domain:    climate science
+  text (preview):    algorithm: climate_trend_analysis
+parameters:
+  data_source: giss
+  variable: temperature
+  trend_method: linear
+  time_period: 1880-2020

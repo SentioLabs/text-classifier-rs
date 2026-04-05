@@ -7,8 +7,9 @@ pub mod types;
 
 pub use features::extract_features;
 pub use tier2::ModelClassifier;
-pub use types::thresholds;
-pub use types::{Classification, ContentSubType, FeatureVector, TextCategory, TextType, Tier};
+pub use types::{
+    Classification, ContentSubType, FeatureVector, TextCategory, TextType, Tier, thresholds,
+};
 
 /// Classify a text string using Tier 1 structural features only.
 ///
@@ -17,7 +18,7 @@ pub use types::{Classification, ContentSubType, FeatureVector, TextCategory, Tex
 pub fn classify(text: &str) -> Classification {
     if text.trim().is_empty() || tier1::is_too_short(text) {
         return Classification {
-            category: TextType::Skip,
+            category: TextCategory::Skip,
             sub_type: None,
             confidence: 1.0,
             reason: "too short".to_string(),
@@ -52,13 +53,13 @@ impl Classifier {
     /// Classify a single text string.
     ///
     /// 1. Short text (< 5 words) -> Skip
-    /// 2. Tier 1 structural features -> if confidence >= per-type threshold, return
+    /// 2. Tier 1 structural features -> if confidence >= 0.95, return
     /// 3. Tier 2 model (if loaded) -> return model decision
     /// 4. No model -> return low-confidence fallback
     pub fn classify(&self, text: &str) -> Classification {
         if text.trim().is_empty() || tier1::is_too_short(text) {
             return Classification {
-                category: TextType::Skip,
+                category: TextCategory::Skip,
                 sub_type: None,
                 confidence: 1.0,
                 reason: "too short".to_string(),
@@ -69,22 +70,14 @@ impl Classifier {
         let features = features::extract_features(text);
         let tier1_result = tier1::classify_tier1(&features);
 
-        // If Tier 1 is confident (per-type threshold), use it
-        let threshold = match tier1_result.category {
-            TextCategory::Prose => thresholds::PROSE,
-            TextCategory::Code => thresholds::CODE,
-            TextCategory::Structured => thresholds::STRUCTURED,
-            TextCategory::Artifact => thresholds::ARTIFACT,
-            TextCategory::Tabular => thresholds::STRUCTURED,
-            TextCategory::PdfDump => thresholds::ARTIFACT,
-            TextCategory::Skip => 0.0, // Skip always accepted
-        };
+        // Only accept Tier 1 for very high-confidence short-circuits
+        let threshold = 0.95;
         if tier1_result.confidence >= threshold {
             return tier1_result;
         }
 
         // Otherwise, fall through to Tier 2
-        self.model.classify(text, &features)
+        self.model.classify(&features)
     }
 
     /// Classify multiple texts in parallel using rayon.

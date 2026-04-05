@@ -1,0 +1,54 @@
+# API Migration Guide: v1 to v2
+
+This document describes the breaking changes introduced in API v2 and provides
+step-by-step instructions for migrating your integration. We recommend completing
+the migration before the v1 deprecation date of June 30, 2024.
+
+## Authentication Changes
+
+The most significant change in v2 is the move from API key authentication to
+OAuth 2.0 with short-lived access tokens. This improves security by eliminating
+long-lived credentials that can be leaked or compromised.
+
+Previously, you would include your API key directly in the request header:
+
+```
+Authorization: Bearer sk-your-api-key-here
+```
+
+In v2, you first exchange your client credentials for an access token, then use
+that token for subsequent requests. Access tokens expire after 1 hour.
+
+## Endpoint Changes
+
+The following table summarizes the endpoint changes between v1 and v2:
+
+| v1 Endpoint | v2 Endpoint | Notes |
+|------------|------------|-------|
+| GET /users | GET /v2/users | Pagination now required |
+| POST /users | POST /v2/users | Request body schema changed |
+| GET /users/:id | GET /v2/users/:id | Response includes `metadata` |
+| DELETE /users/:id | DELETE /v2/users/:id | Now returns 202 Accepted |
+| GET /reports | GET /v2/analytics/reports | Moved under analytics |
+| POST /export | POST /v2/analytics/export | Async with webhook callback |
+
+## Rate Limiting
+
+Rate limits have been adjusted in v2 to better reflect actual usage patterns.
+The new limits are applied per-organization rather than per-API-key, which means
+all team members share a common pool of requests.
+
+| Tier | v1 Limit | v2 Limit | Burst |
+|------|---------|---------|-------|
+| Free | 60/min | 100/min | 20 |
+| Pro | 600/min | 1000/min | 100 |
+| Enterprise | 6000/min | 10000/min | 500 |
+
+If you exceed the rate limit, the API returns a 429 status code with a
+`Retry-After` header indicating how many seconds to wait before retrying.
+
+## Error Response Format
+
+Error responses now follow the RFC 7807 Problem Details specification. This
+provides a more structured and consistent format for error information across
+all endpoints.

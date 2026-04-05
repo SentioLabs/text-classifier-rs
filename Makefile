@@ -1,7 +1,8 @@
 .PHONY: build build-release test test-single fmt fmt-check clippy lint check clean \
 	python-setup python-build \
 	install run review \
-	release-build release-local release-list release-show release-download release-delete release-pr help
+	release-build release-local release-list release-show release-download release-delete release-pr \
+	help
 
 # Build metadata
 VERSION ?= $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')

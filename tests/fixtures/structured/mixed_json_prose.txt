@@ -1,0 +1,28 @@
+{
+  "api_version": "2.1",
+  "request_id": "req_8f3a2b1c",
+  "status": "error",
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "You have exceeded the maximum number of requests allowed per minute. The current limit is 100 requests per minute for standard tier accounts. Please wait before retrying your request, or consider upgrading to a higher tier for increased rate limits.",
+    "details": {
+      "limit": 100,
+      "window_seconds": 60,
+      "current_count": 103,
+      "retry_after_seconds": 23,
+      "upgrade_url": "https://api.example.com/pricing"
+    },
+    "suggestions": [
+      "Implement exponential backoff in your client code to handle rate limiting gracefully.",
+      "Consider batching multiple operations into a single API call where supported.",
+      "Review your integration for unnecessary polling or redundant requests.",
+      "Contact support@example.com if you believe this limit is too restrictive for your use case."
+    ]
+  },
+  "meta": {
+    "timestamp": "2024-03-15T14:23:41.892Z",
+    "server": "api-gw-us-east-1b",
+    "trace_id": "t_7f2a3b4c5d6e",
+    "documentation": "https://docs.example.com/errors/RATE_LIMIT_EXCEEDED"
+  }
+}
