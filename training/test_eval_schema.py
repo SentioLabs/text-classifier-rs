@@ -2,15 +2,14 @@
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from eval_schema import (
+from trainr.core.schema import (
     PROVENANCE_FIELDS,
     VALID_BOUNDARY_PAIRS,
     VALID_CATEGORIES,

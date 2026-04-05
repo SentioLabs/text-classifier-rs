@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "text-classifier-training"
 version = "0.1.0"
@@ -6,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "torch>=2.0",
     "anthropic>=0.40",
+    "click>=8.1",
     "onnx>=1.15",
     "onnxscript>=0.1",
     "numpy>=1.24",
@@ -16,6 +21,12 @@ dependencies = [
     "polars>=1.39.3",
     "onnxruntime>=1.17",
 ]
+
+[project.scripts]
+trainr = "trainr.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["trainr*"]
 
 [dependency-groups]
 dev = ["pytest", "ruff"]
