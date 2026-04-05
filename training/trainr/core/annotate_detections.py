@@ -160,19 +160,63 @@ def call_llm(text: str, model: str, api_key: str) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
+CHECKPOINT_INTERVAL = 500
+"""Flush checkpoint every N completed annotations."""
+
+
+def _load_checkpoint(path: str) -> dict[int, dict[str, int]]:
+    """Load existing checkpoint JSONL. Returns {row_index: annotation}."""
+    result: dict[int, dict[str, int]] = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                result[record["idx"]] = record["labels"]
+    except FileNotFoundError:
+        pass
+    return result
+
+
+def _flush_checkpoint(
+    path: str,
+    annotations: list[dict[str, int] | None],
+    flushed_up_to: int,
+) -> int:
+    """Append newly completed annotations to the checkpoint file.
+
+    Returns the new flushed_up_to watermark.
+    """
+    with open(path, "a") as f:
+        for i in range(flushed_up_to, len(annotations)):
+            if annotations[i] is not None:
+                f.write(json.dumps({"idx": i, "labels": annotations[i]}) + "\n")
+            else:
+                break
+            flushed_up_to = i + 1
+    return flushed_up_to
+
+
 def annotate_dataframe(
     df: pl.DataFrame,
     model: str = DEFAULT_MODEL,
     api_key: str = "",
     concurrency: int = 20,
+    checkpoint_path: str | None = None,
 ) -> pl.DataFrame:
     """Annotate a DataFrame with det_* columns using concurrent LLM calls.
+
+    Supports checkpointing: if checkpoint_path is set, completed annotations
+    are flushed periodically and the run can be resumed after interruption.
 
     Args:
         df: Input DataFrame with a 'text' column.
         model: OpenRouter model ID.
         api_key: OpenRouter API key.
         concurrency: Number of concurrent workers.
+        checkpoint_path: Path to checkpoint JSONL file (None to disable).
 
     Returns:
         DataFrame with additional det_* binary columns.
@@ -180,25 +224,62 @@ def annotate_dataframe(
     texts = df["text"].to_list()
     n = len(texts)
 
-    # Pre-allocate results by index to preserve order
+    # Load checkpoint if available
+    prior: dict[int, dict[str, int]] = {}
+    if checkpoint_path:
+        prior = _load_checkpoint(checkpoint_path)
+        if prior:
+            print(
+                f"  Resumed from checkpoint: {len(prior)}/{n} already annotated.",
+                file=sys.stderr,
+            )
+
+    # Pre-allocate results, filling in checkpoint data
     annotations: list[dict[str, int] | None] = [None] * n
-    lock = threading.Lock()
-    pbar = tqdm(total=n, desc="Annotating", file=sys.stderr)
+    for idx, labels in prior.items():
+        if idx < n:
+            annotations[idx] = labels
 
-    def _annotate(idx: int, text: str) -> None:
-        result = call_llm(text, model=model, api_key=api_key)
-        with lock:
-            annotations[idx] = result
-            pbar.update(1)
+    # Identify remaining work
+    todo = [(i, texts[i]) for i in range(n) if annotations[i] is None]
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(_annotate, i, t) for i, t in enumerate(texts)]
-        concurrent.futures.wait(futures)
-        # Raise any exceptions from workers
-        for f in futures:
-            f.result()
+    if not todo:
+        print("  All rows already annotated from checkpoint.", file=sys.stderr)
+    else:
+        lock = threading.Lock()
+        completed_count = n - len(todo)
+        flushed_up_to = 0
+        pbar = tqdm(
+            total=n, initial=completed_count, desc="Annotating", file=sys.stderr,
+        )
 
-    pbar.close()
+        def _annotate(idx: int, text: str) -> None:
+            nonlocal flushed_up_to, completed_count
+            result = call_llm(text, model=model, api_key=api_key)
+            with lock:
+                annotations[idx] = result
+                completed_count += 1
+                pbar.update(1)
+                # Periodic checkpoint flush
+                if (
+                    checkpoint_path
+                    and completed_count % CHECKPOINT_INTERVAL == 0
+                ):
+                    flushed_up_to = _flush_checkpoint(
+                        checkpoint_path, annotations, flushed_up_to,
+                    )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = [executor.submit(_annotate, i, t) for i, t in todo]
+            concurrent.futures.wait(futures)
+            for f in futures:
+                f.result()
+
+        pbar.close()
+
+        # Final checkpoint flush
+        if checkpoint_path:
+            _flush_checkpoint(checkpoint_path, annotations, flushed_up_to)
 
     # Build columns from annotations
     det_columns: dict[str, list[int]] = {
@@ -293,6 +374,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     """Entry point for the annotation pipeline."""
+    from pathlib import Path
+
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -306,10 +389,25 @@ def main(argv: list[str] | None = None) -> None:
         df = stratified_sample(df, n=args.sample)
         print(f"  Sampled {len(df)} rows (stratified by sub_type).", file=sys.stderr)
 
+    # Checkpoint file sits next to the output: output.parquet -> output.checkpoint.jsonl
+    output_path = Path(args.output)
+    checkpoint_path = str(output_path.with_suffix(".checkpoint.jsonl"))
+
     result_df = annotate_dataframe(
-        df, model=args.model, api_key=api_key, concurrency=args.concurrency,
+        df,
+        model=args.model,
+        api_key=api_key,
+        concurrency=args.concurrency,
+        checkpoint_path=checkpoint_path,
     )
 
     print(f"Writing {args.output}...", file=sys.stderr)
     result_df.write_parquet(args.output)
+
+    # Clean up checkpoint on success
+    ckpt = Path(checkpoint_path)
+    if ckpt.exists():
+        ckpt.unlink()
+        print("  Checkpoint removed (run complete).", file=sys.stderr)
+
     print(f"  Done. {len(result_df)} samples with {len(DETECTION_LABELS)} detection columns.", file=sys.stderr)
