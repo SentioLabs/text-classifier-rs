@@ -46,7 +46,11 @@ pub fn extract_features(text: &str) -> FeatureVector {
     let word_count = sample.split_whitespace().count().max(1) as f32;
 
     // Non-empty lines (used by several features)
-    let non_empty: Vec<&str> = lines.iter().filter(|l| !l.trim().is_empty()).copied().collect();
+    let non_empty: Vec<&str> = lines
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .copied()
+        .collect();
     let n_non_empty = non_empty.len().max(1);
 
     FeatureVector {
@@ -560,10 +564,7 @@ fn compute_page_number_density(lines: &[&str], n_lines: usize) -> f32 {
         if trimmed.is_empty() {
             continue;
         }
-        if is_page_number_only(trimmed)
-            || is_page_n_of_m(trimmed)
-            || is_page_fraction(trimmed)
-        {
+        if is_page_number_only(trimmed) || is_page_n_of_m(trimmed) || is_page_fraction(trimmed) {
             count += 1;
         }
     }
@@ -717,9 +718,7 @@ fn is_label_value_line(s: &str) -> bool {
     let label_max = (chars.len()).min(32); // 1 + up to 30 more = 31 max index, but we need room for separator
     while i < label_max {
         let ch = chars[i];
-        if ch.is_ascii_alphanumeric()
-            || matches!(ch, ' ' | '_' | '/' | '(' | ')' | '.')
-        {
+        if ch.is_ascii_alphanumeric() || matches!(ch, ' ' | '_' | '/' | '(' | ')' | '.') {
             i += 1;
         } else {
             break;
@@ -755,14 +754,21 @@ fn is_label_value_line(s: &str) -> bool {
 /// Fraction of non-empty lines that look table-like (have delimiters or
 /// multi-space column separation).
 fn compute_table_fragment_score(lines: &[&str]) -> f32 {
-    let non_empty: Vec<&str> = lines.iter().filter(|l| !l.trim().is_empty()).copied().collect();
+    let non_empty: Vec<&str> = lines
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .copied()
+        .collect();
     if non_empty.is_empty() {
         return 0.0;
     }
 
     let mut score = 0;
     for line in &non_empty {
-        let delimiter_hits = line.chars().filter(|&c| matches!(c, ',' | '|' | '\t' | ';')).count();
+        let delimiter_hits = line
+            .chars()
+            .filter(|&c| matches!(c, ',' | '|' | '\t' | ';'))
+            .count();
         if delimiter_hits >= 2 || has_spaced_columns(line) {
             score += 1;
         }
@@ -805,7 +811,11 @@ fn has_spaced_columns(s: &str) -> bool {
 
 /// Fraction of non-empty trimmed lines that look like uppercase section headers.
 fn compute_uppercase_header_ratio(lines: &[&str]) -> f32 {
-    let non_empty: Vec<&str> = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    let non_empty: Vec<&str> = lines
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
     if non_empty.is_empty() {
         return 0.0;
     }
@@ -866,20 +876,23 @@ fn compute_encoding_error_ratio(text: &str, total_chars: f32) -> f32 {
     let fffd_count = text.chars().filter(|&c| c == '\u{FFFD}').count();
 
     let mojibake_sequences: &[&str] = &[
-        "\u{00C3}\u{00A9}",   // Ã©
-        "\u{00C3}\u{00A8}",   // Ã¨
-        "\u{00C3}\u{00BC}",   // Ã¼
-        "\u{00C3}\u{00B6}",   // Ã¶
-        "\u{00C3}\u{00A4}",   // Ã¤
-        "\u{00C2}\u{00B0}",   // Â°
-        "\u{00C2}\u{00A9}",   // Â©
+        "\u{00C3}\u{00A9}",         // Ã©
+        "\u{00C3}\u{00A8}",         // Ã¨
+        "\u{00C3}\u{00BC}",         // Ã¼
+        "\u{00C3}\u{00B6}",         // Ã¶
+        "\u{00C3}\u{00A4}",         // Ã¤
+        "\u{00C2}\u{00B0}",         // Â°
+        "\u{00C2}\u{00A9}",         // Â©
         "\u{00E2}\u{0080}\u{0093}", // em-dash mojibake
         "\u{00E2}\u{0080}\u{0099}", // right-single-quote mojibake
         "\u{00E2}\u{0080}\u{009C}", // left-double-quote mojibake
         "\u{00E2}\u{0080}\u{009D}", // right-double-quote mojibake
     ];
 
-    let mojibake_count: usize = mojibake_sequences.iter().map(|seq| text.matches(seq).count()).sum();
+    let mojibake_count: usize = mojibake_sequences
+        .iter()
+        .map(|seq| text.matches(seq).count())
+        .sum();
 
     (fffd_count + mojibake_count) as f32 / total_chars
 }
@@ -908,7 +921,11 @@ fn compute_repeated_ngram_ratio(text: &str) -> f32 {
 
 /// Fraction of non-empty trimmed lines that start with uppercase and end with `.!?`.
 fn compute_sentence_coherence_score(lines: &[&str]) -> f32 {
-    let non_empty: Vec<&str> = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    let non_empty: Vec<&str> = lines
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
     if non_empty.is_empty() {
         return 0.0;
     }
@@ -943,8 +960,8 @@ fn compute_avg_words_per_line(non_empty: &[&str], n_non_empty: usize) -> f32 {
 /// Counts ==, !=, >=, <=, &&, ||, =>, ->, +=, -=, etc.
 fn compute_operator_density(text: &str, total_chars: f32) -> f32 {
     const OPERATORS: &[&str] = &[
-        "==", "!=", ">=", "<=", "&&", "||", "=>", "->",
-        "+=", "-=", "*=", "/=", "**", "<<", ">>", "::",
+        "==", "!=", ">=", "<=", "&&", "||", "=>", "->", "+=", "-=", "*=", "/=", "**", "<<", ">>",
+        "::",
     ];
     let count: usize = OPERATORS.iter().map(|op| text.matches(op).count()).sum();
     count as f32 / total_chars * 1000.0
@@ -973,9 +990,9 @@ fn compute_inline_markup_count(text: &str, total_chars: f32) -> f32 {
     rest = text;
     while let Some(start) = rest.find('`') {
         let after = &rest[start + 1..];
-        if after.starts_with('`') {
+        if let Some(stripped) = after.strip_prefix('`') {
             // Skip `` (double backtick)
-            rest = &after[1..];
+            rest = stripped;
             continue;
         }
         if let Some(end) = after.find('`') {
@@ -1161,18 +1178,14 @@ fn is_list_item(line: &str) -> bool {
     }
 
     // Bullet: - item, * item, • item
-    if let Some(first) = trimmed.chars().next() {
-        if matches!(first, '-' | '*' | '•') {
-            if let Some(second) = trimmed.chars().nth(1) {
-                if second == ' ' {
-                    if let Some(third) = trimmed.chars().nth(2) {
-                        if !third.is_whitespace() {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
+    if let Some(first) = trimmed.chars().next()
+        && matches!(first, '-' | '*' | '•')
+        && let Some(second) = trimmed.chars().nth(1)
+        && second == ' '
+        && let Some(third) = trimmed.chars().nth(2)
+        && !third.is_whitespace()
+    {
+        return true;
     }
 
     // Numbered: 1. item, 1) item
@@ -1182,12 +1195,14 @@ fn is_list_item(line: &str) -> bool {
         while i < chars.len() && chars[i].is_ascii_digit() {
             i += 1;
         }
-        if i < chars.len() && matches!(chars[i], '.' | ')') {
-            if i + 1 < chars.len() && chars[i + 1] == ' ' {
-                if i + 2 < chars.len() && !chars[i + 2].is_whitespace() {
-                    return true;
-                }
-            }
+        if i < chars.len()
+            && matches!(chars[i], '.' | ')')
+            && i + 1 < chars.len()
+            && chars[i + 1] == ' '
+            && i + 2 < chars.len()
+            && !chars[i + 2].is_whitespace()
+        {
+            return true;
         }
     }
 
