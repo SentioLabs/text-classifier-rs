@@ -277,9 +277,9 @@ class TestBuildParser:
 
         parser = build_parser()
         args = parser.parse_args([])
-        assert args.input == "golden_train.parquet"
-        assert args.output == "golden_train.parquet"
-        assert args.voting_log == "voting_log.parquet"
+        assert args.input == "data/curated/train/golden_train.parquet"
+        assert args.output == "data/curated/train/golden_train.parquet"
+        assert args.voting_log == "data/curated/train/voting_log.parquet"
         assert args.tier1_only is False
         assert args.concurrency == 20
         assert args.dry_run is False

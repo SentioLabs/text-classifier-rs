@@ -151,8 +151,8 @@ class TestBuildParser:
 
         parser = build_parser()
         args = parser.parse_args([])
-        assert args.input == "golden_train.parquet"
-        assert args.output == "voting_pilot_results.parquet"
+        assert args.input == "data/curated/train/golden_train.parquet"
+        assert args.output == "data/curated/train/voting_pilot_results.parquet"
         assert args.sample_size == 5000
         assert args.seed == 42
         assert args.concurrency == 20

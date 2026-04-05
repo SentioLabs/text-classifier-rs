@@ -648,16 +648,16 @@ def build_parser() -> argparse.ArgumentParser:
         description="Tiered voting pipeline for label cleanup.",
     )
     parser.add_argument(
-        "--input", default="golden_train.parquet",
-        help="Path to input Parquet file (default: golden_train.parquet).",
+        "--input", default="data/curated/train/golden_train.parquet",
+        help="Path to input Parquet file.",
     )
     parser.add_argument(
-        "--output", default="golden_train.parquet",
-        help="Path to output Parquet file (default: golden_train.parquet — overwrites).",
+        "--output", default="data/curated/train/golden_train.parquet",
+        help="Path to output Parquet file (overwrites input).",
     )
     parser.add_argument(
-        "--voting-log", default="voting_log.parquet",
-        help="Path to voting log Parquet file (default: voting_log.parquet).",
+        "--voting-log", default="data/curated/train/voting_log.parquet",
+        help="Path to voting log Parquet file.",
     )
     parser.add_argument(
         "--tier1-only", action="store_true",

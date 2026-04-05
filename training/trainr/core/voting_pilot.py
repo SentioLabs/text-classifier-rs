@@ -360,12 +360,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Tier 1 voting pilot — measure agreement/escalation rates on a stratified sample.",
     )
     parser.add_argument(
-        "--input", default="golden_train.parquet",
-        help="Path to input Parquet file (default: golden_train.parquet).",
+        "--input", default="data/curated/train/golden_train.parquet",
+        help="Path to input Parquet file.",
     )
     parser.add_argument(
-        "--output", default="voting_pilot_results.parquet",
-        help="Path to output Parquet file (default: voting_pilot_results.parquet).",
+        "--output", default="data/curated/train/voting_pilot_results.parquet",
+        help="Path to output Parquet file.",
     )
     parser.add_argument(
         "--sample-size", type=int, default=5000,
