@@ -8,10 +8,11 @@ Usage via trainr CLI:
 """
 
 import argparse
+import concurrent.futures
 import json
-import os
 import re
 import sys
+import threading
 
 import polars as pl
 from tqdm import tqdm
@@ -163,36 +164,98 @@ def annotate_dataframe(
     df: pl.DataFrame,
     model: str = DEFAULT_MODEL,
     api_key: str = "",
+    concurrency: int = 20,
 ) -> pl.DataFrame:
-    """Annotate a DataFrame with det_* columns using LLM calls.
+    """Annotate a DataFrame with det_* columns using concurrent LLM calls.
 
     Args:
         df: Input DataFrame with a 'text' column.
         model: OpenRouter model ID.
         api_key: OpenRouter API key.
+        concurrency: Number of concurrent workers.
 
     Returns:
         DataFrame with additional det_* binary columns.
     """
     texts = df["text"].to_list()
+    n = len(texts)
 
-    # Collect annotations
-    annotations: list[dict[str, int]] = []
-    for text in tqdm(texts, desc="Annotating", file=sys.stderr):
+    # Pre-allocate results by index to preserve order
+    annotations: list[dict[str, int] | None] = [None] * n
+    lock = threading.Lock()
+    pbar = tqdm(total=n, desc="Annotating", file=sys.stderr)
+
+    def _annotate(idx: int, text: str) -> None:
         result = call_llm(text, model=model, api_key=api_key)
-        annotations.append(result)
+        with lock:
+            annotations[idx] = result
+            pbar.update(1)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [executor.submit(_annotate, i, t) for i, t in enumerate(texts)]
+        concurrent.futures.wait(futures)
+        # Raise any exceptions from workers
+        for f in futures:
+            f.result()
+
+    pbar.close()
 
     # Build columns from annotations
     det_columns: dict[str, list[int]] = {
         f"det_{label}": [] for label in DETECTION_LABELS
     }
     for ann in annotations:
+        assert ann is not None
         for label in DETECTION_LABELS:
             det_columns[f"det_{label}"].append(ann.get(label, 0))
 
     # Create a DataFrame from detection columns and concatenate
     det_df = pl.DataFrame(det_columns)
     return pl.concat([df, det_df], how="horizontal")
+
+
+def stratified_sample(
+    df: pl.DataFrame,
+    n: int = 10000,
+    min_per_group: int = 50,
+    group_col: str = "sub_type",
+    seed: int = 42,
+) -> pl.DataFrame:
+    """Stratified sample with a floor per sub-type group.
+
+    Ensures rare sub-types get at least min_per_group samples.
+    Remaining budget is distributed proportionally.
+    """
+    counts = df.group_by(group_col).len().sort("len")
+    total = len(df)
+    groups = counts[group_col].to_list()
+    group_counts = dict(zip(counts[group_col].to_list(), counts["len"].to_list()))
+
+    # Calculate per-group allocation
+    allocations: dict[str, int] = {}
+    budget = n
+    # First pass: guarantee floor
+    for g in groups:
+        alloc = min(min_per_group, group_counts[g])
+        allocations[g] = alloc
+        budget -= alloc
+
+    # Second pass: distribute remaining proportionally
+    remaining_groups = [g for g in groups if group_counts[g] > allocations[g]]
+    remaining_total = sum(group_counts[g] - allocations[g] for g in remaining_groups)
+    if budget > 0 and remaining_total > 0:
+        for g in remaining_groups:
+            extra = int(budget * (group_counts[g] - allocations[g]) / remaining_total)
+            allocations[g] = min(allocations[g] + extra, group_counts[g])
+
+    # Sample from each group
+    sampled = []
+    for g in groups:
+        group_df = df.filter(pl.col(group_col) == g)
+        sample_n = min(allocations.get(g, min_per_group), len(group_df))
+        sampled.append(group_df.sample(n=sample_n, seed=seed))
+
+    return pl.concat(sampled)
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +276,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model", default=DEFAULT_MODEL, help=f"OpenRouter model ID (default: {DEFAULT_MODEL}).",
     )
+    parser.add_argument(
+        "--concurrency", type=int, default=20, help="Number of concurrent workers (default: 20).",
+    )
+    parser.add_argument(
+        "--sample", type=int, default=0,
+        help="Stratified sample N rows before annotating (0 = annotate all).",
+    )
     return parser
 
 
@@ -227,7 +297,13 @@ def main(argv: list[str] | None = None) -> None:
     df = pl.read_parquet(args.input)
     print(f"  {len(df)} samples loaded.", file=sys.stderr)
 
-    result_df = annotate_dataframe(df, model=args.model, api_key=api_key)
+    if args.sample > 0 and args.sample < len(df):
+        df = stratified_sample(df, n=args.sample)
+        print(f"  Sampled {len(df)} rows (stratified by sub_type).", file=sys.stderr)
+
+    result_df = annotate_dataframe(
+        df, model=args.model, api_key=api_key, concurrency=args.concurrency,
+    )
 
     print(f"Writing {args.output}...", file=sys.stderr)
     result_df.write_parquet(args.output)
