@@ -93,6 +93,18 @@ _EXT_TO_SUB_TYPE: dict[str, str] = {
     "dockerfile": "dockerfile",
     "makefile": "makefile",
     "mk": "makefile",
+    # config
+    "yaml": "yaml",
+    "yml": "yaml",
+    "toml": "toml",
+    "ini": "ini",
+    "cfg": "ini",
+    # prose
+    "md": "markdown",
+    "markdown": "markdown",
+    "rst": "rst",
+    "tex": "latex",
+    "latex": "latex",
 }
 
 
@@ -103,6 +115,36 @@ def sub_type_for_extension(ext: str) -> str | None:
     """
     return _EXT_TO_SUB_TYPE.get(ext.lower())
 
+
+# ---------------------------------------------------------------------------
+# Sub_type -> category mapping
+# ---------------------------------------------------------------------------
+
+SUB_TYPE_CATEGORY: dict[str, str] = {
+    # code
+    "python": "code",
+    "javascript": "code",
+    "typescript": "code",
+    "rust": "code",
+    "go": "code",
+    "java": "code",
+    "sql": "code",
+    "shell": "code",
+    "css": "code",
+    "html": "code",
+    "xml": "code",
+    "dockerfile": "code",
+    "makefile": "code",
+    "unknown": "code",
+    # config (category is "code" per types.rs — yaml/toml/ini are under Code)
+    "yaml": "code",
+    "toml": "code",
+    "ini": "code",
+    # prose
+    "markdown": "prose",
+    "rst": "prose",
+    "latex": "prose",
+}
 
 # ---------------------------------------------------------------------------
 # Phase -> sub_type groups
@@ -125,6 +167,8 @@ PHASE_SUB_TYPES: dict[str, list[str]] = {
         "makefile",
         "unknown",
     ],
+    "config": ["yaml", "toml", "ini"],
+    "prose": ["markdown", "rst", "latex"],
 }
 
 # ---------------------------------------------------------------------------
@@ -146,6 +190,14 @@ TARGET_COUNTS: dict[str, int] = {
     "dockerfile": 2500,
     "makefile": 2500,
     "unknown": 2500,
+    # config
+    "yaml": 1000,
+    "toml": 1000,
+    "ini": 500,
+    # prose
+    "markdown": 2500,
+    "rst": 1500,
+    "latex": 2000,
 }
 
 # ---------------------------------------------------------------------------
@@ -167,6 +219,14 @@ STACK_DATA_DIR: dict[str, str] = {
     "dockerfile": "data/dockerfile",
     "makefile": "data/makefile",
     "unknown": "data/c",  # use C as proxy for "unknown" code
+    # config
+    "yaml": "data/yaml",
+    "toml": "data/toml",
+    "ini": "data/ini",
+    # prose
+    "markdown": "data/markdown",
+    "rst": "data/restructuredtext",
+    "latex": "data/tex",
 }
 
 # ---------------------------------------------------------------------------
@@ -188,15 +248,16 @@ def passes_size_filter(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def build_row(text: str, sub_type: str) -> dict:
+def build_row(text: str, sub_type: str, category: str = "code") -> dict:
     """Build a single row dict matching the golden_train.parquet schema.
 
-    Sets source and model to ``real/the-stack-v2``, category to ``code``,
-    and all 38 feature columns to None.
+    Sets source and model to ``real/the-stack-v2`` and all 38 feature
+    columns to None.  The *category* defaults to ``"code"`` but should
+    be set to ``"prose"`` for prose sub_types.
     """
     row: dict = {
         "text": text,
-        "category": "code",
+        "category": category,
         "sub_type": sub_type,
         "source": "real/the-stack-v2",
         "model": "real/the-stack-v2",
@@ -237,7 +298,8 @@ def _stream_sub_type(
         if not content or not passes_size_filter(content):
             continue
 
-        rows.append(build_row(text=content, sub_type=sub_type))
+        category = SUB_TYPE_CATEGORY.get(sub_type, "code")
+        rows.append(build_row(text=content, sub_type=sub_type, category=category))
         pbar.update(1)
 
         if len(rows) >= target:

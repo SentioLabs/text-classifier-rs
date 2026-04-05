@@ -14,6 +14,7 @@ from trainr.core.pull_real_data import (
     FEATURE_COLUMNS,
     PHASE_SUB_TYPES,
     STACK_DATA_DIR,
+    SUB_TYPE_CATEGORY,
     TARGET_COUNTS,
     append_to_parquet,
     build_row,
@@ -291,3 +292,195 @@ class TestPassesSizeFilterMultibyte:
         # 10 CJK chars = 30 bytes, should fail
         text = "\u4e00" * 10
         assert passes_size_filter(text) is False
+
+
+# ---------------------------------------------------------------------------
+# Config and prose extension mappings
+# ---------------------------------------------------------------------------
+
+
+class TestConfigProseExtensions:
+    """Test extension mapping for config and prose sub_types."""
+
+    def test_yaml_extension(self):
+        assert sub_type_for_extension("yaml") == "yaml"
+
+    def test_yml_extension(self):
+        assert sub_type_for_extension("yml") == "yaml"
+
+    def test_toml_extension(self):
+        assert sub_type_for_extension("toml") == "toml"
+
+    def test_ini_extension(self):
+        assert sub_type_for_extension("ini") == "ini"
+
+    def test_cfg_extension(self):
+        assert sub_type_for_extension("cfg") == "ini"
+
+    def test_markdown_extensions(self):
+        assert sub_type_for_extension("md") == "markdown"
+        assert sub_type_for_extension("markdown") == "markdown"
+
+    def test_rst_extension(self):
+        assert sub_type_for_extension("rst") == "rst"
+
+    def test_latex_extensions(self):
+        assert sub_type_for_extension("tex") == "latex"
+        assert sub_type_for_extension("latex") == "latex"
+
+
+# ---------------------------------------------------------------------------
+# SUB_TYPE_CATEGORY mapping
+# ---------------------------------------------------------------------------
+
+
+class TestSubTypeCategory:
+    """Test sub_type -> category mapping."""
+
+    def test_code_sub_types_have_code_category(self):
+        for st in ["python", "javascript", "typescript", "rust", "go", "java",
+                    "sql", "shell", "css", "html", "xml", "dockerfile",
+                    "makefile", "unknown"]:
+            assert SUB_TYPE_CATEGORY[st] == "code", f"{st} should be 'code'"
+
+    def test_config_sub_types_have_code_category(self):
+        """Config files (yaml/toml/ini) are categorized as code per types.rs."""
+        for st in ["yaml", "toml", "ini"]:
+            assert SUB_TYPE_CATEGORY[st] == "code", f"{st} should be 'code'"
+
+    def test_prose_sub_types_have_prose_category(self):
+        for st in ["markdown", "rst", "latex"]:
+            assert SUB_TYPE_CATEGORY[st] == "prose", f"{st} should be 'prose'"
+
+    def test_all_phase_sub_types_have_category(self):
+        """Every sub_type in any phase must have a category entry."""
+        for phase_list in PHASE_SUB_TYPES.values():
+            for st in phase_list:
+                assert st in SUB_TYPE_CATEGORY, f"Missing category for {st}"
+
+
+# ---------------------------------------------------------------------------
+# Config and prose phases
+# ---------------------------------------------------------------------------
+
+
+class TestConfigProsePhases:
+    """Test phase configuration for config and prose."""
+
+    def test_config_phase_exists(self):
+        assert "config" in PHASE_SUB_TYPES
+
+    def test_config_phase_sub_types(self):
+        assert PHASE_SUB_TYPES["config"] == ["yaml", "toml", "ini"]
+
+    def test_prose_phase_exists(self):
+        assert "prose" in PHASE_SUB_TYPES
+
+    def test_prose_phase_sub_types(self):
+        assert PHASE_SUB_TYPES["prose"] == ["markdown", "rst", "latex"]
+
+    def test_all_config_sub_types_have_targets(self):
+        for st in PHASE_SUB_TYPES["config"]:
+            assert st in TARGET_COUNTS, f"Missing target count for {st}"
+
+    def test_all_prose_sub_types_have_targets(self):
+        for st in PHASE_SUB_TYPES["prose"]:
+            assert st in TARGET_COUNTS, f"Missing target count for {st}"
+
+    def test_all_config_sub_types_have_data_dir(self):
+        for st in PHASE_SUB_TYPES["config"]:
+            assert st in STACK_DATA_DIR, f"Missing data_dir for {st}"
+
+    def test_all_prose_sub_types_have_data_dir(self):
+        for st in PHASE_SUB_TYPES["prose"]:
+            assert st in STACK_DATA_DIR, f"Missing data_dir for {st}"
+
+
+# ---------------------------------------------------------------------------
+# Config and prose target counts
+# ---------------------------------------------------------------------------
+
+
+class TestConfigProseTargetCounts:
+    """Test target counts for config and prose phases."""
+
+    def test_yaml_target(self):
+        assert TARGET_COUNTS["yaml"] == 1000
+
+    def test_toml_target(self):
+        assert TARGET_COUNTS["toml"] == 1000
+
+    def test_ini_target(self):
+        assert TARGET_COUNTS["ini"] == 500
+
+    def test_markdown_target(self):
+        assert TARGET_COUNTS["markdown"] == 2500
+
+    def test_rst_target(self):
+        assert TARGET_COUNTS["rst"] == 1500
+
+    def test_latex_target(self):
+        assert TARGET_COUNTS["latex"] == 2000
+
+    def test_total_config_target(self):
+        total = sum(TARGET_COUNTS[st] for st in PHASE_SUB_TYPES["config"])
+        assert total == 2500
+
+    def test_total_prose_target(self):
+        total = sum(TARGET_COUNTS[st] for st in PHASE_SUB_TYPES["prose"])
+        assert total == 6000
+
+
+# ---------------------------------------------------------------------------
+# build_row with category parameter
+# ---------------------------------------------------------------------------
+
+
+class TestBuildRowCategory:
+    """Test that build_row accepts and uses the category parameter."""
+
+    def test_default_category_is_code(self):
+        row = build_row(text="hello", sub_type="python")
+        assert row["category"] == "code"
+
+    def test_explicit_prose_category(self):
+        row = build_row(text="# Hello World", sub_type="markdown", category="prose")
+        assert row["category"] == "prose"
+
+    def test_explicit_code_category(self):
+        row = build_row(text="key: val", sub_type="yaml", category="code")
+        assert row["category"] == "code"
+
+    def test_prose_row_has_all_columns(self):
+        row = build_row(text="Some text", sub_type="rst", category="prose")
+        assert len(row) == 43
+        assert row["sub_type"] == "rst"
+        for col in FEATURE_COLUMNS:
+            assert row[col] is None
+
+
+# ---------------------------------------------------------------------------
+# Stack data dir for config/prose
+# ---------------------------------------------------------------------------
+
+
+class TestConfigProseStackDataDir:
+    """Test Stack v1 data_dir mapping for config and prose."""
+
+    def test_yaml_data_dir(self):
+        assert STACK_DATA_DIR["yaml"] == "data/yaml"
+
+    def test_toml_data_dir(self):
+        assert STACK_DATA_DIR["toml"] == "data/toml"
+
+    def test_ini_data_dir(self):
+        assert STACK_DATA_DIR["ini"] == "data/ini"
+
+    def test_markdown_data_dir(self):
+        assert STACK_DATA_DIR["markdown"] == "data/markdown"
+
+    def test_rst_data_dir(self):
+        assert STACK_DATA_DIR["rst"] == "data/restructuredtext"
+
+    def test_latex_data_dir(self):
+        assert STACK_DATA_DIR["latex"] == "data/tex"
