@@ -2,15 +2,12 @@
 
 import asyncio
 import json
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from audit_model_errors import _parse_llm_answer
+from trainr.core.audit_model_errors import _parse_llm_answer
 
 
 def _run(coro):
@@ -52,7 +49,7 @@ class TestComputeVerdict:
 
     @pytest.fixture(autouse=True)
     def _import(self):
-        from audit_model_errors import _compute_verdict
+        from trainr.core.audit_model_errors import _compute_verdict
         self.compute = _compute_verdict
 
     def test_3_1_majority_fix_label(self):
@@ -118,7 +115,7 @@ class TestFilterSubtypes:
         return p
 
     def test_filter_subtypes_limits_audited_errors(self, tmp_path):
-        from audit_model_errors import async_main
+        from trainr.core.audit_model_errors import async_main
 
         preds = self._make_predictions_file(tmp_path)
         output = tmp_path / "votes.jsonl"
@@ -129,7 +126,7 @@ class TestFilterSubtypes:
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
-        with patch("audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
+        with patch("trainr.core.audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
              patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}):
             _run(async_main([
                 "--predictions", str(preds),
@@ -145,7 +142,7 @@ class TestFilterSubtypes:
         assert sub_types <= {"json", "csv"}
 
     def test_no_filter_subtypes_audits_all(self, tmp_path):
-        from audit_model_errors import async_main
+        from trainr.core.audit_model_errors import async_main
 
         preds = self._make_predictions_file(tmp_path)
         output = tmp_path / "votes.jsonl"
@@ -155,7 +152,7 @@ class TestFilterSubtypes:
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
-        with patch("audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
+        with patch("trainr.core.audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
              patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}):
             _run(async_main([
                 "--predictions", str(preds),
@@ -186,7 +183,7 @@ class TestDualLlmMode:
         return p
 
     def test_dual_llm_produces_4way_vote(self, tmp_path):
-        from audit_model_errors import async_main
+        from trainr.core.audit_model_errors import async_main
 
         preds = self._make_predictions_file(tmp_path)
         output = tmp_path / "votes.jsonl"
@@ -201,7 +198,7 @@ class TestDualLlmMode:
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(side_effect=[mock_haiku, mock_gpt])
 
-        with patch("audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
+        with patch("trainr.core.audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
              patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}):
             _run(async_main([
                 "--predictions", str(preds),
@@ -220,7 +217,7 @@ class TestDualLlmMode:
         assert rec["magika_category"] == "code"
 
     def test_dual_llm_ties_go_to_ties_output(self, tmp_path):
-        from audit_model_errors import async_main
+        from trainr.core.audit_model_errors import async_main
 
         preds = self._make_predictions_file(tmp_path)
         output = tmp_path / "votes.jsonl"
@@ -235,7 +232,7 @@ class TestDualLlmMode:
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(side_effect=[mock_haiku, mock_gpt])
 
-        with patch("audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
+        with patch("trainr.core.audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
              patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}):
             _run(async_main([
                 "--predictions", str(preds),
@@ -261,7 +258,7 @@ class TestBackwardCompat:
     """Existing single-LLM mode with --backend/--model must still work."""
 
     def test_single_llm_backend_still_works(self, tmp_path):
-        from audit_model_errors import async_main
+        from trainr.core.audit_model_errors import async_main
 
         preds_data = [
             {"text": "some text", "expected_category": "prose",
@@ -276,7 +273,7 @@ class TestBackwardCompat:
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
-        with patch("audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
+        with patch("trainr.core.audit_model_errors.openai.AsyncOpenAI", return_value=mock_client), \
              patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}):
             _run(async_main([
                 "--predictions", str(preds),
