@@ -462,7 +462,7 @@ def stratified_sample(
     # Sample from each group
     sampled = []
     for g in groups:
-        group_df = df.filter(pl.col(group_col) == g)
+        group_df = df.filter(pl.col(group_col) == g if g is not None else pl.col(group_col).is_null())
         sample_n = min(allocations.get(g, min_per_group), len(group_df))
         sampled.append(group_df.sample(n=sample_n, seed=seed))
 
