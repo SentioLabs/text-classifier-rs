@@ -155,7 +155,7 @@ class TestOutputColumns:
         })
 
         # Mock the LLM call to return known detections
-        def mock_call_llm(text, model, api_key):
+        def mock_call_llm(text, model, api_key, **kwargs):
             if "print" in text:
                 result = {label: 0 for label in DETECTION_LABELS}
                 result["python"] = 1
@@ -188,7 +188,7 @@ class TestOutputColumns:
             "extra_col": [42],
         })
 
-        def mock_call_llm(text, model, api_key):
+        def mock_call_llm(text, model, api_key, **kwargs):
             return {label: 0 for label in DETECTION_LABELS}
 
         with patch("trainr.core.annotate_detections.call_llm", side_effect=mock_call_llm):
@@ -220,7 +220,7 @@ class TestMain:
             })
             df.write_parquet(input_path)
 
-            def mock_call_llm(text, model, api_key):
+            def mock_call_llm(text, model, api_key, **kwargs):
                 return {label: 0 for label in DETECTION_LABELS}
 
             with patch("trainr.core.annotate_detections.call_llm", side_effect=mock_call_llm), \

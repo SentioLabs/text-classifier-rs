@@ -54,52 +54,37 @@ content types present. A text can contain multiple types (e.g., a markdown \
 document with embedded Python code blocks should have both "markdown": 1 and \
 "python": 1).
 
-For each label below, output 1 if that content type is present, or 0 if not.
+Labels: plain, markdown, rst, latex, python, javascript, typescript, rust, go, \
+java, sql, shell, css, yaml, toml, ini, dockerfile, makefile, html, xml, sgml, \
+csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, log_lines
 
-## Label definitions
+For each label, output 1 if that content type is present in the text, or 0 if not.
 
-**Prose formats:**
-- plain: Unformatted natural language text without any markup syntax
-- markdown: Text using Markdown syntax (headings with #, **bold**, links, lists with - or *)
-- rst: reStructuredText markup (underlined headings, .. directives, :role:`text` syntax)
-- latex: LaTeX document markup (\\begin, \\end, $math$, \\section, \\cite)
-
-**Programming languages:**
-- python, javascript, typescript, rust, go, java, sql, shell, css: Source code in that language
-
-**Config/build formats:**
-- yaml: YAML config (key: value with indentation-based nesting)
-- toml: TOML config ([sections], key = "value" with quotes)
-- ini: INI config ([sections], key=value without quotes, semicolon comments)
-- dockerfile: Dockerfile instructions (FROM, RUN, COPY, ENTRYPOINT)
-- makefile: Makefile syntax (targets with tabs, .PHONY, $(variables))
-
-**Markup languages:**
-- html: HTML tags (<div>, <p>, <a href>)
-- xml: XML tags with namespaces or non-HTML structure
-- sgml: SGML/DTD markup (<!DOCTYPE, <!ENTITY, SGML declarations)
-
-**Tabular data:**
-- csv: Comma-separated values (fields separated by commas, one record per line)
-- tsv: Tab-separated values (fields separated by tab characters)
-- pipe_table: Pipe-delimited table (fields separated by | characters)
-- fixed_width: Fixed-width columnar data (fields aligned by character position, no delimiters)
-
-**Structured data:**
-- json: JSON object or array (curly braces, square brackets, quoted keys)
-- jsonl: JSON Lines — one complete JSON object per line, no wrapping array
-- key_value: Key-value pairs not matching ini/toml/yaml (e.g., "Key: Value" or "KEY=VALUE" without sections)
-- log_lines: Log entries with timestamps, severity levels, or structured log fields
+## Important distinctions
+- "jsonl" = JSON Lines: one JSON object per line, no wrapping array. If you see \
+multiple JSON objects one-per-line, that is jsonl, not json.
+- "rst" = reStructuredText: look for .. directives, :role:`text`, or heading \
+underlines with === or ---
+- "sgml" = SGML/DTD: look for <!DOCTYPE, <!ENTITY, or SGML declarations
+- "fixed_width" = columns aligned by character position with spaces, no delimiter \
+characters between fields
+- "pipe_table" = fields separated by | pipe characters
+- "csv" vs "tsv": csv uses commas, tsv uses tabs
 
 ## Rules
-- A label should be 1 if ANY portion of the text contains that content type
-- "plain" means natural language prose WITHOUT formatting markup — only set to 1 if there is substantial unformatted narrative text (not just variable names or short labels)
-- Be specific with tabular formats: if you see commas separating fields, use "csv"; tabs use "tsv"; pipes use "pipe_table"
-- "jsonl" is NOT the same as "json" — jsonl has one JSON object per line with no outer array
+- When in doubt, label 1. It is better to include a borderline detection than \
+to miss it.
+- "plain" = natural language prose without markup. Only set to 1 if there are \
+full sentences of readable narrative text.
 
-Return ONLY a JSON object. No explanation, no markdown formatting.
+Return ONLY a JSON object with each label as a key and 0 or 1 as the value. \
+No explanation, no markdown formatting.
 
-{"plain": 0, "markdown": 0, "rst": 0, "latex": 0, "python": 0, "javascript": 0, "typescript": 0, "rust": 0, "go": 0, "java": 0, "sql": 0, "shell": 0, "css": 0, "yaml": 0, "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, "xml": 0, "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, "json": 0, "jsonl": 0, "key_value": 0, "log_lines": 0}"""
+{"plain": 0, "markdown": 0, "rst": 0, "latex": 0, "python": 0, "javascript": 0, \
+"typescript": 0, "rust": 0, "go": 0, "java": 0, "sql": 0, "shell": 0, "css": 0, \
+"yaml": 0, "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, \
+"xml": 0, "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, \
+"json": 0, "jsonl": 0, "key_value": 0, "log_lines": 0}"""
 
 
 def build_prompt(text: str) -> str:
@@ -178,18 +163,8 @@ MAX_RETRIES = 3
 RETRY_BACKOFF = [2, 5, 15]
 
 
-def call_llm(text: str, model: str, api_key: str) -> dict[str, int]:
-    """Call the LLM to annotate a single text sample.
-
-    Uses a system message with cache_control for the static prompt prefix
-    (label definitions + rules). The per-sample text goes in the user message.
-    Anthropic models on OpenRouter will cache the system message across calls.
-
-    Retries on transient errors (connection, rate-limit, server errors).
-    Returns a dict of label -> 0/1.
-    """
-    import time
-
+def _call_openrouter(text: str, model: str, api_key: str) -> str:
+    """Call LLM via OpenRouter (OpenAI-compatible API)."""
     if openai is None:
         raise RuntimeError("openai package is not installed. Run: pip install openai")
 
@@ -198,34 +173,99 @@ def call_llm(text: str, model: str, api_key: str) -> dict[str, int]:
         api_key=api_key,
         timeout=30.0,
     )
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": build_prompt(text)},
+        ],
+        temperature=0.0,
+        extra_body={
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
+        },
+    )
+    return response.choices[0].message.content or ""
 
-    user_msg = build_prompt(text)
+
+def _call_anthropic(text: str, model: str, api_key: str) -> str:
+    """Call LLM via Anthropic API with native prompt caching."""
+    try:
+        import anthropic
+    except ImportError:
+        raise RuntimeError("anthropic package is not installed. Run: pip install anthropic")
+
+    client = anthropic.Anthropic(api_key=api_key, timeout=30.0)
+    response = client.messages.create(
+        model=model,
+        max_tokens=256,
+        system=[
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[
+            {"role": "user", "content": build_prompt(text)},
+        ],
+        temperature=0.0,
+    )
+    return response.content[0].text if response.content else ""
+
+
+# Transient errors to retry on, by backend
+_OPENROUTER_RETRYABLE = None  # lazy-loaded
+_ANTHROPIC_RETRYABLE = None
+
+
+def _get_retryable_errors(backend: str) -> tuple:
+    """Get the retryable exception types for the given backend."""
+    global _OPENROUTER_RETRYABLE, _ANTHROPIC_RETRYABLE
+    if backend == "anthropic":
+        if _ANTHROPIC_RETRYABLE is None:
+            import anthropic as anth
+            _ANTHROPIC_RETRYABLE = (
+                anth.APIConnectionError,
+                anth.APITimeoutError,
+                anth.RateLimitError,
+                anth.InternalServerError,
+            )
+        return _ANTHROPIC_RETRYABLE
+    else:
+        if _OPENROUTER_RETRYABLE is None:
+            _OPENROUTER_RETRYABLE = (
+                openai.APIConnectionError,
+                openai.APITimeoutError,
+                openai.RateLimitError,
+                openai.InternalServerError,
+            )
+        return _OPENROUTER_RETRYABLE
+
+
+def call_llm(
+    text: str, model: str, api_key: str, backend: str = "openrouter",
+) -> dict[str, int]:
+    """Call the LLM to annotate a single text sample.
+
+    Args:
+        text: The text to classify.
+        model: Model ID (OpenRouter format or Anthropic format).
+        api_key: API key for the chosen backend.
+        backend: "openrouter" or "anthropic".
+
+    Retries on transient errors. Returns a dict of label -> 0/1.
+    """
+    import time
+
+    call_fn = _call_anthropic if backend == "anthropic" else _call_openrouter
+    retryable = _get_retryable_errors(backend)
     last_err: Exception | None = None
 
     for attempt in range(MAX_RETRIES):
         try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": SYSTEM_PROMPT,
-                    },
-                    {"role": "user", "content": user_msg},
-                ],
-                temperature=0.0,
-                extra_body={
-                    "cache_control": {"type": "ephemeral", "ttl": "1h"},
-                },
-            )
-            content = response.choices[0].message.content or ""
+            content = call_fn(text, model=model, api_key=api_key)
             return parse_response(content)
-        except (
-            openai.APIConnectionError,
-            openai.APITimeoutError,
-            openai.RateLimitError,
-            openai.InternalServerError,
-        ) as e:
+        except retryable as e:
             last_err = e
             backoff = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
             print(
@@ -288,6 +328,7 @@ def annotate_dataframe(
     api_key: str = "",
     concurrency: int = 20,
     checkpoint_path: str | None = None,
+    backend: str = "openrouter",
 ) -> pl.DataFrame:
     """Annotate a DataFrame with det_* columns using concurrent LLM calls.
 
@@ -296,10 +337,11 @@ def annotate_dataframe(
 
     Args:
         df: Input DataFrame with a 'text' column.
-        model: OpenRouter model ID.
-        api_key: OpenRouter API key.
+        model: Model ID.
+        api_key: API key for the chosen backend.
         concurrency: Number of concurrent workers.
         checkpoint_path: Path to checkpoint JSONL file (None to disable).
+        backend: "openrouter" or "anthropic".
 
     Returns:
         DataFrame with additional det_* binary columns.
@@ -338,7 +380,7 @@ def annotate_dataframe(
 
         def _annotate(idx: int, text: str) -> None:
             nonlocal flushed_up_to, completed_count
-            result = call_llm(text, model=model, api_key=api_key)
+            result = call_llm(text, model=model, api_key=api_key, backend=backend)
             with lock:
                 annotations[idx] = result
                 completed_count += 1
@@ -443,7 +485,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", required=True, help="Path to output Parquet file.",
     )
     parser.add_argument(
-        "--model", default=DEFAULT_MODEL, help=f"OpenRouter model ID (default: {DEFAULT_MODEL}).",
+        "--model", default=None,
+        help="Model ID. Defaults: openrouter=gpt-5.4-nano, anthropic=claude-haiku-4-5-20251001.",
     )
     parser.add_argument(
         "--concurrency", type=int, default=20, help="Number of concurrent workers (default: 20).",
@@ -452,7 +495,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--sample", type=int, default=0,
         help="Stratified sample N rows before annotating (0 = annotate all).",
     )
+    parser.add_argument(
+        "--backend", default="openrouter", choices=["openrouter", "anthropic"],
+        help="API backend (default: openrouter).",
+    )
     return parser
+
+
+BACKEND_DEFAULT_MODELS = {
+    "openrouter": DEFAULT_MODEL,
+    "anthropic": "claude-haiku-4-5-20251001",
+}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -462,8 +515,16 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    api_key = get_openrouter_api_key()
+    backend = args.backend
+    model = args.model or BACKEND_DEFAULT_MODELS.get(backend, DEFAULT_MODEL)
 
+    if backend == "anthropic":
+        from trainr.shared.api import get_anthropic_api_key
+        api_key = get_anthropic_api_key()
+    else:
+        api_key = get_openrouter_api_key()
+
+    print(f"Backend: {backend}, Model: {model}", file=sys.stderr)
     print(f"Reading {args.input}...", file=sys.stderr)
     df = pl.read_parquet(args.input)
     print(f"  {len(df)} samples loaded.", file=sys.stderr)
@@ -478,10 +539,11 @@ def main(argv: list[str] | None = None) -> None:
 
     result_df = annotate_dataframe(
         df,
-        model=args.model,
+        model=model,
         api_key=api_key,
         concurrency=args.concurrency,
         checkpoint_path=checkpoint_path,
+        backend=backend,
     )
 
     print(f"Writing {args.output}...", file=sys.stderr)

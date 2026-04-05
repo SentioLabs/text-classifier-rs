@@ -82,9 +82,10 @@ def split_cmd(**kwargs):
 @data.command("annotate-detections")
 @click.option("--input", required=True, help="Path to input Parquet file.")
 @click.option("--output", required=True, help="Path to output Parquet file.")
-@click.option("--model", default=None, help="OpenRouter model ID.")
+@click.option("--model", default=None, help="Model ID (auto-selected per backend if omitted).")
 @click.option("--concurrency", type=int, default=None, help="Concurrent workers (default: 20).")
 @click.option("--sample", type=int, default=None, help="Stratified sample N rows (0=all).")
+@click.option("--backend", default=None, type=click.Choice(["openrouter", "anthropic"]), help="API backend.")
 def annotate_detections_cmd(**kwargs):
     """Annotate training data with multi-label content detections via LLM."""
     from trainr.core.annotate_detections import main as _main
