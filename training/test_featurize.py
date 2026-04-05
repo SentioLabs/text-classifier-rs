@@ -6,10 +6,7 @@ from pathlib import Path
 
 import pytest
 
-# Ensure the training module is importable
-sys.path.insert(0, str(Path(__file__).parent))
-
-from featurize import (
+from trainr.core.featurize import (
     FEATURES,
     SAMPLE_SIZE,
     UNIQUENESS_LINES,
@@ -851,7 +848,7 @@ class TestCli:
         result = subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).parent / "featurize.py"),
+                str(Path(__file__).parent / "trainr" / "core" / "featurize.py"),
                 "--input",
                 str(input_path),
                 "--output",
@@ -872,7 +869,7 @@ class TestCli:
     def test_feature_columns_are_float32(self, tmp_path):
         """Feature columns should use Float32 dtype to match Rust f32."""
         pl = pytest.importorskip("polars")
-        from featurize import main
+        from trainr.core.featurize import main
 
         input_path = tmp_path / "input.parquet"
         output_path = tmp_path / "output.parquet"
@@ -884,7 +881,7 @@ class TestCli:
 
         output_df = pl.read_parquet(str(output_path))
         # Also verify via direct DataFrame construction for completeness.
-        from featurize import extract_all
+        from trainr.core.featurize import extract_all
 
         rows = [extract_all("Hello world.")]
         features_df = pl.DataFrame(
