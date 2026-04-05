@@ -1,6 +1,6 @@
 outs:
-- md5: f86bcc43c2e0e655b00ebf2b7665a00b.dir
-  size: 74639017
-  nfiles: 5
+- md5: b88e3fb544dbf1c5f2c4e61fc85c6e76.dir
+  size: 45352051
+  nfiles: 1
   hash: md5
   path: archive
