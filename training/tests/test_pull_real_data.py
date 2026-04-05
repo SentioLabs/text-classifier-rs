@@ -16,10 +16,17 @@ from trainr.core.pull_real_data import (
     STACK_DATA_DIR,
     SUB_TYPE_CATEGORY,
     TARGET_COUNTS,
+    VALIDATORS,
     append_to_parquet,
     build_row,
     passes_size_filter,
     sub_type_for_extension,
+    validate_csv,
+    validate_fixed_width,
+    validate_json,
+    validate_jsonl,
+    validate_pipe_table,
+    validate_tsv,
 )
 
 
@@ -484,3 +491,342 @@ class TestConfigProseStackDataDir:
 
     def test_latex_data_dir(self):
         assert STACK_DATA_DIR["latex"] == "data/tex"
+
+
+# ---------------------------------------------------------------------------
+# Validators — CSV
+# ---------------------------------------------------------------------------
+
+
+class TestValidateCsv:
+    """Test CSV format validation."""
+
+    def test_valid_csv(self):
+        text = "name,age,city\nAlice,30,NYC\nBob,25,LA\n"
+        assert validate_csv(text) is True
+
+    def test_single_row_rejected(self):
+        text = "name,age,city\n"
+        assert validate_csv(text) is False
+
+    def test_empty_string_rejected(self):
+        assert validate_csv("") is False
+
+    def test_inconsistent_columns_rejected(self):
+        text = "a,b,c\n1,2\n3,4,5\n"
+        assert validate_csv(text) is False
+
+    def test_single_column_rejected(self):
+        text = "name\nAlice\nBob\n"
+        assert validate_csv(text) is False
+
+    def test_quoted_fields_accepted(self):
+        text = '"name","age"\n"Alice","30"\n"Bob","25"\n'
+        assert validate_csv(text) is True
+
+    def test_blank_lines_ignored(self):
+        text = "a,b\n\n1,2\n\n3,4\n"
+        assert validate_csv(text) is True
+
+
+# ---------------------------------------------------------------------------
+# Validators — TSV
+# ---------------------------------------------------------------------------
+
+
+class TestValidateTsv:
+    """Test TSV format validation."""
+
+    def test_valid_tsv(self):
+        text = "name\tage\tcity\nAlice\t30\tNYC\nBob\t25\tLA\n"
+        assert validate_tsv(text) is True
+
+    def test_single_row_rejected(self):
+        text = "name\tage\tcity\n"
+        assert validate_tsv(text) is False
+
+    def test_empty_string_rejected(self):
+        assert validate_tsv("") is False
+
+    def test_inconsistent_columns_rejected(self):
+        text = "a\tb\tc\n1\t2\n3\t4\t5\n"
+        assert validate_tsv(text) is False
+
+    def test_single_column_rejected(self):
+        text = "name\nAlice\nBob\n"
+        assert validate_tsv(text) is False
+
+    def test_blank_lines_ignored(self):
+        text = "a\tb\n\n1\t2\n\n3\t4\n"
+        assert validate_tsv(text) is True
+
+
+# ---------------------------------------------------------------------------
+# Validators — JSONL
+# ---------------------------------------------------------------------------
+
+
+class TestValidateJsonl:
+    """Test JSONL format validation."""
+
+    def test_valid_jsonl(self):
+        text = '{"a": 1}\n{"b": 2}\n'
+        assert validate_jsonl(text) is True
+
+    def test_single_line_rejected(self):
+        text = '{"a": 1}\n'
+        assert validate_jsonl(text) is False
+
+    def test_empty_string_rejected(self):
+        assert validate_jsonl("") is False
+
+    def test_invalid_json_line_rejected(self):
+        text = '{"a": 1}\nnot json\n'
+        assert validate_jsonl(text) is False
+
+    def test_blank_lines_ignored(self):
+        text = '{"a": 1}\n\n{"b": 2}\n'
+        assert validate_jsonl(text) is True
+
+    def test_arrays_accepted(self):
+        text = '[1, 2, 3]\n[4, 5, 6]\n'
+        assert validate_jsonl(text) is True
+
+
+# ---------------------------------------------------------------------------
+# Validators — JSON
+# ---------------------------------------------------------------------------
+
+
+class TestValidateJson:
+    """Test JSON format validation."""
+
+    def test_valid_json_object(self):
+        assert validate_json('{"key": "value"}') is True
+
+    def test_valid_json_array(self):
+        assert validate_json('[1, 2, 3]') is True
+
+    def test_invalid_json_rejected(self):
+        assert validate_json("{invalid json}") is False
+
+    def test_empty_string_rejected(self):
+        assert validate_json("") is False
+
+    def test_plain_text_rejected(self):
+        assert validate_json("hello world") is False
+
+    def test_nested_json_accepted(self):
+        assert validate_json('{"a": {"b": [1, 2]}}') is True
+
+
+# ---------------------------------------------------------------------------
+# Validators — pipe_table
+# ---------------------------------------------------------------------------
+
+
+class TestValidatePipeTable:
+    """Test pipe table format validation."""
+
+    def test_valid_pipe_table(self):
+        text = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n"
+        assert validate_pipe_table(text) is True
+
+    def test_no_pipes_rejected(self):
+        text = "Name  Age\nAlice  30\nBob  25\n"
+        assert validate_pipe_table(text) is False
+
+    def test_single_line_rejected(self):
+        text = "| Name | Age |\n"
+        assert validate_pipe_table(text) is False
+
+    def test_empty_string_rejected(self):
+        assert validate_pipe_table("") is False
+
+    def test_too_few_pipe_lines_rejected(self):
+        """Less than 70% of lines must have pipes."""
+        text = "| Name | Age |\nno pipes\nno pipes\nno pipes\n"
+        assert validate_pipe_table(text) is False
+
+    def test_consistent_columns_accepted(self):
+        text = "| a | b | c |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n"
+        assert validate_pipe_table(text) is True
+
+
+# ---------------------------------------------------------------------------
+# Validators — fixed_width
+# ---------------------------------------------------------------------------
+
+
+class TestValidateFixedWidth:
+    """Test fixed-width format validation."""
+
+    def test_valid_fixed_width(self):
+        text = "Name      Age  City\nAlice     30   NYC\nBob       25   LA\n"
+        assert validate_fixed_width(text) is True
+
+    def test_too_few_lines_rejected(self):
+        text = "Name      Age\nAlice     30\n"
+        assert validate_fixed_width(text) is False
+
+    def test_empty_string_rejected(self):
+        assert validate_fixed_width("") is False
+
+    def test_no_common_gaps_rejected(self):
+        text = "abc\ndef\nghi\n"
+        assert validate_fixed_width(text) is False
+
+    def test_three_lines_with_alignment_accepted(self):
+        text = "ID    Name    Score\n01    Alice   95\n02    Bob     87\n"
+        assert validate_fixed_width(text) is True
+
+
+# ---------------------------------------------------------------------------
+# VALIDATORS dict
+# ---------------------------------------------------------------------------
+
+
+class TestValidatorsDict:
+    """Test the VALIDATORS mapping."""
+
+    def test_validators_has_csv(self):
+        assert "csv" in VALIDATORS
+        assert VALIDATORS["csv"] is validate_csv
+
+    def test_validators_has_tsv(self):
+        assert "tsv" in VALIDATORS
+        assert VALIDATORS["tsv"] is validate_tsv
+
+    def test_validators_has_jsonl(self):
+        assert "jsonl" in VALIDATORS
+        assert VALIDATORS["jsonl"] is validate_jsonl
+
+    def test_validators_has_json(self):
+        assert "json" in VALIDATORS
+        assert VALIDATORS["json"] is validate_json
+
+    def test_validators_has_pipe_table(self):
+        assert "pipe_table" in VALIDATORS
+        assert VALIDATORS["pipe_table"] is validate_pipe_table
+
+    def test_validators_has_fixed_width(self):
+        assert "fixed_width" in VALIDATORS
+        assert VALIDATORS["fixed_width"] is validate_fixed_width
+
+
+# ---------------------------------------------------------------------------
+# Structured phase configuration
+# ---------------------------------------------------------------------------
+
+
+class TestStructuredPhaseConfig:
+    """Test structured phase sub_type configuration."""
+
+    def test_structured_phase_exists(self):
+        assert "structured" in PHASE_SUB_TYPES
+
+    def test_structured_phase_sub_types(self):
+        expected = ["csv", "tsv", "jsonl", "json", "pipe_table",
+                    "fixed_width", "key_value", "log_lines"]
+        assert sorted(PHASE_SUB_TYPES["structured"]) == sorted(expected)
+
+    def test_all_structured_sub_types_have_category(self):
+        for st in PHASE_SUB_TYPES["structured"]:
+            assert st in SUB_TYPE_CATEGORY, f"Missing category for {st}"
+            assert SUB_TYPE_CATEGORY[st] == "structured"
+
+    def test_all_structured_sub_types_have_targets(self):
+        for st in PHASE_SUB_TYPES["structured"]:
+            assert st in TARGET_COUNTS, f"Missing target count for {st}"
+            assert TARGET_COUNTS[st] >= 500
+
+
+# ---------------------------------------------------------------------------
+# Structured extension mappings
+# ---------------------------------------------------------------------------
+
+
+class TestStructuredExtensions:
+    """Test extension mapping for structured sub_types."""
+
+    def test_jsonl_extension(self):
+        assert sub_type_for_extension("jsonl") == "jsonl"
+
+    def test_ndjson_extension(self):
+        assert sub_type_for_extension("ndjson") == "jsonl"
+
+    def test_json_extension(self):
+        assert sub_type_for_extension("json") == "json"
+
+    def test_csv_extension(self):
+        assert sub_type_for_extension("csv") == "csv"
+
+    def test_tsv_extension(self):
+        assert sub_type_for_extension("tsv") == "tsv"
+
+    def test_properties_extension(self):
+        assert sub_type_for_extension("properties") == "key_value"
+
+    def test_env_extension(self):
+        assert sub_type_for_extension("env") == "key_value"
+
+    def test_log_extension(self):
+        assert sub_type_for_extension("log") == "log_lines"
+
+
+# ---------------------------------------------------------------------------
+# Structured target counts
+# ---------------------------------------------------------------------------
+
+
+class TestStructuredTargetCounts:
+    """Test target counts for structured phase."""
+
+    def test_jsonl_target(self):
+        assert TARGET_COUNTS["jsonl"] == 1500
+
+    def test_json_target(self):
+        assert TARGET_COUNTS["json"] == 1500
+
+    def test_csv_target(self):
+        assert TARGET_COUNTS["csv"] == 1000
+
+    def test_tsv_target(self):
+        assert TARGET_COUNTS["tsv"] == 1500
+
+    def test_pipe_table_target(self):
+        assert TARGET_COUNTS["pipe_table"] == 1000
+
+    def test_fixed_width_target(self):
+        assert TARGET_COUNTS["fixed_width"] == 1000
+
+    def test_key_value_target(self):
+        assert TARGET_COUNTS["key_value"] == 1000
+
+    def test_log_lines_target(self):
+        assert TARGET_COUNTS["log_lines"] == 1000
+
+    def test_total_structured_target(self):
+        total = sum(TARGET_COUNTS[st] for st in PHASE_SUB_TYPES["structured"])
+        assert total == 9500
+
+
+# ---------------------------------------------------------------------------
+# Structured Stack data dir
+# ---------------------------------------------------------------------------
+
+
+class TestStructuredStackDataDir:
+    """Test Stack v1 data_dir mapping for structured types."""
+
+    def test_json_data_dir(self):
+        assert STACK_DATA_DIR["json"] == "data/json"
+
+    def test_csv_data_dir(self):
+        assert STACK_DATA_DIR["csv"] == "data/csv"
+
+    def test_tsv_data_dir(self):
+        assert STACK_DATA_DIR["tsv"] == "data/tsv"
+
+    def test_jsonl_data_dir(self):
+        assert STACK_DATA_DIR["jsonl"] == "data/json"

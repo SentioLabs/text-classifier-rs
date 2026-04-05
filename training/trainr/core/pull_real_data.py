@@ -1,14 +1,21 @@
-"""Pull real data from HuggingFace's The Stack for code sub_types.
+"""Pull real data from HuggingFace's The Stack for code/structured sub_types.
 
-Streams code samples from bigcode/the-stack (v1), filters by size,
-and appends to golden_train.parquet with null feature columns.
+Streams code and structured samples from bigcode/the-stack (v1), filters by
+size and format validators, and appends to golden_train.parquet with null
+feature columns.
 
 Usage:
     cd training && uv run python3 -m trainr.core.pull_real_data --phase code
+    cd training && uv run python3 -m trainr.core.pull_real_data --phase structured
 """
 
 import argparse
+import csv
+import io
+import json
+import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import polars as pl
@@ -99,6 +106,15 @@ _EXT_TO_SUB_TYPE: dict[str, str] = {
     "toml": "toml",
     "ini": "ini",
     "cfg": "ini",
+    # structured
+    "jsonl": "jsonl",
+    "ndjson": "jsonl",
+    "json": "json",
+    "csv": "csv",
+    "tsv": "tsv",
+    "properties": "key_value",
+    "env": "key_value",
+    "log": "log_lines",
     # prose
     "md": "markdown",
     "markdown": "markdown",
@@ -140,6 +156,15 @@ SUB_TYPE_CATEGORY: dict[str, str] = {
     "yaml": "code",
     "toml": "code",
     "ini": "code",
+    # structured
+    "csv": "structured",
+    "tsv": "structured",
+    "jsonl": "structured",
+    "json": "structured",
+    "pipe_table": "structured",
+    "fixed_width": "structured",
+    "key_value": "structured",
+    "log_lines": "structured",
     # prose
     "markdown": "prose",
     "rst": "prose",
@@ -168,6 +193,16 @@ PHASE_SUB_TYPES: dict[str, list[str]] = {
         "unknown",
     ],
     "config": ["yaml", "toml", "ini"],
+    "structured": [
+        "csv",
+        "tsv",
+        "jsonl",
+        "json",
+        "pipe_table",
+        "fixed_width",
+        "key_value",
+        "log_lines",
+    ],
     "prose": ["markdown", "rst", "latex"],
 }
 
@@ -194,6 +229,15 @@ TARGET_COUNTS: dict[str, int] = {
     "yaml": 1000,
     "toml": 1000,
     "ini": 500,
+    # structured
+    "jsonl": 1500,
+    "json": 1500,
+    "csv": 1000,
+    "tsv": 1500,
+    "pipe_table": 1000,
+    "fixed_width": 1000,
+    "key_value": 1000,
+    "log_lines": 1000,
     # prose
     "markdown": 2500,
     "rst": 1500,
@@ -223,11 +267,117 @@ STACK_DATA_DIR: dict[str, str] = {
     "yaml": "data/yaml",
     "toml": "data/toml",
     "ini": "data/ini",
+    # structured (types with direct Stack sources)
+    "json": "data/json",
+    "csv": "data/csv",
+    "tsv": "data/tsv",
+    "jsonl": "data/json",  # filter JSONL from JSON stream
     # prose
     "markdown": "data/markdown",
     "rst": "data/restructuredtext",
     "latex": "data/tex",
 }
+
+# ---------------------------------------------------------------------------
+# Format validators for structured sub_types
+# ---------------------------------------------------------------------------
+
+
+def validate_csv(text: str) -> bool:
+    """Return True if *text* looks like valid CSV with consistent columns."""
+    try:
+        reader = csv.reader(io.StringIO(text))
+        rows = [r for r in reader if r]
+        if len(rows) < 2:
+            return False
+        col_count = len(rows[0])
+        return col_count >= 2 and all(len(r) == col_count for r in rows[:20])
+    except csv.Error:
+        return False
+
+
+def validate_tsv(text: str) -> bool:
+    """Return True if *text* looks like valid TSV with consistent columns."""
+    try:
+        reader = csv.reader(io.StringIO(text), delimiter="\t")
+        rows = [r for r in reader if r]
+        if len(rows) < 2:
+            return False
+        col_count = len(rows[0])
+        return col_count >= 2 and all(len(r) == col_count for r in rows[:20])
+    except csv.Error:
+        return False
+
+
+def validate_jsonl(text: str) -> bool:
+    """Return True if *text* contains at least 2 valid JSON lines."""
+    lines = [line for line in text.strip().split("\n") if line.strip()]
+    if len(lines) < 2:
+        return False
+    try:
+        for line in lines[:20]:
+            json.loads(line)
+        return True
+    except json.JSONDecodeError:
+        return False
+
+
+def validate_json(text: str) -> bool:
+    """Return True if *text* is valid JSON."""
+    try:
+        json.loads(text)
+        return True
+    except (json.JSONDecodeError, ValueError):
+        return False
+
+
+def validate_pipe_table(text: str) -> bool:
+    """Return True if *text* looks like a pipe-delimited table."""
+    lines = [line for line in text.strip().split("\n") if line.strip()]
+    if len(lines) < 2:
+        return False
+    pipe_lines = [line for line in lines if "|" in line]
+    if len(pipe_lines) < len(lines) * 0.7:
+        return False
+    col_counts = [line.count("|") for line in pipe_lines[:20]]
+    return len(set(col_counts)) <= 2
+
+
+def validate_fixed_width(text: str) -> bool:
+    """Return True if *text* has aligned multi-space gaps across lines.
+
+    Checks that there is at least one character position that falls inside a
+    multi-space gap on every sampled line, which indicates column alignment.
+    """
+    lines = [line for line in text.strip().split("\n") if line.strip()]
+    if len(lines) < 3:
+        return False
+    # For each line, collect the set of char positions that are inside a
+    # multi-space gap (2+ consecutive spaces).
+    gap_char_sets: list[set[int]] = []
+    for line in lines[:20]:
+        positions: set[int] = set()
+        for m in re.finditer(r"  +", line):
+            for pos in range(m.start(), m.end()):
+                positions.add(pos)
+        gap_char_sets.append(positions)
+    if not gap_char_sets:
+        return False
+    common = gap_char_sets[0]
+    for gp in gap_char_sets[1:]:
+        common &= gp
+    return len(common) >= 1
+
+
+VALIDATORS: dict[str, Callable[[str], bool]] = {
+    "csv": validate_csv,
+    "tsv": validate_tsv,
+    "jsonl": validate_jsonl,
+    "json": validate_json,
+    "pipe_table": validate_pipe_table,
+    "fixed_width": validate_fixed_width,
+}
+
 
 # ---------------------------------------------------------------------------
 # Size filtering
@@ -272,40 +422,101 @@ def build_row(text: str, sub_type: str, category: str = "code") -> dict:
 # ---------------------------------------------------------------------------
 
 
+_FALLBACK_DATA_DIRS: dict[str, list[str]] = {
+    "pipe_table": ["data/markdown", "data/restructuredtext"],
+    "fixed_width": ["data/text"],
+    "key_value": ["data/ini"],
+    "log_lines": ["data/text"],
+}
+
+
 def _stream_sub_type(
     sub_type: str,
     target: int,
     seed: int = 42,
 ) -> list[dict]:
-    """Stream samples from The Stack for a single sub_type."""
+    """Stream samples from The Stack for a single sub_type.
+
+    For sub_types with a direct ``STACK_DATA_DIR`` entry the stream is read
+    from that directory.  For rare structured types without a direct source
+    (pipe_table, fixed_width, key_value, log_lines) we fall back to broader
+    data dirs and rely on the format validator to filter.
+    """
     if datasets is None:
         raise ImportError("The 'datasets' package is required: pip install datasets")
 
-    data_dir = STACK_DATA_DIR[sub_type]
-    ds = datasets.load_dataset(
-        "bigcode/the-stack",
-        data_dir=data_dir,
-        streaming=True,
-        split="train",
-        token=True,
-    )
+    validator = VALIDATORS.get(sub_type)
+
+    # Determine which Stack data_dirs to stream from
+    if sub_type in STACK_DATA_DIR:
+        data_dirs = [STACK_DATA_DIR[sub_type]]
+    elif sub_type in _FALLBACK_DATA_DIRS:
+        data_dirs = _FALLBACK_DATA_DIRS[sub_type]
+    else:
+        print(
+            f"  WARNING: no Stack data_dir or fallback for {sub_type}, skipping",
+            file=sys.stderr,
+        )
+        return []
 
     rows: list[dict] = []
     pbar = tqdm(total=target, desc=sub_type, unit="rows")
 
-    for item in ds.shuffle(seed=seed, buffer_size=5000):
-        content = item.get("content", "")
-        if not content or not passes_size_filter(content):
-            continue
-
-        category = SUB_TYPE_CATEGORY.get(sub_type, "code")
-        rows.append(build_row(text=content, sub_type=sub_type, category=category))
-        pbar.update(1)
-
+    for data_dir in data_dirs:
         if len(rows) >= target:
             break
 
+        ds = datasets.load_dataset(
+            "bigcode/the-stack",
+            data_dir=data_dir,
+            streaming=True,
+            split="train",
+            token=True,
+        )
+
+        skipped = 0
+        max_skips = target * 50  # stop after too many misses
+
+        for item in ds.shuffle(seed=seed, buffer_size=5000):
+            content = item.get("content", "")
+            if not content or not passes_size_filter(content):
+                skipped += 1
+                if skipped >= max_skips:
+                    break
+                continue
+
+            # Apply format validator if one exists
+            if validator and not validator(content):
+                skipped += 1
+                if skipped >= max_skips:
+                    break
+                continue
+
+            category = SUB_TYPE_CATEGORY.get(sub_type, "code")
+            rows.append(
+                build_row(text=content, sub_type=sub_type, category=category)
+            )
+            pbar.update(1)
+
+            if len(rows) >= target:
+                break
+
+        if len(rows) < target and len(data_dirs) == 1:
+            print(
+                f"  WARNING: only found {len(rows)}/{target} for {sub_type} "
+                f"from {data_dir}",
+                file=sys.stderr,
+            )
+
     pbar.close()
+
+    if len(rows) < 500 and target >= 500:
+        print(
+            f"  WARNING: {sub_type} has only {len(rows)} rows (minimum 500 "
+            f"recommended)",
+            file=sys.stderr,
+        )
+
     return rows
 
 
