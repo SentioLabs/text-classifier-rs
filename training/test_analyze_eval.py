@@ -1,12 +1,8 @@
 """Tests for analyze_eval.py."""
 
 import json
-import sys
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent))
 
 
 def _record(
@@ -33,7 +29,7 @@ def _record(
 
 class TestComputeSliceAccuracy:
     def test_groups_by_sub_type(self):
-        from analyze_eval import compute_slice_accuracy
+        from trainr.core.analyze_eval import compute_slice_accuracy
 
         records = [
             _record(expected="artifact", predicted="artifact", sub_type="pdf_dump"),
@@ -49,7 +45,7 @@ class TestComputeSliceAccuracy:
         assert result["plain"]["accuracy"] == 1.0
 
     def test_groups_by_boundary_pair(self):
-        from analyze_eval import compute_slice_accuracy
+        from trainr.core.analyze_eval import compute_slice_accuracy
 
         records = [
             _record(
@@ -71,7 +67,7 @@ class TestComputeSliceAccuracy:
 
 class TestBuildTopConfusions:
     def test_category_pair_confusions(self):
-        from analyze_eval import build_top_confusions
+        from trainr.core.analyze_eval import build_top_confusions
 
         records = [
             _record(expected="artifact", predicted="structured"),
@@ -85,7 +81,7 @@ class TestBuildTopConfusions:
         assert result[0]["count"] == 2
 
     def test_field_specific_confusions(self):
-        from analyze_eval import build_top_confusions
+        from trainr.core.analyze_eval import build_top_confusions
 
         records = [
             _record(
@@ -112,7 +108,7 @@ class TestBuildTopConfusions:
 
 class TestBuildSliceReport:
     def test_contains_per_boundary_pair_and_confusions(self):
-        from analyze_eval import build_slice_report
+        from trainr.core.analyze_eval import build_slice_report
 
         records = [
             _record(
@@ -159,7 +155,7 @@ class TestBuildSliceReport:
 
 class TestMain:
     def test_writes_output_file(self, tmp_path):
-        from analyze_eval import main
+        from trainr.core.analyze_eval import main
 
         predictions_path = tmp_path / "predictions.jsonl"
         predictions_path.write_text(

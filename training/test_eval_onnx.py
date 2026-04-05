@@ -1,16 +1,12 @@
 """Tests for eval_onnx.py — validates ONNX model evaluation pipeline."""
 
 import json
-import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-
-# Ensure the training module is importable
-sys.path.insert(0, str(Path(__file__).parent))
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +81,7 @@ def _write_jsonl(path, samples):
 
 class TestLoadConfig:
     def test_loads_valid_config(self):
-        from eval_onnx import load_config
+        from trainr.core.eval_onnx import load_config
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             config = _make_config()
@@ -99,7 +95,7 @@ class TestLoadConfig:
         assert result["category_map"] == CATEGORY_MAP
 
     def test_raises_on_missing_file(self):
-        from eval_onnx import load_config
+        from trainr.core.eval_onnx import load_config
 
         with pytest.raises(FileNotFoundError):
             load_config("/nonexistent/config.json")
@@ -112,7 +108,7 @@ class TestLoadConfig:
 
 class TestLoadEvalSamples:
     def test_loads_samples_from_jsonl(self):
-        from eval_onnx import load_eval_samples
+        from trainr.core.eval_onnx import load_eval_samples
 
         samples = [
             _make_sample(text="Hello.", expected_category="prose"),
@@ -129,7 +125,7 @@ class TestLoadEvalSamples:
         assert result[1]["text"] == "def foo():"
 
     def test_loads_from_multiple_files(self):
-        from eval_onnx import load_eval_samples
+        from trainr.core.eval_onnx import load_eval_samples
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f1:
             f1.write(json.dumps(_make_sample(text="A")) + "\n")
@@ -142,7 +138,7 @@ class TestLoadEvalSamples:
         assert len(result) == 2
 
     def test_skips_empty_lines(self):
-        from eval_onnx import load_eval_samples
+        from trainr.core.eval_onnx import load_eval_samples
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write(json.dumps(_make_sample()) + "\n")
@@ -155,7 +151,7 @@ class TestLoadEvalSamples:
 
     def test_loads_samples_from_parquet(self, tmp_path):
         import polars as pl
-        from eval_onnx import load_eval_samples
+        from trainr.core.eval_onnx import load_eval_samples
 
         parquet_path = str(tmp_path / "test.parquet")
         df = pl.DataFrame({
@@ -176,7 +172,7 @@ class TestLoadEvalSamples:
 
     def test_parquet_samples_same_format_as_jsonl(self, tmp_path):
         import polars as pl
-        from eval_onnx import load_eval_samples
+        from trainr.core.eval_onnx import load_eval_samples
 
         # Create a Parquet file
         parquet_path = str(tmp_path / "test.parquet")
@@ -199,7 +195,7 @@ class TestLoadEvalSamples:
 
     def test_mixed_jsonl_and_parquet_input(self, tmp_path):
         import polars as pl
-        from eval_onnx import load_eval_samples
+        from trainr.core.eval_onnx import load_eval_samples
 
         # Create JSONL file
         jsonl_path = str(tmp_path / "test.jsonl")
@@ -231,7 +227,7 @@ class TestLoadEvalSamples:
 
 class TestNormalizeFeatures:
     def test_zscore_normalization(self):
-        from eval_onnx import normalize_features
+        from trainr.core.eval_onnx import normalize_features
 
         raw = {"f1": 1.0, "f2": 2.0}
         config = {
@@ -247,7 +243,7 @@ class TestNormalizeFeatures:
         np.testing.assert_allclose(result[0, 1], 2.0, atol=1e-6)
 
     def test_handles_zero_std(self):
-        from eval_onnx import normalize_features
+        from trainr.core.eval_onnx import normalize_features
 
         raw = {"f1": 5.0}
         config = {
@@ -268,7 +264,7 @@ class TestNormalizeFeatures:
 
 class TestComputeMetrics:
     def test_perfect_predictions(self):
-        from eval_onnx import compute_metrics
+        from trainr.core.eval_onnx import compute_metrics
 
         y_true = ["prose", "code", "prose", "code"]
         y_pred = ["prose", "code", "prose", "code"]
@@ -282,7 +278,7 @@ class TestComputeMetrics:
         assert metrics["per_category"]["code"]["precision"] == 1.0
 
     def test_partial_predictions(self):
-        from eval_onnx import compute_metrics
+        from trainr.core.eval_onnx import compute_metrics
 
         # prose: 2 correct, 1 missed (predicted as code)
         # code: 1 correct, 0 missed
@@ -298,7 +294,7 @@ class TestComputeMetrics:
         assert metrics["per_category"]["code"]["recall"] == pytest.approx(1.0)
 
     def test_confusion_matrix(self):
-        from eval_onnx import compute_metrics
+        from trainr.core.eval_onnx import compute_metrics
 
         y_true = ["prose", "prose", "code"]
         y_pred = ["prose", "code", "code"]
@@ -310,7 +306,7 @@ class TestComputeMetrics:
         assert cm == [[1, 1], [0, 1]]
 
     def test_handles_zero_support_category(self):
-        from eval_onnx import compute_metrics
+        from trainr.core.eval_onnx import compute_metrics
 
         y_true = ["prose", "prose"]
         y_pred = ["prose", "prose"]
@@ -331,7 +327,7 @@ class TestComputeMetrics:
 
 class TestFormatReport:
     def test_contains_accuracy(self):
-        from eval_onnx import format_report
+        from trainr.core.eval_onnx import format_report
 
         metrics = {
             "overall_accuracy": 0.938,
@@ -346,7 +342,7 @@ class TestFormatReport:
         assert "clear.jsonl" in output
 
     def test_contains_per_category_headers(self):
-        from eval_onnx import format_report
+        from trainr.core.eval_onnx import format_report
 
         metrics = {
             "overall_accuracy": 0.9,
@@ -365,7 +361,7 @@ class TestFormatReport:
         assert "code" in output
 
     def test_contains_confusion_matrix(self):
-        from eval_onnx import format_report
+        from trainr.core.eval_onnx import format_report
 
         metrics = {
             "overall_accuracy": 0.9,
@@ -386,7 +382,7 @@ class TestFormatReport:
 
 class TestFormatJsonReport:
     def test_produces_valid_json(self):
-        from eval_onnx import format_json_report
+        from trainr.core.eval_onnx import format_json_report
 
         metrics = {
             "overall_accuracy": 0.938,
@@ -409,7 +405,7 @@ class TestFormatJsonReport:
 
 class TestPredictionRecords:
     def test_predict_samples_preserves_provenance(self):
-        from eval_onnx import predict_samples
+        from trainr.core.eval_onnx import predict_samples
 
         config = _make_config()
         sample = {
@@ -446,7 +442,7 @@ class TestPredictionRecords:
         assert predictions[0]["model"] == "openai/gpt-5"
 
     def test_write_prediction_records_jsonl(self, tmp_path):
-        from eval_onnx import write_prediction_records
+        from trainr.core.eval_onnx import write_prediction_records
 
         output_path = tmp_path / "predictions.jsonl"
         records = [
@@ -472,7 +468,7 @@ class TestPredictionRecords:
 
 class TestParseArgs:
     def test_defaults(self):
-        from eval_onnx import parse_args
+        from trainr.core.eval_onnx import parse_args
 
         args = parse_args(["--eval", "test.jsonl"])
         assert args.model == "output/model.onnx"
@@ -481,19 +477,19 @@ class TestParseArgs:
         assert args.json is False
 
     def test_multiple_eval_files(self):
-        from eval_onnx import parse_args
+        from trainr.core.eval_onnx import parse_args
 
         args = parse_args(["--eval", "a.jsonl", "--eval", "b.jsonl"])
         assert args.eval == ["a.jsonl", "b.jsonl"]
 
     def test_json_flag(self):
-        from eval_onnx import parse_args
+        from trainr.core.eval_onnx import parse_args
 
         args = parse_args(["--eval", "test.jsonl", "--json"])
         assert args.json is True
 
     def test_predictions_output_dir_flag(self):
-        from eval_onnx import parse_args
+        from trainr.core.eval_onnx import parse_args
 
         args = parse_args(
             ["--eval", "test.jsonl", "--predictions-output-dir", "output"]
@@ -501,7 +497,7 @@ class TestParseArgs:
         assert args.predictions_output_dir == "output"
 
     def test_custom_model_and_config(self):
-        from eval_onnx import parse_args
+        from trainr.core.eval_onnx import parse_args
 
         args = parse_args([
             "--model", "my_model.onnx",
@@ -519,7 +515,7 @@ class TestParseArgs:
 
 class TestInvertCategoryMap:
     def test_inverts_map(self):
-        from eval_onnx import invert_category_map
+        from trainr.core.eval_onnx import invert_category_map
 
         cat_map = {"prose": 0, "code": 1, "structured": 2}
         inv = invert_category_map(cat_map)
@@ -533,7 +529,7 @@ class TestInvertCategoryMap:
 
 class TestRunEvaluation:
     def test_end_to_end_with_mock_session(self):
-        from eval_onnx import run_evaluation
+        from trainr.core.eval_onnx import run_evaluation
 
         config = _make_config()
 
@@ -563,7 +559,7 @@ class TestRunEvaluation:
         assert mock_session.run.call_count == 3
 
     def test_perfect_mock_session(self):
-        from eval_onnx import run_evaluation
+        from trainr.core.eval_onnx import run_evaluation
 
         config = _make_config()
 
