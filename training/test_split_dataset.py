@@ -1,4 +1,4 @@
-"""Tests for training/split_dataset.py"""
+"""Tests for trainr.core.split_dataset"""
 
 import json
 import os
@@ -8,9 +8,6 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-
-# Ensure the training directory is importable
-sys.path.insert(0, str(Path(__file__).parent))
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +50,7 @@ def _write_jsonl(path, samples):
 
 class TestLoadJsonl:
     def test_loads_valid_jsonl(self, tmp_path):
-        from split_dataset import load_jsonl
+        from trainr.core.split_dataset import load_jsonl
 
         p = tmp_path / "data.jsonl"
         samples = [{"a": 1}, {"b": 2}]
@@ -63,7 +60,7 @@ class TestLoadJsonl:
         assert result == samples
 
     def test_loads_empty_file(self, tmp_path):
-        from split_dataset import load_jsonl
+        from trainr.core.split_dataset import load_jsonl
 
         p = tmp_path / "empty.jsonl"
         p.write_text("")
@@ -79,7 +76,7 @@ class TestLoadJsonl:
 
 class TestStratifiedSample:
     def test_correct_counts_per_group(self):
-        from split_dataset import stratified_sample
+        from trainr.core.split_dataset import stratified_sample
 
         # 3 categories, 5 samples each = 15 total
         samples = []
@@ -104,7 +101,7 @@ class TestStratifiedSample:
         assert cats["structured"] == 2
 
     def test_deterministic_with_seed(self):
-        from split_dataset import stratified_sample
+        from trainr.core.split_dataset import stratified_sample
 
         samples = []
         for cat in ["prose", "code"]:
@@ -117,7 +114,7 @@ class TestStratifiedSample:
         assert s1 == s2
 
     def test_different_seed_gives_different_result(self):
-        from split_dataset import stratified_sample
+        from trainr.core.split_dataset import stratified_sample
 
         # Use 2 models with many samples each so shuffle order matters
         samples = []
@@ -140,7 +137,7 @@ class TestStratifiedSample:
         assert texts1 != texts2
 
     def test_sub_stratifies_by_model(self):
-        from split_dataset import stratified_sample
+        from trainr.core.split_dataset import stratified_sample
 
         # 1 category, 2 models, 6 samples each = 12 total
         samples = []
@@ -161,7 +158,7 @@ class TestStratifiedSample:
         assert "modelB" in models_in_selected
 
     def test_handles_group_with_fewer_samples_than_requested(self):
-        from split_dataset import stratified_sample
+        from trainr.core.split_dataset import stratified_sample
 
         # Only 2 samples in "code" but we request 5 per group
         samples = [
@@ -194,7 +191,7 @@ class TestStratifiedSample:
 
 class TestSplitDataset:
     def test_split_small_dataset(self, tmp_path):
-        from split_dataset import split_dataset
+        from trainr.core.split_dataset import split_dataset
 
         # Build input: 5 clear prose, 5 clear code, 5 boundary
         samples = []
@@ -266,7 +263,7 @@ class TestSplitDataset:
         assert all(v != "" for v in train_df.get_column("source").to_list())
 
     def test_split_writes_valid_jsonl(self, tmp_path):
-        from split_dataset import split_dataset
+        from trainr.core.split_dataset import split_dataset
 
         samples = [_make_sample(text=f"text {i}") for i in range(5)]
         input_path = str(tmp_path / "input.jsonl")
@@ -300,7 +297,7 @@ class TestSplitDataset:
 
 class TestVerifyDiversity:
     def test_passes_when_diverse(self):
-        from split_dataset import verify_diversity
+        from trainr.core.split_dataset import verify_diversity
 
         # 10 samples per model across 5 models = even distribution (20% each)
         # But 20% > 15%, so we need 7+ models to be under 15% each
@@ -313,7 +310,7 @@ class TestVerifyDiversity:
         assert warnings == []
 
     def test_warns_when_model_dominates(self):
-        from split_dataset import verify_diversity
+        from trainr.core.split_dataset import verify_diversity
 
         # 9 samples from one model, 1 from another in same sub_type
         samples = []
@@ -326,7 +323,7 @@ class TestVerifyDiversity:
         assert any("dominant" in w for w in warnings)
 
     def test_checks_per_sub_type(self):
-        from split_dataset import verify_diversity
+        from trainr.core.split_dataset import verify_diversity
 
         # sub_type "plain": evenly distributed across 10 models
         samples = []
@@ -350,7 +347,7 @@ class TestVerifyDiversity:
 
 class TestDownsampling:
     def test_downsampling_caps_large_categories(self, tmp_path):
-        from split_dataset import split_dataset
+        from trainr.core.split_dataset import split_dataset
 
         samples = []
         for i in range(10):
@@ -400,7 +397,7 @@ class TestDownsampling:
         assert cats["prose"] == 3
 
     def test_downsampling_zero_means_no_limit(self, tmp_path):
-        from split_dataset import split_dataset
+        from trainr.core.split_dataset import split_dataset
 
         samples = []
         for i in range(10):
@@ -436,7 +433,7 @@ class TestDownsampling:
         assert len(train_df) == 10
 
     def test_downsampling_is_deterministic(self, tmp_path):
-        from split_dataset import split_dataset
+        from trainr.core.split_dataset import split_dataset
 
         samples = []
         for i in range(20):
@@ -482,7 +479,7 @@ class TestDownsampling:
 
 class TestSubtypeCategoryOverrides:
     def test_overrides_include_reclassified_subtypes(self):
-        from split_dataset import SUBTYPE_CATEGORY_OVERRIDES
+        from trainr.core.split_dataset import SUBTYPE_CATEGORY_OVERRIDES
 
         # Original overrides
         assert SUBTYPE_CATEGORY_OVERRIDES["yaml"] == "structured"
@@ -503,7 +500,7 @@ class TestSubtypeCategoryOverrides:
 
 class TestReclassifyByContent:
     def test_high_coherence_and_dictionary_returns_prose(self):
-        from split_dataset import reclassify_by_content
+        from trainr.core.split_dataset import reclassify_by_content
 
         # Craft text with high sentence_coherence_score and dictionary_word_ratio
         # Sentences that start uppercase and end with period, using dictionary words
@@ -512,7 +509,7 @@ class TestReclassifyByContent:
         assert result == "prose"
 
     def test_high_kvr_returns_structured(self):
-        from split_dataset import reclassify_by_content
+        from trainr.core.split_dataset import reclassify_by_content
 
         # Text with lots of key: value lines
         text = "name: John\nage: 30\ncity: Paris\ncolor: blue\n" * 10
@@ -520,7 +517,7 @@ class TestReclassifyByContent:
         assert result == "structured"
 
     def test_high_comment_ratio_returns_code(self):
-        from split_dataset import reclassify_by_content
+        from trainr.core.split_dataset import reclassify_by_content
 
         # Text with lots of comment lines
         text = "# this is a comment\n# another comment\n# more comments\nx = 1\n# yet another\n" * 5
@@ -528,7 +525,7 @@ class TestReclassifyByContent:
         assert result == "code"
 
     def test_high_delimiter_consistency_returns_structured(self):
-        from split_dataset import reclassify_by_content
+        from trainr.core.split_dataset import reclassify_by_content
 
         # CSV-like data with consistent delimiters
         text = "a,b,c\n1,2,3\n4,5,6\n7,8,9\n10,11,12\n" * 5
@@ -536,7 +533,7 @@ class TestReclassifyByContent:
         assert result == "structured"
 
     def test_fallback_returns_structured(self):
-        from split_dataset import reclassify_by_content
+        from trainr.core.split_dataset import reclassify_by_content
 
         # Gibberish: no coherence, no dictionary words, no kv, no comments
         text = "xzq wrp tlm\nbrg fnd klt\nmxp qrs znt\n"
@@ -544,7 +541,7 @@ class TestReclassifyByContent:
         assert result == "structured"
 
     def test_returns_only_valid_categories(self):
-        from split_dataset import reclassify_by_content
+        from trainr.core.split_dataset import reclassify_by_content
 
         # Any text should return one of the 3 valid categories
         for text in ["", "hello", "x=1\ny=2\n", "# comment\n"]:
@@ -559,7 +556,7 @@ class TestReclassifyByContent:
 
 class TestReclassificationInSplit:
     def test_artifact_samples_are_reclassified(self, tmp_path):
-        from split_dataset import split_dataset
+        from trainr.core.split_dataset import split_dataset
 
         # Create samples with artifact category
         samples = []
@@ -605,7 +602,7 @@ class TestReclassificationInSplit:
         assert categories.issubset({"prose", "code", "structured"})
 
     def test_skip_samples_are_reclassified(self, tmp_path):
-        from split_dataset import split_dataset
+        from trainr.core.split_dataset import split_dataset
 
         samples = []
         for i in range(5):
@@ -651,7 +648,7 @@ class TestReclassificationInSplit:
     def test_samples_with_invalid_category_after_reclassification_are_dropped(self, tmp_path):
         """Samples whose expected_category is not in {prose, code, structured}
         after reclassification should be dropped."""
-        from split_dataset import split_dataset
+        from trainr.core.split_dataset import split_dataset
 
         samples = []
         for i in range(5):

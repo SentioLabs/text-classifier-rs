@@ -1,4 +1,4 @@
-"""Tests for training/generate.py"""
+"""Tests for trainr.core.generate"""
 
 import csv
 import os
@@ -9,9 +9,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-
-# Ensure the training directory is importable
-sys.path.insert(0, str(Path(__file__).parent))
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
@@ -30,7 +27,7 @@ def cli_available():
 
 class TestMapDirectoryToCategory:
     def test_known_directories(self):
-        from generate import map_directory_to_category
+        from trainr.core.generate import map_directory_to_category
 
         assert map_directory_to_category("prose") == "prose"
         assert map_directory_to_category("code") == "code"
@@ -38,21 +35,21 @@ class TestMapDirectoryToCategory:
         assert map_directory_to_category("pdf_dump") == "artifact"
 
     def test_unknown_directory_returns_name(self):
-        from generate import map_directory_to_category
+        from trainr.core.generate import map_directory_to_category
 
         assert map_directory_to_category("other") == "other"
 
 
 class TestDeriveSubType:
     def test_derives_from_filename(self):
-        from generate import derive_sub_type
+        from trainr.core.generate import derive_sub_type
 
         assert derive_sub_type("python.txt") == "python"
         assert derive_sub_type("csv_data.txt") == "csv_data"
         assert derive_sub_type("simple.txt") == "simple"
 
     def test_handles_no_extension(self):
-        from generate import derive_sub_type
+        from trainr.core.generate import derive_sub_type
 
         assert derive_sub_type("readme") == "readme"
 
@@ -60,7 +57,7 @@ class TestDeriveSubType:
 class TestExtractFeaturesViaCli:
     @pytest.mark.skipif(not cli_available(), reason="classify binary not built")
     def test_extracts_features_from_text(self):
-        from generate import extract_features_via_cli
+        from trainr.core.generate import extract_features_via_cli
 
         text = "Hello world. This is a test sentence for feature extraction."
         features = extract_features_via_cli(text, str(CLASSIFY_BIN))
@@ -74,7 +71,7 @@ class TestExtractFeaturesViaCli:
 
     @pytest.mark.skipif(not cli_available(), reason="classify binary not built")
     def test_multiline_text(self):
-        from generate import extract_features_via_cli
+        from trainr.core.generate import extract_features_via_cli
 
         text = "Line one.\nLine two.\nLine three."
         features = extract_features_via_cli(text, str(CLASSIFY_BIN))
@@ -89,7 +86,7 @@ class TestExtractFeaturesViaCli:
 class TestFixturesMode:
     @pytest.mark.skipif(not cli_available(), reason="classify binary not built")
     def test_produces_csv_output(self):
-        from generate import run_fixtures_mode
+        from trainr.core.generate import run_fixtures_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = run_fixtures_mode(
@@ -112,7 +109,7 @@ class TestFixturesMode:
 
     @pytest.mark.skipif(not cli_available(), reason="classify binary not built")
     def test_maps_categories_correctly(self):
-        from generate import run_fixtures_mode
+        from trainr.core.generate import run_fixtures_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = run_fixtures_mode(
@@ -138,7 +135,7 @@ class TestFixturesMode:
 class TestPerturbMode:
     @pytest.mark.skipif(not cli_available(), reason="classify binary not built")
     def test_generates_perturbations(self):
-        from generate import run_fixtures_mode, run_perturb_mode
+        from trainr.core.generate import run_fixtures_mode, run_perturb_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # First generate fixtures
@@ -159,7 +156,7 @@ class TestPerturbMode:
 
     @pytest.mark.skipif(not cli_available(), reason="classify binary not built")
     def test_perturbations_have_same_columns(self):
-        from generate import run_fixtures_mode, run_perturb_mode
+        from trainr.core.generate import run_fixtures_mode, run_perturb_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fixtures_path = run_fixtures_mode(
@@ -178,7 +175,7 @@ class TestPerturbMode:
 
     @pytest.mark.skipif(not cli_available(), reason="classify binary not built")
     def test_perturbations_clip_to_minimum(self):
-        from generate import run_fixtures_mode, run_perturb_mode
+        from trainr.core.generate import run_fixtures_mode, run_perturb_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             run_fixtures_mode(
@@ -203,7 +200,7 @@ class TestPerturbMode:
 
 class TestSyntheticMode:
     def test_skips_without_api_key(self, capsys):
-        from generate import run_synthetic_mode
+        from trainr.core.generate import run_synthetic_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             result = run_synthetic_mode(
@@ -217,7 +214,7 @@ class TestSyntheticMode:
             assert "ANTHROPIC_API_KEY" in captured.out or "ANTHROPIC_API_KEY" in captured.err
 
     def test_type_pairs_defined(self):
-        from generate import SYNTHETIC_TYPE_PAIRS
+        from trainr.core.generate import SYNTHETIC_TYPE_PAIRS
 
         assert len(SYNTHETIC_TYPE_PAIRS) > 0
         categories = {pair[0] for pair in SYNTHETIC_TYPE_PAIRS}
@@ -235,7 +232,7 @@ class TestSyntheticMode:
 class TestAllMode:
     @pytest.mark.skipif(not cli_available(), reason="classify binary not built")
     def test_combines_csv_files(self):
-        from generate import run_fixtures_mode, run_perturb_mode, combine_csvs
+        from trainr.core.generate import run_fixtures_mode, run_perturb_mode, combine_csvs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fixtures_path = run_fixtures_mode(
@@ -267,7 +264,7 @@ class TestAllMode:
 
 class TestArgParsing:
     def test_default_arguments(self):
-        from generate import build_parser
+        from trainr.core.generate import build_parser
 
         parser = build_parser()
         args = parser.parse_args([])
@@ -276,7 +273,7 @@ class TestArgParsing:
         assert args.samples_per_type == 50
 
     def test_custom_arguments(self):
-        from generate import build_parser
+        from trainr.core.generate import build_parser
 
         parser = build_parser()
         args = parser.parse_args([
@@ -291,7 +288,7 @@ class TestArgParsing:
         assert args.api_key == "test-key"
 
     def test_golden_train_mode_accepted(self):
-        from generate import build_parser
+        from trainr.core.generate import build_parser
 
         parser = build_parser()
         args = parser.parse_args([
@@ -304,7 +301,7 @@ class TestArgParsing:
         assert args.dry_run is True
 
     def test_dry_run_defaults_to_false(self):
-        from generate import build_parser
+        from trainr.core.generate import build_parser
 
         parser = build_parser()
         args = parser.parse_args([])
@@ -318,12 +315,12 @@ class TestArgParsing:
 
 class TestGoldenTrainConstants:
     def test_valid_categories_defined(self):
-        from generate import VALID_CATEGORIES
+        from trainr.core.generate import VALID_CATEGORIES
 
         assert VALID_CATEGORIES == {"prose", "code", "structured", "artifact"}
 
     def test_golden_sub_types_covers_all_categories(self):
-        from generate import GOLDEN_SUB_TYPES, VALID_CATEGORIES
+        from trainr.core.generate import GOLDEN_SUB_TYPES, VALID_CATEGORIES
 
         for cat in VALID_CATEGORIES:
             assert cat in GOLDEN_SUB_TYPES, f"Missing category {cat} in GOLDEN_SUB_TYPES"
@@ -332,18 +329,18 @@ class TestGoldenTrainConstants:
     def test_golden_sub_types_total_count(self):
         """All trainable ContentSubType variants should be present (32 total,
         excluding skip/fallback types: TooShort, Empty, Ambiguous, Unknown)."""
-        from generate import GOLDEN_SUB_TYPES
+        from trainr.core.generate import GOLDEN_SUB_TYPES
 
         total = sum(len(v) for v in GOLDEN_SUB_TYPES.values())
         assert total == 32
 
     def test_golden_domain_seeds_has_50_plus(self):
-        from generate import GOLDEN_DOMAIN_SEEDS
+        from trainr.core.generate import GOLDEN_DOMAIN_SEEDS
 
         assert len(GOLDEN_DOMAIN_SEEDS) >= 50
 
     def test_golden_length_buckets_defined(self):
-        from generate import GOLDEN_LENGTH_BUCKETS
+        from trainr.core.generate import GOLDEN_LENGTH_BUCKETS
 
         assert "short" in GOLDEN_LENGTH_BUCKETS
         assert "medium" in GOLDEN_LENGTH_BUCKETS
@@ -353,7 +350,7 @@ class TestGoldenTrainConstants:
         assert GOLDEN_LENGTH_BUCKETS["long"] == (100, 200)
 
     def test_golden_boundary_pairs_defined(self):
-        from generate import GOLDEN_BOUNDARY_PAIRS
+        from trainr.core.generate import GOLDEN_BOUNDARY_PAIRS
 
         assert len(GOLDEN_BOUNDARY_PAIRS) == 6
         # Each pair should have cat_a, cat_b, label, examples
@@ -371,7 +368,7 @@ class TestGoldenTrainConstants:
 
 class TestGoldenTrainDryRun:
     def test_dry_run_prints_summary(self, capsys):
-        from generate import run_golden_train_mode
+        from trainr.core.generate import run_golden_train_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             run_golden_train_mode(
@@ -387,7 +384,7 @@ class TestGoldenTrainDryRun:
             assert "artifact" in captured.out
 
     def test_dry_run_does_not_create_csv(self):
-        from generate import run_golden_train_mode
+        from trainr.core.generate import run_golden_train_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             run_golden_train_mode(
@@ -399,7 +396,7 @@ class TestGoldenTrainDryRun:
             assert not os.path.exists(csv_path)
 
     def test_dry_run_shows_sample_counts(self, capsys):
-        from generate import run_golden_train_mode
+        from trainr.core.generate import run_golden_train_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             run_golden_train_mode(
@@ -413,7 +410,7 @@ class TestGoldenTrainDryRun:
             assert "boundary" in captured.out.lower() or "Boundary" in captured.out
 
     def test_dry_run_shows_domain_seed_count(self, capsys):
-        from generate import run_golden_train_mode
+        from trainr.core.generate import run_golden_train_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             run_golden_train_mode(
@@ -434,7 +431,7 @@ class TestGoldenTrainParquetOutput:
     def test_writes_parquet_file(self):
         """run_golden_train_mode should write a .parquet file, not CSV."""
         import polars as pl
-        from generate import run_golden_train_mode
+        from trainr.core.generate import run_golden_train_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Mock anthropic import and client
@@ -466,7 +463,7 @@ class TestGoldenTrainParquetOutput:
 
     def test_no_csv_file_created(self):
         """Ensure no golden_raw.csv file is created."""
-        from generate import run_golden_train_mode
+        from trainr.core.generate import run_golden_train_mode
 
         with tempfile.TemporaryDirectory() as tmpdir:
             mock_client = mock.MagicMock()
@@ -496,7 +493,7 @@ class TestGoldenTrainParquetOutput:
 
 class TestGenerateGoldenClear:
     def test_function_signature(self):
-        from generate import generate_golden_clear
+        from trainr.core.generate import generate_golden_clear
         import inspect
 
         sig = inspect.signature(generate_golden_clear)
@@ -509,7 +506,7 @@ class TestGenerateGoldenClear:
 
     def test_returns_list_of_dicts(self):
         """With a mock client, should return sample dicts."""
-        from generate import generate_golden_clear, GOLDEN_LENGTH_BUCKETS
+        from trainr.core.generate import generate_golden_clear, GOLDEN_LENGTH_BUCKETS
 
         # Mock the anthropic client
         mock_client = mock.MagicMock()
@@ -537,7 +534,7 @@ class TestGenerateGoldenClear:
 
     def test_distributes_across_sub_types(self):
         """Count should be distributed across sub-types."""
-        from generate import generate_golden_clear, GOLDEN_LENGTH_BUCKETS
+        from trainr.core.generate import generate_golden_clear, GOLDEN_LENGTH_BUCKETS
 
         mock_client = mock.MagicMock()
         mock_response = mock.MagicMock()
@@ -567,7 +564,7 @@ class TestGenerateGoldenClear:
 
 class TestGenerateGoldenBoundary:
     def test_function_signature(self):
-        from generate import generate_golden_boundary
+        from trainr.core.generate import generate_golden_boundary
         import inspect
 
         sig = inspect.signature(generate_golden_boundary)
@@ -578,7 +575,7 @@ class TestGenerateGoldenBoundary:
         assert "length_buckets" in params
 
     def test_returns_list_of_dicts(self):
-        from generate import generate_golden_boundary, GOLDEN_LENGTH_BUCKETS
+        from trainr.core.generate import generate_golden_boundary, GOLDEN_LENGTH_BUCKETS
 
         mock_client = mock.MagicMock()
         mock_response = mock.MagicMock()
@@ -610,7 +607,7 @@ class TestGenerateGoldenBoundary:
 class TestGoldenTrainCLI:
     def test_main_routes_golden_train(self):
         """Verify that --mode golden-train routes to run_golden_train_mode."""
-        from generate import build_parser
+        from trainr.core.generate import build_parser
 
         parser = build_parser()
         args = parser.parse_args([
