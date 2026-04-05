@@ -356,10 +356,34 @@ fn format_human_friendly(result: &text_classifier::Classification) -> String {
         Some(st) => format!("{}/{}", category, st.label()),
         None => category,
     };
-    format!(
+    let base = format!(
         "{} (confidence: {:.2}, tier: {})",
         label, result.confidence, result.tier
-    )
+    );
+
+    // Collect detections above 0.5 threshold, sorted by score descending.
+    let mut entries: Vec<(String, f32)> = result
+        .detections
+        .iter()
+        .flat_map(|(cat, dets)| {
+            dets.iter().filter(|d| d.score > 0.5).map(move |d| {
+                (format!("{}/{}", cat, d.sub_type.label()), d.score)
+            })
+        })
+        .collect();
+
+    if entries.is_empty() {
+        return base;
+    }
+
+    entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let detection_strs: Vec<String> = entries
+        .iter()
+        .map(|(label, score)| format!("{}({:.2})", label, score))
+        .collect();
+
+    format!("{} [detections: {}]", base, detection_strs.join(", "))
 }
 
 fn classify_inline(
@@ -1056,5 +1080,112 @@ mod tests {
         assert!(cli.text.is_none());
         assert!(cli.command.is_none());
         // The dispatch logic in main() routes this to classify_stdin() which always outputs JSON
+    }
+
+    #[test]
+    fn format_human_friendly_with_detections() {
+        use text_classifier::types::Detection;
+        let mut detections = BTreeMap::new();
+        detections.insert(
+            text_classifier::TextCategory::Code,
+            vec![Detection {
+                sub_type: text_classifier::ContentSubType::Python,
+                score: 0.75,
+            }],
+        );
+        let result = Classification {
+            category: TextCategory::Prose,
+            sub_type: Some(text_classifier::ContentSubType::Markdown),
+            confidence: 0.97,
+            reason: "model".to_string(),
+            tier: text_classifier::Tier::Model,
+            detections,
+        };
+        let output = format_human_friendly(&result);
+        assert!(output.contains("detections:"));
+        assert!(output.contains("code/python"));
+    }
+
+    #[test]
+    fn format_human_friendly_with_detections_sorted_by_score() {
+        use text_classifier::types::Detection;
+        let mut detections = BTreeMap::new();
+        detections.insert(
+            text_classifier::TextCategory::Code,
+            vec![
+                Detection {
+                    sub_type: text_classifier::ContentSubType::Python,
+                    score: 0.75,
+                },
+                Detection {
+                    sub_type: text_classifier::ContentSubType::Shell,
+                    score: 0.90,
+                },
+            ],
+        );
+        detections.insert(
+            text_classifier::TextCategory::Structured,
+            vec![Detection {
+                sub_type: text_classifier::ContentSubType::Csv,
+                score: 0.51,
+            }],
+        );
+        let result = Classification {
+            category: TextCategory::Prose,
+            sub_type: None,
+            confidence: 0.80,
+            reason: "model".to_string(),
+            tier: text_classifier::Tier::Model,
+            detections,
+        };
+        let output = format_human_friendly(&result);
+        // Should contain detections sorted by score descending
+        assert!(output.contains("detections:"));
+        assert!(output.contains("code/shell(0.90)"));
+        assert!(output.contains("code/python(0.75)"));
+        assert!(output.contains("structured/csv(0.51)"));
+        // shell(0.90) should come before python(0.75)
+        let shell_pos = output.find("code/shell").unwrap();
+        let python_pos = output.find("code/python").unwrap();
+        assert!(shell_pos < python_pos, "detections should be sorted by score descending");
+    }
+
+    #[test]
+    fn format_human_friendly_empty_detections_no_suffix() {
+        let result = Classification {
+            category: TextCategory::Prose,
+            sub_type: None,
+            confidence: 0.95,
+            reason: "high alpha ratio".to_string(),
+            tier: text_classifier::Tier::Structural,
+            detections: BTreeMap::new(),
+        };
+        let output = format_human_friendly(&result);
+        assert!(!output.contains("detections:"));
+        assert_eq!(output, "prose (confidence: 0.95, tier: structural)");
+    }
+
+    #[test]
+    fn format_human_friendly_filters_low_score_detections() {
+        use text_classifier::types::Detection;
+        let mut detections = BTreeMap::new();
+        detections.insert(
+            text_classifier::TextCategory::Code,
+            vec![Detection {
+                sub_type: text_classifier::ContentSubType::Python,
+                score: 0.40,
+            }],
+        );
+        let result = Classification {
+            category: TextCategory::Prose,
+            sub_type: None,
+            confidence: 0.95,
+            reason: "model".to_string(),
+            tier: text_classifier::Tier::Model,
+            detections,
+        };
+        let output = format_human_friendly(&result);
+        // Score 0.40 is below 0.5 threshold, so no detections suffix
+        assert!(!output.contains("detections:"));
     }
 }
