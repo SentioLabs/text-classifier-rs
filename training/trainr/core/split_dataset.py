@@ -50,7 +50,7 @@ def reclassify_by_content(text: str) -> str:
     Used for samples whose original category was ``"artifact"`` or ``"skip"``.
     Returns one of ``"prose"``, ``"code"``, or ``"structured"``.
     """
-    from featurize import (
+    from trainr.core.featurize import (
         sentence_coherence_score,
         dictionary_word_ratio,
         alpha_ratio,

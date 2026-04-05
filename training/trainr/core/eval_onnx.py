@@ -131,7 +131,7 @@ def predict_samples(
     inv_map = invert_category_map(config["category_map"])
     predictions: list[dict[str, Any]] = []
     if feature_extractor is None:
-        from featurize import extract_all as feature_extractor
+        from trainr.core.featurize import extract_all as feature_extractor
 
     for sample in tqdm(samples, desc="Evaluating"):
         text = sample.get("text", "")
