@@ -20,6 +20,11 @@ dependencies = [
     "openai>=2.30.0",
     "polars>=1.39.3",
     "onnxruntime>=1.17",
+    "faiss-cpu>=1.7",
+    "sentence-transformers>=2.0",
+    "magika>=0.6",
+    "datasets>=2.14",
+    "huggingface-hub>=0.16",
 ]
 
 [project.scripts]
