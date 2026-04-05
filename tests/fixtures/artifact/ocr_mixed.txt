@@ -1,0 +1,46 @@
+TM
+Pa ge 1 of3
+INVOICE
+lnvo ice Num ber: INV-2024-0 0847
+Da te: March 15, 2024
+
+Bi ll To:
+Ac me Cor poration
+12 3 Main St reet, Su ite 400
+Port land, OR 972 01
+Atte ntion: J ohn Smi th
+
+Shi p To:
+Ac me War ehouse
+45 6 Indu strial Blvd
+Port land, OR 972 03
+
+ltem           Desc ription            Q ty   Unit Pr ice   Tot al
+----           ----  --------           ---   ---- -----   -----
+WDG-001        Wid get Asse mbly A      50    $12 .50      $62 5.00
+WDG-002        Wid get Asse mbly B      25    $18 .75      $46 8.75
+BRK-010        Brac ket Kit (sm all)   100     $3 .25      $32 5.00
+FAS-020        Fast ener Set M1 0       75     $1 .80      $13 5.00
+CBL-005        Ca ble Har ness 2m       30     $7 .50      $22 5.00
+
+                                     Sub total:          $1,7 78.75
+                                     Ta x (8 .5%):         $15 1.19
+                                     Ship ping:            $45 .00
+                                     ------- -------
+                                     TOT AL:             $1,9 74.94
+
+Pay ment Ter ms: Net 30
+Ple ase rem it pay ment to:
+Glo bal Supp ly Co.
+Acc ount: 82 91-004 7-23
+Rou ting: 021 000 021
+
+Th ank you for yo ur bus iness!
+
+Pa ge 2 of3
+TERMS AND CON DITIONS
+1. All go ods rem ain prop erty of Glo bal Supp ly Co. unt il
+   pay ment is rec eived in fu ll.
+2. Lat e pay ments are sub ject to a 1.5 % mon thly int erest
+   cha rge.
+3. Ret urns mu st be ini tiated with in 30 da ys of rec eipt.

@@ -58,14 +58,10 @@ struct PyClassifier {
 #[pymethods]
 impl PyClassifier {
     #[new]
-    #[pyo3(signature = (model_path=None))]
-    fn new(model_path: Option<&str>) -> PyResult<Self> {
-        let inner = match model_path {
-            Some(path) => RustClassifier::with_model(path)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))?,
-            None => RustClassifier::new(),
-        };
-        Ok(PyClassifier { inner })
+    fn new() -> PyResult<Self> {
+        Ok(PyClassifier {
+            inner: RustClassifier::new(),
+        })
     }
 
     fn classify(&self, text: &str) -> PyClassification {
@@ -107,9 +103,16 @@ impl PyClassifier {
     }
 }
 
+#[pyfunction]
+fn classify(text: &str) -> PyClassification {
+    let classifier = RustClassifier::new();
+    classifier.classify(text).into()
+}
+
 #[pymodule]
 fn text_classifier(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyClassifier>()?;
     m.add_class::<PyClassification>()?;
+    m.add_function(wrap_pyfunction!(classify, m)?)?;
     Ok(())
 }

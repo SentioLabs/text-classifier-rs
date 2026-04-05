@@ -1,0 +1,12 @@
+# Regenerable pilot data (not DVC-tracked)
+data/source/pilot/
+
+# Model artifacts (large binaries)
+models/*.onnx
+models/metrics.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+/output

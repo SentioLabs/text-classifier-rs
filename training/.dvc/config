@@ -1,0 +1,6 @@
+[core]
+    remote = text-classifier-training
+['remote "text-classifier-training"']
+    url = s3://sentiolabs-training-data/text-classifier-rs/training
+    endpointurl = https://s3.us-west-000.backblazeb2.com
+    region = us-west-000

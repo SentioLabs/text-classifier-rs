@@ -7,9 +7,6 @@ pub enum TextCategory {
     Prose,
     Code,
     Structured,
-    Artifact,
-    Tabular,
-    PdfDump,
     Skip,
 }
 
@@ -28,9 +25,6 @@ impl std::fmt::Display for TextCategory {
             TextCategory::Prose => write!(f, "prose"),
             TextCategory::Code => write!(f, "code"),
             TextCategory::Structured => write!(f, "structured"),
-            TextCategory::Artifact => write!(f, "artifact"),
-            TextCategory::Tabular => write!(f, "tabular"),
-            TextCategory::PdfDump => write!(f, "pdf_dump"),
             TextCategory::Skip => write!(f, "skip"),
         }
     }
@@ -73,9 +67,6 @@ pub enum ContentSubType {
     Shell,
     Css,
     // Code > Config
-    Yaml,
-    Toml,
-    Ini,
     Dockerfile,
     Makefile,
     // Code > Markup
@@ -92,14 +83,10 @@ pub enum ContentSubType {
     Jsonl,
     KeyValue,
     LogLines,
-    // Artifact
-    PdfDump,
-    OcrGarbage,
-    Boilerplate,
-    // Skip
-    TooShort,
-    Empty,
-    Ambiguous,
+    // Structured > Config
+    Yaml,
+    Toml,
+    Ini,
     // Fallback
     Unknown,
 }
@@ -124,16 +111,13 @@ impl ContentSubType {
             | ContentSubType::Sql
             | ContentSubType::Shell
             | ContentSubType::Css
-            | ContentSubType::Yaml
-            | ContentSubType::Toml
-            | ContentSubType::Ini
             | ContentSubType::Dockerfile
             | ContentSubType::Makefile
             | ContentSubType::Html
             | ContentSubType::Xml
             | ContentSubType::Sgml => TextCategory::Code,
 
-            // Structured (tabular + data)
+            // Structured (tabular + data + config)
             ContentSubType::Csv
             | ContentSubType::Tsv
             | ContentSubType::PipeTable
@@ -141,18 +125,13 @@ impl ContentSubType {
             | ContentSubType::Json
             | ContentSubType::Jsonl
             | ContentSubType::KeyValue
-            | ContentSubType::LogLines => TextCategory::Structured,
+            | ContentSubType::LogLines
+            | ContentSubType::Yaml
+            | ContentSubType::Toml
+            | ContentSubType::Ini => TextCategory::Structured,
 
-            // Artifact
-            ContentSubType::PdfDump | ContentSubType::OcrGarbage | ContentSubType::Boilerplate => {
-                TextCategory::Artifact
-            }
-
-            // Skip + Fallback
-            ContentSubType::TooShort
-            | ContentSubType::Empty
-            | ContentSubType::Ambiguous
-            | ContentSubType::Unknown => TextCategory::Skip,
+            // Fallback
+            ContentSubType::Unknown => TextCategory::Skip,
         }
     }
 
@@ -188,12 +167,6 @@ impl ContentSubType {
             ContentSubType::Jsonl => "jsonl",
             ContentSubType::KeyValue => "key_value",
             ContentSubType::LogLines => "log_lines",
-            ContentSubType::PdfDump => "pdf_dump",
-            ContentSubType::OcrGarbage => "ocr_garbage",
-            ContentSubType::Boilerplate => "boilerplate",
-            ContentSubType::TooShort => "too_short",
-            ContentSubType::Empty => "empty",
-            ContentSubType::Ambiguous => "ambiguous",
             ContentSubType::Unknown => "unknown",
         }
     }
@@ -245,6 +218,27 @@ pub struct FeatureVector {
     pub comment_ratio: f32,
     pub numeric_field_ratio: f32,
     pub repetitive_structure_score: f32,
+    pub hyphenated_line_break_ratio: f32,
+    pub short_repeated_line_ratio: f32,
+    pub page_number_density: f32,
+    pub label_value_line_ratio: f32,
+    pub table_fragment_score: f32,
+    pub uppercase_header_ratio: f32,
+    pub dictionary_word_ratio: f32,
+    pub encoding_error_ratio: f32,
+    pub repeated_ngram_ratio: f32,
+    pub sentence_coherence_score: f32,
+    // New features (v2)
+    pub avg_words_per_line: f32,
+    pub operator_density: f32,
+    pub inline_markup_count: f32,
+    pub indentation_consistency: f32,
+    pub markup_heading_ratio: f32,
+    pub code_fence_density: f32,
+    pub prose_paragraph_ratio: f32,
+    pub semicolon_line_ending_ratio: f32,
+    pub list_item_ratio: f32,
+    pub parenthesis_density: f32,
     /// Number of lines in the sampled text. Used by rules that need
     /// a minimum sample size (e.g. tabular detection).
     pub line_count: usize,
@@ -272,6 +266,26 @@ impl FeatureVector {
             comment_ratio: 0.0,
             numeric_field_ratio: 0.0,
             repetitive_structure_score: 0.0,
+            hyphenated_line_break_ratio: 0.0,
+            short_repeated_line_ratio: 0.0,
+            page_number_density: 0.0,
+            label_value_line_ratio: 0.0,
+            table_fragment_score: 0.0,
+            uppercase_header_ratio: 0.0,
+            dictionary_word_ratio: 0.0,
+            encoding_error_ratio: 0.0,
+            repeated_ngram_ratio: 0.0,
+            sentence_coherence_score: 0.0,
+            avg_words_per_line: 0.0,
+            operator_density: 0.0,
+            inline_markup_count: 0.0,
+            indentation_consistency: 0.0,
+            markup_heading_ratio: 0.0,
+            code_fence_density: 0.0,
+            prose_paragraph_ratio: 0.0,
+            semicolon_line_ending_ratio: 0.0,
+            list_item_ratio: 0.0,
+            parenthesis_density: 0.0,
             line_count: 0,
         }
     }
@@ -282,6 +296,5 @@ pub mod thresholds {
     pub const PROSE: f32 = 0.65;
     pub const CODE: f32 = 0.70;
     pub const STRUCTURED: f32 = 0.60;
-    pub const ARTIFACT: f32 = 0.75;
     pub const SUB_TYPE: f32 = 0.80;
 }

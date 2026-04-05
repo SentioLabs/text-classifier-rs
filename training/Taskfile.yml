@@ -1,0 +1,100 @@
+version: '3'
+
+tasks:
+  train:setup:
+    desc: Create venv and install dependencies
+    cmds:
+      - uv venv .venv
+      - uv pip install --python .venv/bin/python openai datasets sentence-transformers faiss-cpu pandas numpy torch onnx onnxruntime
+
+  train:pilot:
+    desc: Generate ~2K pilot samples and validate diversity
+    cmds:
+      - uv run generate_openrouter.py --output data/source/pilot/pilot_samples.jsonl --total-samples 2000 --pilot
+      - uv run validate_pilot.py --input data/source/pilot/pilot_samples.jsonl
+
+  train:sample-real:
+    desc: Sample ~30K real files from The Stack v1 (14 languages)
+    cmds:
+      - uv run sample_the_stack.py --output data/source/real/real_samples.jsonl --per-language 2100
+
+  train:generate-synthetic:
+    desc: Generate ~30K synthetic samples via OpenRouter (cost-optimized model mix)
+    cmds:
+      - uv run generate_openrouter.py --output data/source/synthetic/synthetic_samples.jsonl --total-samples 30000
+
+  train:sample-real-v2:
+    desc: Sample real data for underrepresented categories from HuggingFace datasets
+    cmds:
+      - uv run sample_real_data.py --output data/source/real/real_samples_v2.jsonl
+
+  train:sample-real-v2-plan:
+    desc: Preview real-data source quotas for artifact, prose, and structured slices
+    cmds:
+      - uv run sample_real_data.py --dry-run
+
+  train:generate:
+    desc: Generate full dataset (real v1 + real v2 + synthetic)
+    cmds:
+      - task train:sample-real
+      - task train:sample-real-v2
+      - task train:generate-synthetic
+      - cat data/source/real/real_samples.jsonl data/source/real/real_samples_v2.jsonl data/source/synthetic/synthetic_samples.jsonl > data/source/merged/raw_samples.jsonl
+
+  train:split:
+    desc: Split raw samples into eval + training with per-category cap
+    cmds:
+      - |
+        if [ -f data/eval/clear.jsonl ]; then
+          echo "Frozen eval sets found in data/eval/, skipping eval generation"
+          uv run split_dataset.py --input data/source/merged/raw_samples.jsonl --train-output data/curated/train/golden_raw.parquet --max-per-category 50000 --skip-eval
+        else
+          uv run split_dataset.py --input data/source/merged/raw_samples.jsonl --eval-output data/eval/clear.jsonl --eval-boundary-output data/eval/boundary.jsonl --train-output data/curated/train/golden_raw.parquet --max-per-category 50000
+        fi
+
+  train:featurize:
+    desc: Compute 22 structural + content features from text and enrich the training dataset
+    cmds:
+      - uv run featurize.py --input data/curated/train/golden_raw.parquet --output data/curated/train/golden_featurized.parquet
+
+  train:dedup:
+    desc: Semantic dedup on featurized training split
+    env:
+      KMP_DUPLICATE_LIB_OK: "TRUE"
+    cmds:
+      - uv run dedup.py --input data/curated/train/golden_featurized.parquet --output data/curated/train/golden_train.parquet --feature-threshold 0
+
+  train:train:
+    desc: Train model with stratified validation and artifact-subtype-balanced sampling
+    cmds:
+      - uv run train.py --data data/curated/train/golden_train.parquet --output output/ --balance-artifact-subtypes --device auto
+
+  train:update-model:
+    desc: Copy trained model to src/ for embedding
+    cmds:
+      - cp output/model.onnx ../src/model.onnx
+      - cp output/model_config.json ../src/model_config.json
+
+  train:eval-onnx:
+    desc: Evaluate ONNX model against eval sets (Python, no Rust needed)
+    cmds:
+      - uv run eval_onnx.py --model output/model.onnx --config output/model_config.json --eval data/eval/clear.jsonl --eval data/eval/boundary.jsonl
+
+  train:eval-slices:
+    desc: Evaluate ONNX model and emit per-sample predictions plus slice reports
+    cmds:
+      - uv run eval_onnx.py --model output/model.onnx --config output/model_config.json --eval data/eval/clear.jsonl --eval data/eval/boundary.jsonl --predictions-output-dir output
+      - uv run analyze_eval.py --predictions output/eval_predictions.clear.jsonl --output output/slice_report.clear.json
+      - uv run analyze_eval.py --predictions output/eval_predictions.boundary.jsonl --output output/slice_report.boundary.json
+
+  train:pipeline:
+    desc: Full pipeline -- generate -> split -> featurize -> dedup -> train -> embed -> validate
+    cmds:
+      - task train:generate
+      - task train:split
+      - task train:featurize
+      - task train:dedup
+      - task train:train
+      - task train:update-model
+      - task train:eval-onnx
+      - task train:eval-slices
