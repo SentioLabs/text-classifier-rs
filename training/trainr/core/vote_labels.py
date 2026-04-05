@@ -61,9 +61,9 @@ TIER2_ROUTING: dict[str, tuple[str, str]] = {
     "sgml": ("openai/gpt-5.4", "openrouter"),
     "toml": ("openai/gpt-5.4", "openrouter"),
     "tsv": ("openai/gpt-5.4", "openrouter"),
-    "json": ("anthropic/claude-haiku-4.5", "openrouter"),
-    "makefile": ("anthropic/claude-haiku-4.5", "openrouter"),
-    "python": ("anthropic/claude-haiku-4.5", "openrouter"),
+    "json": ("anthropic/claude-haiku-4.5", "anthropic"),
+    "makefile": ("anthropic/claude-haiku-4.5", "anthropic"),
+    "python": ("anthropic/claude-haiku-4.5", "anthropic"),
     "xml": ("openai/gpt-5.4-mini", "openrouter"),
 }
 
