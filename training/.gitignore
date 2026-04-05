@@ -9,3 +9,4 @@ models/metrics.json
 __pycache__/
 *.pyc
 .venv/
+/output
