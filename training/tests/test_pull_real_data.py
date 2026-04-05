@@ -17,7 +17,9 @@ from trainr.core.pull_real_data import (
     SUB_TYPE_CATEGORY,
     TARGET_COUNTS,
     VALIDATORS,
+    _FALLBACK_DATA_DIRS,
     append_to_parquet,
+    build_parser,
     build_row,
     passes_size_filter,
     sub_type_for_extension,
@@ -830,3 +832,85 @@ class TestStructuredStackDataDir:
 
     def test_jsonl_data_dir(self):
         assert STACK_DATA_DIR["jsonl"] == "data/json"
+
+
+# ---------------------------------------------------------------------------
+# Fallback data dirs for rare structured types
+# ---------------------------------------------------------------------------
+
+
+class TestFallbackDataDirs:
+    """Test fallback data_dir configuration for rare structured types."""
+
+    def test_pipe_table_fallback_dirs(self):
+        assert _FALLBACK_DATA_DIRS["pipe_table"] == [
+            "data/markdown", "data/restructuredtext"
+        ]
+
+    def test_fixed_width_fallback_dirs(self):
+        assert _FALLBACK_DATA_DIRS["fixed_width"] == ["data/text", "data/csv"]
+
+    def test_key_value_fallback_dirs(self):
+        assert _FALLBACK_DATA_DIRS["key_value"] == ["data/ini", "data/yaml"]
+
+    def test_log_lines_fallback_dirs(self):
+        assert _FALLBACK_DATA_DIRS["log_lines"] == ["data/text", "data/shell"]
+
+    def test_tsv_fallback_dirs(self):
+        assert _FALLBACK_DATA_DIRS["tsv"] == ["data/csv"]
+
+    def test_rare_types_not_in_stack_data_dir(self):
+        """pipe_table and fixed_width should NOT be in STACK_DATA_DIR."""
+        assert "pipe_table" not in STACK_DATA_DIR
+        assert "fixed_width" not in STACK_DATA_DIR
+
+    def test_rare_types_have_fallback(self):
+        """All structured types without a STACK_DATA_DIR entry must have a fallback."""
+        for st in PHASE_SUB_TYPES["structured"]:
+            assert st in STACK_DATA_DIR or st in _FALLBACK_DATA_DIRS, (
+                f"{st} has neither STACK_DATA_DIR nor _FALLBACK_DATA_DIRS entry"
+            )
+
+
+# ---------------------------------------------------------------------------
+# CLI parser
+# ---------------------------------------------------------------------------
+
+
+class TestBuildParser:
+    """Test CLI argument parser construction."""
+
+    def test_default_phase_is_all(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.phase == "all"
+
+    def test_phase_code(self):
+        parser = build_parser()
+        args = parser.parse_args(["--phase", "code"])
+        assert args.phase == "code"
+
+    def test_phase_structured(self):
+        parser = build_parser()
+        args = parser.parse_args(["--phase", "structured"])
+        assert args.phase == "structured"
+
+    def test_dry_run_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["--dry-run"])
+        assert args.dry_run is True
+
+    def test_default_seed(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.seed == 42
+
+    def test_custom_seed(self):
+        parser = build_parser()
+        args = parser.parse_args(["--seed", "123"])
+        assert args.seed == 123
+
+    def test_custom_output(self):
+        parser = build_parser()
+        args = parser.parse_args(["--output", "/tmp/test.parquet"])
+        assert args.output == "/tmp/test.parquet"

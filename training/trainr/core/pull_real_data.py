@@ -424,9 +424,10 @@ def build_row(text: str, sub_type: str, category: str = "code") -> dict:
 
 _FALLBACK_DATA_DIRS: dict[str, list[str]] = {
     "pipe_table": ["data/markdown", "data/restructuredtext"],
-    "fixed_width": ["data/text"],
-    "key_value": ["data/ini"],
-    "log_lines": ["data/text"],
+    "fixed_width": ["data/text", "data/csv"],
+    "key_value": ["data/ini", "data/yaml"],
+    "log_lines": ["data/text", "data/shell"],
+    "tsv": ["data/csv"],
 }
 
 
@@ -447,12 +448,16 @@ def _stream_sub_type(
 
     validator = VALIDATORS.get(sub_type)
 
-    # Determine which Stack data_dirs to stream from
+    # Determine which Stack data_dirs to stream from.
+    # Start with primary data_dir, then append fallbacks.
+    data_dirs: list[str] = []
     if sub_type in STACK_DATA_DIR:
-        data_dirs = [STACK_DATA_DIR[sub_type]]
-    elif sub_type in _FALLBACK_DATA_DIRS:
-        data_dirs = _FALLBACK_DATA_DIRS[sub_type]
-    else:
+        data_dirs.append(STACK_DATA_DIR[sub_type])
+    if sub_type in _FALLBACK_DATA_DIRS:
+        for fb in _FALLBACK_DATA_DIRS[sub_type]:
+            if fb not in data_dirs:
+                data_dirs.append(fb)
+    if not data_dirs:
         print(
             f"  WARNING: no Stack data_dir or fallback for {sub_type}, skipping",
             file=sys.stderr,
@@ -466,13 +471,20 @@ def _stream_sub_type(
         if len(rows) >= target:
             break
 
-        ds = datasets.load_dataset(
-            "bigcode/the-stack",
-            data_dir=data_dir,
-            streaming=True,
-            split="train",
-            token=True,
-        )
+        try:
+            ds = datasets.load_dataset(
+                "bigcode/the-stack",
+                data_dir=data_dir,
+                streaming=True,
+                split="train",
+                token=True,
+            )
+        except Exception as exc:
+            print(
+                f"  WARNING: failed to load {data_dir} for {sub_type}: {exc}",
+                file=sys.stderr,
+            )
+            continue
 
         skipped = 0
         max_skips = target * 50  # stop after too many misses
