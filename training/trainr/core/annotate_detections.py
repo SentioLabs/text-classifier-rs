@@ -199,17 +199,45 @@ def parse_response(response: str) -> dict[str, int]:
 MAX_RETRIES = 3
 RETRY_BACKOFF = [2, 5, 15]
 
+# Shared client instances — avoids creating a new connection pool per call
+_openrouter_clients: dict[str, object] = {}  # keyed by api_key
+_anthropic_clients: dict[str, object] = {}
+_client_lock = threading.Lock()
+
+
+def _get_openrouter_client(api_key: str):
+    """Get or create a shared OpenRouter client for this API key."""
+    if api_key not in _openrouter_clients:
+        with _client_lock:
+            if api_key not in _openrouter_clients:
+                if openai is None:
+                    raise RuntimeError("openai package not installed. Run: pip install openai")
+                _openrouter_clients[api_key] = openai.OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=api_key,
+                    timeout=30.0,
+                )
+    return _openrouter_clients[api_key]
+
+
+def _get_anthropic_client(api_key: str):
+    """Get or create a shared Anthropic client for this API key."""
+    if api_key not in _anthropic_clients:
+        with _client_lock:
+            if api_key not in _anthropic_clients:
+                try:
+                    import anthropic
+                except ImportError:
+                    raise RuntimeError("anthropic package not installed. Run: pip install anthropic")
+                _anthropic_clients[api_key] = anthropic.Anthropic(
+                    api_key=api_key, timeout=30.0,
+                )
+    return _anthropic_clients[api_key]
+
 
 def _call_openrouter(text: str, model: str, api_key: str) -> str:
     """Call LLM via OpenRouter (OpenAI-compatible API)."""
-    if openai is None:
-        raise RuntimeError("openai package is not installed. Run: pip install openai")
-
-    client = openai.OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key,
-        timeout=30.0,
-    )
+    client = _get_openrouter_client(api_key)
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -228,12 +256,7 @@ def _call_openrouter(text: str, model: str, api_key: str) -> str:
 
 def _call_anthropic(text: str, model: str, api_key: str) -> str:
     """Call LLM via Anthropic API with native prompt caching."""
-    try:
-        import anthropic
-    except ImportError:
-        raise RuntimeError("anthropic package is not installed. Run: pip install anthropic")
-
-    client = anthropic.Anthropic(api_key=api_key, timeout=30.0)
+    client = _get_anthropic_client(api_key)
     response = client.messages.create(
         model=model,
         max_tokens=256,
