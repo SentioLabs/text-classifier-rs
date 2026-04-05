@@ -44,6 +44,43 @@ DETECTION_LABELS: list[str] = [
 DEFAULT_MODEL = "openai/gpt-5.4-nano"
 
 # ---------------------------------------------------------------------------
+# Per-sub_type model routing
+# ---------------------------------------------------------------------------
+
+ROUTING_TABLE: dict[str, tuple[str, str]] = {
+    # (model_id, backend)
+    "plain": ("openai/gpt-5.4-nano", "openrouter"),
+    "css": ("openai/gpt-5.4-nano", "openrouter"),
+    "dockerfile": ("openai/gpt-5.4-nano", "openrouter"),
+    "java": ("openai/gpt-5.4-nano", "openrouter"),
+    "log_lines": ("openai/gpt-5.4-nano", "openrouter"),
+    "rust": ("openai/gpt-5.4-nano", "openrouter"),
+    "sql": ("openai/gpt-5.4-nano", "openrouter"),
+    "csv": ("google/gemini-3.1-flash-lite-preview", "openrouter"),
+    "fixed_width": ("google/gemini-3.1-flash-lite-preview", "openrouter"),
+    "ini": ("google/gemini-3.1-flash-lite-preview", "openrouter"),
+    "typescript": ("google/gemini-3.1-flash-lite-preview", "openrouter"),
+    "latex": ("google/gemini-3-flash-preview", "openrouter"),
+    "yaml": ("google/gemini-3-flash-preview", "openrouter"),
+    "go": ("claude-sonnet-4-6", "anthropic"),
+    "html": ("claude-sonnet-4-6", "anthropic"),
+    "jsonl": ("claude-sonnet-4-6", "anthropic"),
+    "markdown": ("claude-sonnet-4-6", "anthropic"),
+    "shell": ("claude-sonnet-4-6", "anthropic"),
+    "javascript": ("openai/gpt-5.4", "openrouter"),
+    "key_value": ("openai/gpt-5.4", "openrouter"),
+    "pipe_table": ("openai/gpt-5.4", "openrouter"),
+    "rst": ("openai/gpt-5.4", "openrouter"),
+    "sgml": ("openai/gpt-5.4", "openrouter"),
+    "toml": ("openai/gpt-5.4", "openrouter"),
+    "tsv": ("openai/gpt-5.4", "openrouter"),
+    "json": ("anthropic/claude-haiku-4.5", "openrouter"),
+    "makefile": ("anthropic/claude-haiku-4.5", "openrouter"),
+    "python": ("anthropic/claude-haiku-4.5", "openrouter"),
+    "xml": ("openai/gpt-5.4-mini", "openrouter"),
+}
+
+# ---------------------------------------------------------------------------
 # Prompt construction
 # ---------------------------------------------------------------------------
 
@@ -331,6 +368,8 @@ def annotate_dataframe(
     concurrency: int = 20,
     checkpoint_path: str | None = None,
     backend: str = "openrouter",
+    routing: bool = False,
+    anthropic_api_key: str = "",
 ) -> pl.DataFrame:
     """Annotate a DataFrame with det_* columns using concurrent LLM calls.
 
@@ -339,17 +378,31 @@ def annotate_dataframe(
 
     Args:
         df: Input DataFrame with a 'text' column.
-        model: Model ID.
-        api_key: API key for the chosen backend.
-        concurrency: Number of concurrent workers.
+        model: Model ID (used when routing is False, or as fallback).
+        api_key: API key for the chosen backend (or openrouter key when routing).
+        concurrency: Number of concurrent workers (ignored per-backend when routing).
         checkpoint_path: Path to checkpoint JSONL file (None to disable).
-        backend: "openrouter" or "anthropic".
+        backend: "openrouter" or "anthropic" (used when routing is False).
+        routing: When True, route each row to a model based on its sub_type.
+        anthropic_api_key: API key for Anthropic backend (used when routing).
 
     Returns:
         DataFrame with additional det_* binary columns.
     """
     texts = df["text"].to_list()
     n = len(texts)
+
+    # Build per-row routing info when routing is enabled
+    if routing:
+        sub_types = df["sub_type"].to_list()
+        row_routes: list[tuple[str, str, str]] = []  # (model, backend, api_key)
+        for st in sub_types:
+            if st in ROUTING_TABLE:
+                r_model, r_backend = ROUTING_TABLE[st]
+            else:
+                r_model, r_backend = model, "openrouter"
+            r_key = anthropic_api_key if r_backend == "anthropic" else api_key
+            row_routes.append((r_model, r_backend, r_key))
 
     # Load checkpoint if available
     prior: dict[int, dict[str, int]] = {}
@@ -382,7 +435,11 @@ def annotate_dataframe(
 
         def _annotate(idx: int, text: str) -> None:
             nonlocal flushed_up_to, completed_count
-            result = call_llm(text, model=model, api_key=api_key, backend=backend)
+            if routing:
+                r_model, r_backend, r_key = row_routes[idx]
+                result = call_llm(text, model=r_model, api_key=r_key, backend=r_backend)
+            else:
+                result = call_llm(text, model=model, api_key=api_key, backend=backend)
             with lock:
                 annotations[idx] = result
                 completed_count += 1
@@ -501,6 +558,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--backend", default="openrouter", choices=["openrouter", "anthropic"],
         help="API backend (default: openrouter).",
     )
+    parser.add_argument(
+        "--routing", action="store_true",
+        help="Enable per-sub_type model routing (uses ROUTING_TABLE).",
+    )
     return parser
 
 
@@ -520,13 +581,22 @@ def main(argv: list[str] | None = None) -> None:
     backend = args.backend
     model = args.model or BACKEND_DEFAULT_MODELS.get(backend, DEFAULT_MODEL)
 
-    if backend == "anthropic":
+    # Resolve API keys based on backend and routing mode
+    anthropic_key = ""
+    if backend == "anthropic" and not args.routing:
         from trainr.shared.api import get_anthropic_api_key
         api_key = get_anthropic_api_key()
+    elif args.routing:
+        from trainr.shared.api import get_anthropic_api_key
+        api_key = get_openrouter_api_key()
+        anthropic_key = get_anthropic_api_key()
     else:
         api_key = get_openrouter_api_key()
 
-    print(f"Backend: {backend}, Model: {model}", file=sys.stderr)
+    if args.routing:
+        print(f"Routing: enabled (per-sub_type model selection)", file=sys.stderr)
+    else:
+        print(f"Backend: {backend}, Model: {model}", file=sys.stderr)
     print(f"Reading {args.input}...", file=sys.stderr)
     df = pl.read_parquet(args.input)
     print(f"  {len(df)} samples loaded.", file=sys.stderr)
@@ -546,6 +616,8 @@ def main(argv: list[str] | None = None) -> None:
         concurrency=args.concurrency,
         checkpoint_path=checkpoint_path,
         backend=backend,
+        routing=args.routing,
+        anthropic_api_key=anthropic_key,
     )
 
     print(f"Writing {args.output}...", file=sys.stderr)

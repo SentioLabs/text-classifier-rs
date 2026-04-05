@@ -232,3 +232,162 @@ class TestMain:
             expected_cols = [f"det_{label}" for label in DETECTION_LABELS]
             for col in expected_cols:
                 assert col in result.columns
+
+
+# ---------------------------------------------------------------------------
+# Routing tests
+# ---------------------------------------------------------------------------
+
+
+class TestRoutingTable:
+    def test_routing_table_exists(self):
+        from trainr.core.annotate_detections import ROUTING_TABLE
+
+        assert isinstance(ROUTING_TABLE, dict)
+
+    def test_routing_table_covers_all_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS, ROUTING_TABLE
+
+        for label in DETECTION_LABELS:
+            assert label in ROUTING_TABLE, f"ROUTING_TABLE missing entry for: {label}"
+
+    def test_routing_table_values_are_model_backend_tuples(self):
+        from trainr.core.annotate_detections import ROUTING_TABLE
+
+        for sub_type, value in ROUTING_TABLE.items():
+            assert isinstance(value, tuple), f"Value for {sub_type} is not a tuple"
+            assert len(value) == 2, f"Tuple for {sub_type} has {len(value)} elements, expected 2"
+            model, backend = value
+            assert isinstance(model, str), f"Model for {sub_type} is not a string"
+            assert isinstance(backend, str), f"Backend for {sub_type} is not a string"
+            assert backend in ("openrouter", "anthropic"), (
+                f"Backend for {sub_type} is '{backend}', expected 'openrouter' or 'anthropic'"
+            )
+
+
+class TestRoutingFlag:
+    def test_parser_accepts_routing_flag(self):
+        from trainr.core.annotate_detections import build_parser
+
+        parser = build_parser()
+        args = parser.parse_args([
+            "--input", "in.parquet", "--output", "out.parquet", "--routing",
+        ])
+        assert args.routing is True
+
+    def test_parser_defaults_routing_false(self):
+        from trainr.core.annotate_detections import build_parser
+
+        parser = build_parser()
+        args = parser.parse_args(["--input", "in.parquet", "--output", "out.parquet"])
+        assert args.routing is False
+
+
+class TestRoutingAnnotation:
+    def test_annotate_dataframe_accepts_routing_param(self):
+        """annotate_dataframe should accept routing=True without error."""
+        from trainr.core.annotate_detections import DETECTION_LABELS, annotate_dataframe
+
+        df = pl.DataFrame({
+            "text": ["print('hello')"],
+            "sub_type": ["python"],
+        })
+
+        def mock_call_llm(text, model, api_key, **kwargs):
+            return {label: 0 for label in DETECTION_LABELS}
+
+        with patch("trainr.core.annotate_detections.call_llm", side_effect=mock_call_llm):
+            result_df = annotate_dataframe(
+                df, api_key="test-key", routing=True,
+            )
+
+        assert len(result_df) == len(df)
+
+    def test_routing_dispatches_to_correct_model(self):
+        """When routing=True, each sub_type should use its ROUTING_TABLE model."""
+        from trainr.core.annotate_detections import (
+            DETECTION_LABELS, ROUTING_TABLE, annotate_dataframe,
+        )
+
+        df = pl.DataFrame({
+            "text": ["print('hello')", "<html></html>"],
+            "sub_type": ["python", "html"],
+        })
+
+        calls: list[dict] = []
+
+        def mock_call_llm(text, model, api_key, backend="openrouter"):
+            calls.append({"model": model, "backend": backend})
+            return {label: 0 for label in DETECTION_LABELS}
+
+        with patch("trainr.core.annotate_detections.call_llm", side_effect=mock_call_llm):
+            annotate_dataframe(df, api_key="test-key", routing=True)
+
+        # Each row should have been called with its routing-table model
+        python_model, python_backend = ROUTING_TABLE["python"]
+        html_model, html_backend = ROUTING_TABLE["html"]
+
+        python_calls = [c for c in calls if c["model"] == python_model and c["backend"] == python_backend]
+        html_calls = [c for c in calls if c["model"] == html_model and c["backend"] == html_backend]
+
+        assert len(python_calls) >= 1, f"Expected call with model={python_model}, got {calls}"
+        assert len(html_calls) >= 1, f"Expected call with model={html_model}, got {calls}"
+
+    def test_routing_unknown_subtype_uses_default(self):
+        """Sub-types not in ROUTING_TABLE should fall back to default model."""
+        from trainr.core.annotate_detections import (
+            DEFAULT_MODEL, DETECTION_LABELS, annotate_dataframe,
+        )
+
+        df = pl.DataFrame({
+            "text": ["some unknown content"],
+            "sub_type": ["nonexistent_type"],
+        })
+
+        calls: list[dict] = []
+
+        def mock_call_llm(text, model, api_key, backend="openrouter"):
+            calls.append({"model": model, "backend": backend})
+            return {label: 0 for label in DETECTION_LABELS}
+
+        with patch("trainr.core.annotate_detections.call_llm", side_effect=mock_call_llm):
+            annotate_dataframe(df, api_key="test-key", routing=True)
+
+        assert len(calls) == 1
+        assert calls[0]["model"] == DEFAULT_MODEL
+        assert calls[0]["backend"] == "openrouter"
+
+    def test_routing_uses_correct_api_keys(self):
+        """When routing=True, anthropic-backed models should use anthropic_api_key."""
+        from trainr.core.annotate_detections import (
+            DETECTION_LABELS, ROUTING_TABLE, annotate_dataframe,
+        )
+
+        # Find a sub_type that uses anthropic backend
+        anthropic_sub = None
+        for sub, (model, backend) in ROUTING_TABLE.items():
+            if backend == "anthropic":
+                anthropic_sub = sub
+                break
+        assert anthropic_sub is not None, "No anthropic entries in ROUTING_TABLE"
+
+        df = pl.DataFrame({
+            "text": ["some content"],
+            "sub_type": [anthropic_sub],
+        })
+
+        calls: list[dict] = []
+
+        def mock_call_llm(text, model, api_key, backend="openrouter"):
+            calls.append({"api_key": api_key, "backend": backend})
+            return {label: 0 for label in DETECTION_LABELS}
+
+        with patch("trainr.core.annotate_detections.call_llm", side_effect=mock_call_llm):
+            annotate_dataframe(
+                df, api_key="openrouter-key",
+                routing=True, anthropic_api_key="anthropic-key",
+            )
+
+        assert len(calls) == 1
+        assert calls[0]["api_key"] == "anthropic-key"
+        assert calls[0]["backend"] == "anthropic"
