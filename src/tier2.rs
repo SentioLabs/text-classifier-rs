@@ -1,10 +1,10 @@
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::ContentSubType;
 use crate::types::{Classification, FeatureVector, TextCategory, Tier};
+#[cfg(any(feature = "onnx-model", test))]
+use crate::types::Detection;
 use std::collections::BTreeMap;
 
-#[cfg(any(feature = "onnx-model", test))]
-use std::collections::BTreeMap;
 #[cfg(any(feature = "onnx-model", test))]
 use std::collections::HashMap;
 #[cfg(feature = "onnx-model")]
@@ -381,29 +381,6 @@ fn parse_sub_type(s: &str) -> ContentSubType {
         "key_value" => ContentSubType::KeyValue,
         "log_lines" => ContentSubType::LogLines,
         _ => ContentSubType::Unknown,
-    }
-}
-
-/// A single detection from the multi-label detection head.
-#[cfg(any(feature = "onnx-model", test))]
-#[derive(Debug, Clone)]
-pub struct Detection {
-    pub sub_type: ContentSubType,
-    pub score: f32,
-}
-
-// TextCategory needs Ord for use as BTreeMap key.
-#[cfg(any(feature = "onnx-model", test))]
-impl PartialOrd for TextCategory {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-#[cfg(any(feature = "onnx-model", test))]
-impl Ord for TextCategory {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (*self as u8).cmp(&(*other as u8))
     }
 }
 
