@@ -393,9 +393,9 @@ def annotate_dataframe(
     n = len(texts)
 
     # Build per-row routing info when routing is enabled
+    row_routes: list[tuple[str, str, str]] = []  # (model, backend, api_key)
     if routing:
         sub_types = df["sub_type"].to_list()
-        row_routes: list[tuple[str, str, str]] = []  # (model, backend, api_key)
         for st in sub_types:
             if st in ROUTING_TABLE:
                 r_model, r_backend = ROUTING_TABLE[st]
