@@ -48,25 +48,68 @@ DEFAULT_MODEL = "openai/gpt-5.4-nano"
 # ---------------------------------------------------------------------------
 
 
+SYSTEM_PROMPT = """\
+You are a multi-label text content classifier. Analyze text and identify ALL \
+content types present. A text can contain multiple types (e.g., a markdown \
+document with embedded Python code blocks should have both "markdown": 1 and \
+"python": 1).
+
+For each label below, output 1 if that content type is present, or 0 if not.
+
+## Label definitions
+
+**Prose formats:**
+- plain: Unformatted natural language text without any markup syntax
+- markdown: Text using Markdown syntax (headings with #, **bold**, links, lists with - or *)
+- rst: reStructuredText markup (underlined headings, .. directives, :role:`text` syntax)
+- latex: LaTeX document markup (\\begin, \\end, $math$, \\section, \\cite)
+
+**Programming languages:**
+- python, javascript, typescript, rust, go, java, sql, shell, css: Source code in that language
+
+**Config/build formats:**
+- yaml: YAML config (key: value with indentation-based nesting)
+- toml: TOML config ([sections], key = "value" with quotes)
+- ini: INI config ([sections], key=value without quotes, semicolon comments)
+- dockerfile: Dockerfile instructions (FROM, RUN, COPY, ENTRYPOINT)
+- makefile: Makefile syntax (targets with tabs, .PHONY, $(variables))
+
+**Markup languages:**
+- html: HTML tags (<div>, <p>, <a href>)
+- xml: XML tags with namespaces or non-HTML structure
+- sgml: SGML/DTD markup (<!DOCTYPE, <!ENTITY, SGML declarations)
+
+**Tabular data:**
+- csv: Comma-separated values (fields separated by commas, one record per line)
+- tsv: Tab-separated values (fields separated by tab characters)
+- pipe_table: Pipe-delimited table (fields separated by | characters)
+- fixed_width: Fixed-width columnar data (fields aligned by character position, no delimiters)
+
+**Structured data:**
+- json: JSON object or array (curly braces, square brackets, quoted keys)
+- jsonl: JSON Lines — one complete JSON object per line, no wrapping array
+- key_value: Key-value pairs not matching ini/toml/yaml (e.g., "Key: Value" or "KEY=VALUE" without sections)
+- log_lines: Log entries with timestamps, severity levels, or structured log fields
+
+## Rules
+- A label should be 1 if ANY portion of the text contains that content type
+- "plain" means natural language prose WITHOUT formatting markup — only set to 1 if there is substantial unformatted narrative text (not just variable names or short labels)
+- Be specific with tabular formats: if you see commas separating fields, use "csv"; tabs use "tsv"; pipes use "pipe_table"
+- "jsonl" is NOT the same as "json" — jsonl has one JSON object per line with no outer array
+
+Return ONLY a JSON object. No explanation, no markdown formatting.
+
+{"plain": 0, "markdown": 0, "rst": 0, "latex": 0, "python": 0, "javascript": 0, "typescript": 0, "rust": 0, "go": 0, "java": 0, "sql": 0, "shell": 0, "css": 0, "yaml": 0, "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, "xml": 0, "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, "json": 0, "jsonl": 0, "key_value": 0, "log_lines": 0}"""
+
+
 def build_prompt(text: str) -> str:
-    """Build the LLM prompt for multi-label detection annotation.
+    """Build the user message for multi-label detection annotation.
 
-    Asks the model to identify ALL content types present in the text and
-    return a JSON object with label: 0 or 1 for each detection label.
+    The static label definitions are in SYSTEM_PROMPT (sent as a cached
+    system message). This function returns just the user message with the
+    text to analyze.
     """
-    labels_str = ", ".join(f'"{label}"' for label in DETECTION_LABELS)
     return f"""\
-Analyze the following text and identify ALL content types present.
-For each label, output 1 if that content type is present in the text, or 0 if it is not.
-
-Labels: [{labels_str}]
-
-Return ONLY a JSON object with each label as a key and 0 or 1 as the value.
-Do not include any other text, explanation, or markdown formatting.
-
-Example output format:
-{{"plain": 0, "markdown": 1, "python": 1, "javascript": 0, ...}}
-
 Text to analyze:
 ---
 {text}
@@ -138,6 +181,10 @@ RETRY_BACKOFF = [2, 5, 15]
 def call_llm(text: str, model: str, api_key: str) -> dict[str, int]:
     """Call the LLM to annotate a single text sample.
 
+    Uses a system message with cache_control for the static prompt prefix
+    (label definitions + rules). The per-sample text goes in the user message.
+    Anthropic models on OpenRouter will cache the system message across calls.
+
     Retries on transient errors (connection, rate-limit, server errors).
     Returns a dict of label -> 0/1.
     """
@@ -152,15 +199,24 @@ def call_llm(text: str, model: str, api_key: str) -> dict[str, int]:
         timeout=30.0,
     )
 
-    prompt = build_prompt(text)
+    user_msg = build_prompt(text)
     last_err: Exception | None = None
 
     for attempt in range(MAX_RETRIES):
         try:
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {
+                        "role": "system",
+                        "content": SYSTEM_PROMPT,
+                    },
+                    {"role": "user", "content": user_msg},
+                ],
                 temperature=0.0,
+                extra_body={
+                    "cache_control": {"type": "ephemeral", "ttl": "1h"},
+                },
             )
             content = response.choices[0].message.content or ""
             return parse_response(content)

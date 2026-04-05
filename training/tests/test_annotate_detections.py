@@ -54,24 +54,21 @@ class TestBuildPrompt:
         assert "hello world" in prompt
 
     def test_prompt_contains_all_labels(self):
-        from trainr.core.annotate_detections import build_prompt, DETECTION_LABELS
+        from trainr.core.annotate_detections import SYSTEM_PROMPT, DETECTION_LABELS
 
-        prompt = build_prompt("some text")
         for label in DETECTION_LABELS:
-            assert label in prompt, f"Label {label} missing from prompt"
+            assert label in SYSTEM_PROMPT, f"Label {label} missing from system prompt"
 
     def test_prompt_requests_json(self):
-        from trainr.core.annotate_detections import build_prompt
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
 
-        prompt = build_prompt("some text")
-        assert "JSON" in prompt or "json" in prompt.lower()
+        assert "JSON" in SYSTEM_PROMPT or "json" in SYSTEM_PROMPT.lower()
 
     def test_prompt_mentions_binary(self):
-        from trainr.core.annotate_detections import build_prompt
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
 
-        prompt = build_prompt("some text")
         # Should mention 0 or 1 values
-        assert "0" in prompt and "1" in prompt
+        assert "0" in SYSTEM_PROMPT and "1" in SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
