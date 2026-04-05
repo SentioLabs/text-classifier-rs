@@ -6,25 +6,21 @@ archives them separately, and overwrites the input file with the filtered data.
 """
 
 import argparse
-import logging
 from pathlib import Path
 
 import polars as pl
 
-logger = logging.getLogger(__name__)
 
-
-def filter_synthetic(input_path: Path | str) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Read a parquet file and split into real and synthetic rows.
+def filter_synthetic(df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Split a DataFrame into real and synthetic rows.
 
     Args:
-        input_path: Path to the input parquet file.
+        df: Input DataFrame that must contain a ``source`` column.
 
     Returns:
         A tuple of (filtered, dropped) DataFrames. ``filtered`` contains rows
         where ``source != "unknown"``; ``dropped`` contains the removed rows.
     """
-    df = pl.read_parquet(input_path)
     mask = pl.col("source") == "unknown"
     filtered = df.filter(~mask)
     dropped = df.filter(mask)
@@ -44,30 +40,35 @@ def run_drop_synthetic(
     input_path = Path(input_path)
     archive_dir = Path(archive_dir)
 
-    df_original = pl.read_parquet(input_path)
-    total_before = df_original.height
+    df = pl.read_parquet(input_path)
+    total_before = df.height
 
-    filtered, dropped = filter_synthetic(input_path)
+    filtered, dropped = filter_synthetic(df)
     total_after = filtered.height
     rows_dropped = dropped.height
 
-    # Create archive directory if needed
-    archive_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = archive_dir / "synthetic_dropped.parquet"
+    # Write archive if there are rows to archive
+    if rows_dropped > 0:
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = archive_dir / "synthetic_dropped.parquet"
+        dropped.write_parquet(archive_path)
+    else:
+        print("No synthetic rows found — skipping archive.")
 
-    # Write archive first, then overwrite input
-    dropped.write_parquet(archive_path)
-    filtered.write_parquet(input_path)
+    # Atomic overwrite: write to temp file, then rename
+    tmp_path = input_path.with_suffix(".tmp.parquet")
+    filtered.write_parquet(tmp_path)
+    tmp_path.rename(input_path)
 
     # Print summary
     print(f"Total before: {total_before}")
     print(f"Total after:  {total_after}")
     print(f"Rows dropped: {rows_dropped}")
 
-    if "sub_type" in df_original.columns:
+    if "sub_type" in df.columns:
         print("\nPer-sub_type distribution BEFORE:")
         before_dist = (
-            df_original.group_by("sub_type")
+            df.group_by("sub_type")
             .agg(pl.len().alias("count"))
             .sort("count", descending=True)
         )
@@ -98,8 +99,6 @@ def main() -> None:
         help="Directory to write archived synthetic rows (default: data/archive)",
     )
     args = parser.parse_args()
-
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     run_drop_synthetic(
         input_path=args.input,
