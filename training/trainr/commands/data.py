@@ -79,6 +79,18 @@ def split_cmd(**kwargs):
     _main(argv)
 
 
+@data.command("annotate-detections")
+@click.option("--input", required=True, help="Path to input Parquet file.")
+@click.option("--output", required=True, help="Path to output Parquet file.")
+@click.option("--model", default=None, help="OpenRouter model ID.")
+def annotate_detections_cmd(**kwargs):
+    """Annotate training data with multi-label content detections via LLM."""
+    from trainr.core.annotate_detections import main as _main
+
+    argv = _build_argv(kwargs)
+    _main(argv)
+
+
 def _build_argv(kwargs: dict, flags: tuple[str, ...] = ()) -> list[str]:
     """Convert click kwargs to an argv list for argparse-based entry points."""
     argv: list[str] = []
