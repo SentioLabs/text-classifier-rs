@@ -61,9 +61,9 @@ TIER2_ROUTING: dict[str, tuple[str, str]] = {
     "sgml": ("openai/gpt-5.4", "openrouter"),
     "toml": ("openai/gpt-5.4", "openrouter"),
     "tsv": ("openai/gpt-5.4", "openrouter"),
-    "json": ("claude-haiku-4-5-20251001", "anthropic"),
-    "makefile": ("claude-haiku-4-5-20251001", "anthropic"),
-    "python": ("claude-haiku-4-5-20251001", "anthropic"),
+    "json": ("claude-haiku-4-5", "anthropic"),
+    "makefile": ("claude-haiku-4-5", "anthropic"),
+    "python": ("claude-haiku-4-5", "anthropic"),
     "xml": ("openai/gpt-5.4-mini", "openrouter"),
 }
 
@@ -201,14 +201,15 @@ def _flush_checkpoint(
     results: list[dict | None],
     flushed_up_to: int,
 ) -> int:
-    """Append newly completed results to the checkpoint file."""
+    """Append newly completed results to the checkpoint file.
+
+    Writes all completed results, skipping None entries still in progress.
+    """
     with open(path, "a") as f:
         for i in range(flushed_up_to, len(results)):
             if results[i] is not None:
                 f.write(json.dumps({"idx": i, **results[i]}) + "\n")
-            else:
-                break
-            flushed_up_to = i + 1
+                flushed_up_to = i + 1
     return flushed_up_to
 
 
