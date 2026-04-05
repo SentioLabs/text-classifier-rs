@@ -745,6 +745,7 @@ fn validate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
     use text_classifier::Classification;
 
     #[test]
@@ -972,6 +973,7 @@ mod tests {
             confidence: 0.95,
             reason: "high alpha ratio".to_string(),
             tier: text_classifier::Tier::Structural,
+            detections: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert_eq!(output, "prose (confidence: 0.95, tier: structural)");
@@ -985,6 +987,7 @@ mod tests {
             confidence: 0.85,
             reason: "config detected".to_string(),
             tier: text_classifier::Tier::Structural,
+            detections: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert_eq!(output, "code/yaml (confidence: 0.85, tier: structural)");

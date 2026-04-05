@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Text content category.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextCategory {
     Prose,
@@ -187,6 +188,15 @@ pub struct Classification {
     pub confidence: f32,
     pub reason: String,
     pub tier: Tier,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub detections: BTreeMap<TextCategory, Vec<Detection>>,
+}
+
+/// A detected sub-type with its confidence score.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Detection {
+    pub sub_type: ContentSubType,
+    pub score: f32,
 }
 
 impl Classification {

@@ -1,4 +1,7 @@
-use text_classifier::types::{Classification, ContentSubType, FeatureVector, TextCategory, Tier};
+use std::collections::BTreeMap;
+use text_classifier::types::{
+    Classification, ContentSubType, Detection, FeatureVector, TextCategory, Tier,
+};
 
 /// Verify that TextCategory, ContentSubType, and thresholds are re-exported
 /// from the crate root (not just from types module).
@@ -58,6 +61,7 @@ fn contract_classification_has_category_and_sub_type() {
         confidence: 0.95,
         reason: "test".to_string(),
         tier: Tier::Structural,
+        detections: BTreeMap::new(),
     };
     assert_eq!(c.category, TextCategory::Code);
     assert_eq!(c.sub_type, Some(ContentSubType::Python));
@@ -133,6 +137,7 @@ fn contract_classification_text_type_deprecated_accessor() {
         confidence: 0.95,
         reason: "test".to_string(),
         tier: Tier::Structural,
+        detections: BTreeMap::new(),
     };
     assert_eq!(c.text_type(), TextCategory::Code);
 }
@@ -290,4 +295,50 @@ fn contract_content_sub_type_no_artifact_skip_subtypes() {
     // Unknown is the only fallback, mapping to Skip
     assert_eq!(ContentSubType::Unknown.category(), TextCategory::Skip);
     assert_eq!(ContentSubType::Unknown.label(), "unknown");
+}
+
+#[test]
+fn contract_detection_struct_fields() {
+    let d = Detection {
+        sub_type: ContentSubType::Python,
+        score: 0.85,
+    };
+    assert_eq!(d.sub_type, ContentSubType::Python);
+    assert!((d.score - 0.85).abs() < f32::EPSILON);
+}
+
+#[test]
+fn contract_classification_has_detections() {
+    let c = Classification {
+        category: TextCategory::Prose,
+        sub_type: Some(ContentSubType::Markdown),
+        confidence: 0.97,
+        reason: "test".to_string(),
+        tier: Tier::Model,
+        detections: BTreeMap::new(),
+    };
+    assert!(c.detections.is_empty());
+}
+
+#[test]
+fn contract_classification_detections_serialized() {
+    let mut detections = BTreeMap::new();
+    detections.insert(
+        TextCategory::Code,
+        vec![Detection {
+            sub_type: ContentSubType::Python,
+            score: 0.85,
+        }],
+    );
+    let c = Classification {
+        category: TextCategory::Prose,
+        sub_type: Some(ContentSubType::Markdown),
+        confidence: 0.97,
+        reason: "test".to_string(),
+        tier: Tier::Model,
+        detections,
+    };
+    let json = serde_json::to_string(&c).unwrap();
+    assert!(json.contains("detections"));
+    assert!(json.contains("python"));
 }

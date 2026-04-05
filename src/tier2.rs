@@ -1,6 +1,7 @@
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::ContentSubType;
 use crate::types::{Classification, FeatureVector, TextCategory, Tier};
+use std::collections::BTreeMap;
 
 #[cfg(feature = "onnx-model")]
 use std::collections::HashMap;
@@ -215,6 +216,7 @@ impl ModelClassifier {
             confidence: cat_conf,
             reason: format!("onnx model: category={cat_label}, sub_type={sub_label}"),
             tier: Tier::Model,
+            detections: BTreeMap::new(),
         })
     }
 
@@ -226,6 +228,7 @@ impl ModelClassifier {
                 confidence: 0.5,
                 reason: "no model — fallback: moderate prose signals".to_string(),
                 tier: Tier::Structural,
+                detections: BTreeMap::new(),
             }
         } else {
             Classification {
@@ -234,6 +237,7 @@ impl ModelClassifier {
                 confidence: 0.5,
                 reason: "no model — fallback: insufficient prose signals".to_string(),
                 tier: Tier::Structural,
+                detections: BTreeMap::new(),
             }
         }
     }
