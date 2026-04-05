@@ -8,10 +8,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-# Ensure the training directory is on the import path.
-sys.path.insert(0, os.path.dirname(__file__))
-
-from dedup import dedup_pipeline, feature_dedup, semantic_dedup
+from trainr.core.dedup import dedup_pipeline, feature_dedup, semantic_dedup
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +240,7 @@ class TestCLI:
         result = subprocess.run(
             [
                 sys.executable,
-                os.path.join(os.path.dirname(__file__), "dedup.py"),
+                os.path.join(os.path.dirname(__file__), "trainr", "core", "dedup.py"),
                 "--input",
                 input_path,
                 "--output",

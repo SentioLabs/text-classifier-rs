@@ -10,10 +10,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-# Ensure the training module is importable
-sys.path.insert(0, str(Path(__file__).parent))
-
-from train import (
+from trainr.core.train import (
     CATEGORY_MAP,
     FEATURE_COLUMNS,
     NUM_CATEGORIES,
@@ -724,7 +721,7 @@ class TestEndToEnd:
         result = subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).parent / "train.py"),
+                str(Path(__file__).parent / "trainr" / "core" / "train.py"),
                 "--data",
                 str(dummy_parquet),
                 "--output",
@@ -752,7 +749,7 @@ class TestEndToEnd:
         subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).parent / "train.py"),
+                str(Path(__file__).parent / "trainr" / "core" / "train.py"),
                 "--data",
                 str(dummy_parquet),
                 "--output",
@@ -783,7 +780,7 @@ class TestEndToEnd:
         result = subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).parent / "train.py"),
+                str(Path(__file__).parent / "trainr" / "core" / "train.py"),
                 "--data",
                 str(dummy_parquet),
                 "--output",
@@ -814,7 +811,7 @@ class TestEndToEnd:
         subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).parent / "train.py"),
+                str(Path(__file__).parent / "trainr" / "core" / "train.py"),
                 "--data",
                 str(dummy_parquet),
                 "--output",
@@ -842,7 +839,7 @@ class TestEndToEnd:
         subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).parent / "train.py"),
+                str(Path(__file__).parent / "trainr" / "core" / "train.py"),
                 "--data",
                 str(dummy_parquet),
                 "--output",
