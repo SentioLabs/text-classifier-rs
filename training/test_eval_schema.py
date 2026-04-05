@@ -446,7 +446,7 @@ class TestMainBlock:
         import subprocess
 
         result = subprocess.run(
-            [sys.executable, "-m", "eval_schema", fpath],
+            [sys.executable, "-m", "trainr.core.schema", fpath],
             capture_output=True,
             text=True,
             cwd=str(Path(__file__).parent),
@@ -462,7 +462,7 @@ class TestMainBlock:
         import subprocess
 
         result = subprocess.run(
-            [sys.executable, "-m", "eval_schema", fpath],
+            [sys.executable, "-m", "trainr.core.schema", fpath],
             capture_output=True,
             text=True,
             cwd=str(Path(__file__).parent),
