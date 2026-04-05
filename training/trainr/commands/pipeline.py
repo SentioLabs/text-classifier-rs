@@ -143,3 +143,42 @@ def train(
     for feat in drop_features:
         argv += ["--drop-features", feat]
     train_main(argv)
+
+
+@pipeline.command()
+@click.option("--input", "input_path", required=True, help="Input raw Parquet file")
+@click.option("--output-dir", required=True, help="Output directory for model and artifacts")
+@click.option("--eval", "eval_paths", multiple=True, help="Eval JSONL files for post-train evaluation")
+@click.pass_context
+def run(ctx, input_path, output_dir, eval_paths):
+    """Run full pipeline: featurize → dedup → train → eval → analyze."""
+    from pathlib import Path
+
+    output = Path(output_dir)
+    featurized = str(output / "golden_featurized.parquet")
+    deduped = str(output / "golden_train.parquet")
+
+    ctx.invoke(featurize, input_path=input_path, output_path=featurized)
+    ctx.invoke(dedup, input_path=featurized, output_path=deduped)
+    ctx.invoke(train, data=deduped, output=output_dir)
+
+    if eval_paths:
+        from trainr.core.eval_onnx import main as eval_main
+
+        argv = [
+            "--model", str(output / "model.onnx"),
+            "--config", str(output / "model_config.json"),
+            "--predictions-output-dir", output_dir,
+        ]
+        for ep in eval_paths:
+            argv.extend(["--eval", ep])
+        eval_main(argv)
+
+        from trainr.core.analyze_eval import main as analyze_main
+
+        for ep in eval_paths:
+            stem = Path(ep).stem
+            analyze_main([
+                "--predictions", str(output / f"eval_predictions.{stem}.jsonl"),
+                "--output", str(output / f"slice_report.{stem}.json"),
+            ])

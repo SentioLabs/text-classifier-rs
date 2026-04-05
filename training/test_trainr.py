@@ -60,6 +60,29 @@ class TestCLI:
         assert result.returncode == 0
         assert "Core training pipeline" in result.stdout
 
+    def test_trainr_pipeline_run_help(self):
+        result = subprocess.run(
+            ["uv", "run", "trainr", "pipeline", "run", "--help"],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent),
+        )
+        assert result.returncode == 0
+        assert "--input" in result.stdout
+        assert "--output-dir" in result.stdout
+        assert "--eval" in result.stdout
+        assert "Run full pipeline" in result.stdout
+
+    def test_trainr_pipeline_run_requires_input_and_output_dir(self):
+        result = subprocess.run(
+            ["uv", "run", "trainr", "pipeline", "run"],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent),
+        )
+        assert result.returncode != 0
+        assert "Missing" in result.stderr or "required" in result.stderr.lower()
+
     def test_trainr_eval_help(self):
         result = subprocess.run(
             ["uv", "run", "trainr", "eval", "--help"],
@@ -202,3 +225,114 @@ class TestCoreSchemaImport:
         assert "prose_code" in VALID_BOUNDARY_PAIRS
         assert "model" in PROVENANCE_FIELDS
         assert "short" in VALID_LENGTH_BUCKETS
+
+
+# ---------------------------------------------------------------------------
+# pipeline run command
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineRunCommand:
+    def test_run_invokes_featurize_dedup_train(self, tmp_path):
+        """pipeline run chains featurize -> dedup -> train via ctx.invoke."""
+        from click.testing import CliRunner
+
+        from trainr.commands.pipeline import pipeline, featurize, dedup, train
+
+        calls = []
+
+        def mock_featurize_main(argv):
+            calls.append(("featurize", argv))
+
+        def mock_dedup_main():
+            calls.append(("dedup",))
+
+        def mock_train_main(argv):
+            calls.append(("train", argv))
+
+        with mock.patch("trainr.core.featurize.main", mock_featurize_main), \
+             mock.patch("trainr.core.dedup.main", mock_dedup_main), \
+             mock.patch("trainr.core.train.main", mock_train_main):
+            runner = CliRunner()
+            result = runner.invoke(pipeline, [
+                "run",
+                "--input", "/tmp/raw.parquet",
+                "--output-dir", str(tmp_path),
+            ])
+            assert result.exit_code == 0, result.output + (result.exception and str(result.exception) or "")
+            assert len(calls) == 3
+            assert calls[0][0] == "featurize"
+            assert calls[1][0] == "dedup"
+            assert calls[2][0] == "train"
+
+    def test_run_invokes_eval_and_analyze_when_eval_paths_given(self, tmp_path):
+        """pipeline run chains eval and analyze when --eval is provided."""
+        from click.testing import CliRunner
+
+        from trainr.commands.pipeline import pipeline
+
+        calls = []
+
+        def mock_featurize_main(argv):
+            calls.append(("featurize",))
+
+        def mock_dedup_main():
+            calls.append(("dedup",))
+
+        def mock_train_main(argv):
+            calls.append(("train",))
+
+        def mock_eval_main(argv):
+            calls.append(("eval", argv))
+
+        def mock_analyze_main(argv):
+            calls.append(("analyze", argv))
+
+        with mock.patch("trainr.core.featurize.main", mock_featurize_main), \
+             mock.patch("trainr.core.dedup.main", mock_dedup_main), \
+             mock.patch("trainr.core.train.main", mock_train_main), \
+             mock.patch("trainr.core.eval_onnx.main", mock_eval_main), \
+             mock.patch("trainr.core.analyze_eval.main", mock_analyze_main):
+            runner = CliRunner()
+            result = runner.invoke(pipeline, [
+                "run",
+                "--input", "/tmp/raw.parquet",
+                "--output-dir", str(tmp_path),
+                "--eval", "/tmp/eval_clear.jsonl",
+                "--eval", "/tmp/eval_boundary.jsonl",
+            ])
+            assert result.exit_code == 0, result.output + (result.exception and str(result.exception) or "")
+            # featurize + dedup + train + eval + 2x analyze = 6 calls
+            assert len(calls) == 6
+            assert calls[3][0] == "eval"
+            assert calls[4][0] == "analyze"
+            assert calls[5][0] == "analyze"
+
+    def test_run_skips_eval_when_no_eval_paths(self, tmp_path):
+        """pipeline run does not invoke eval/analyze when --eval is not provided."""
+        from click.testing import CliRunner
+
+        from trainr.commands.pipeline import pipeline
+
+        calls = []
+
+        def mock_featurize_main(argv):
+            calls.append(("featurize",))
+
+        def mock_dedup_main():
+            calls.append(("dedup",))
+
+        def mock_train_main(argv):
+            calls.append(("train",))
+
+        with mock.patch("trainr.core.featurize.main", mock_featurize_main), \
+             mock.patch("trainr.core.dedup.main", mock_dedup_main), \
+             mock.patch("trainr.core.train.main", mock_train_main):
+            runner = CliRunner()
+            result = runner.invoke(pipeline, [
+                "run",
+                "--input", "/tmp/raw.parquet",
+                "--output-dir", str(tmp_path),
+            ])
+            assert result.exit_code == 0
+            assert len(calls) == 3  # Only featurize, dedup, train
