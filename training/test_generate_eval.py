@@ -1,4 +1,4 @@
-"""Tests for generate_eval.py — the GPT-5.4 eval set generator."""
+"""Tests for trainr.core.generate_eval — the GPT-5.4 eval set generator."""
 
 import json
 import os
@@ -8,10 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Ensure the training directory is importable
-sys.path.insert(0, os.path.dirname(__file__))
-
-import generate_eval
+import trainr.core.generate_eval as generate_eval
 
 
 # ── Shared contract tests ────────────────────────────────────────────
@@ -124,7 +121,7 @@ class TestDomainSeedsAndBuckets:
 class TestGenerateClearSamples:
     """generate_clear_samples must call the API and return validated dicts."""
 
-    @patch("generate_eval.openai")
+    @patch("trainr.core.generate_eval.openai")
     def test_returns_list_of_validated_samples(self, mock_openai_mod):
         mock_client = MagicMock()
         mock_openai_mod.OpenAI.return_value = mock_client
@@ -151,7 +148,7 @@ class TestGenerateClearSamples:
         assert results[0]["label"] == "prose"
         assert results[0]["kind"] == "clear"
 
-    @patch("generate_eval.openai")
+    @patch("trainr.core.generate_eval.openai")
     def test_skips_invalid_samples(self, mock_openai_mod):
         mock_client = MagicMock()
         mock_openai_mod.OpenAI.return_value = mock_client
@@ -178,7 +175,7 @@ class TestGenerateClearSamples:
 # ── generate_boundary_samples ────────────────────────────────────────
 
 class TestGenerateBoundarySamples:
-    @patch("generate_eval.openai")
+    @patch("trainr.core.generate_eval.openai")
     def test_returns_validated_boundary_samples(self, mock_openai_mod):
         mock_client = MagicMock()
         mock_openai_mod.OpenAI.return_value = mock_client
@@ -309,7 +306,7 @@ class TestFileOutput:
                 "--output-dir", tmpdir,
                 "--samples-per-category", "1",
             ])
-            with patch("generate_eval._create_client", return_value=mock_client):
+            with patch("trainr.core.generate_eval._create_client", return_value=mock_client):
                 generate_eval.run(args)
 
             path = os.path.join(tmpdir, "clear.jsonl")
