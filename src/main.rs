@@ -366,9 +366,9 @@ fn format_human_friendly(result: &text_classifier::Classification) -> String {
         .detections
         .iter()
         .flat_map(|(cat, dets)| {
-            dets.iter().filter(|d| d.score > 0.5).map(move |d| {
-                (format!("{}/{}", cat, d.sub_type.label()), d.score)
-            })
+            dets.iter()
+                .filter(|d| d.score > 0.5)
+                .map(move |d| (format!("{}/{}", cat, d.sub_type.label()), d.score))
         })
         .collect();
 
@@ -1147,7 +1147,10 @@ mod tests {
         // shell(0.90) should come before python(0.75)
         let shell_pos = output.find("code/shell").unwrap();
         let python_pos = output.find("code/python").unwrap();
-        assert!(shell_pos < python_pos, "detections should be sorted by score descending");
+        assert!(
+            shell_pos < python_pos,
+            "detections should be sorted by score descending"
+        );
     }
 
     #[test]

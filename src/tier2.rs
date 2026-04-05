@@ -1,8 +1,8 @@
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::ContentSubType;
-use crate::types::{Classification, FeatureVector, TextCategory, Tier};
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::Detection;
+use crate::types::{Classification, FeatureVector, TextCategory, Tier};
 use std::collections::BTreeMap;
 
 #[cfg(any(feature = "onnx-model", test))]
@@ -210,42 +210,20 @@ impl ModelClassifier {
 
         let cat_probs = softmax(cat_logits);
         let sub_probs = softmax(sub_logits);
-
-        let (cat_idx, cat_conf) = argmax(&cat_probs);
-        let (sub_idx, _sub_conf) = argmax(&sub_probs);
-
-        let cat_label = inv_cat.get(&cat_idx).map(|s| s.as_str()).unwrap_or("skip");
-        let sub_label = inv_sub
-            .get(&sub_idx)
-            .map(|s| s.as_str())
-            .unwrap_or("unknown");
-
-        let category = parse_category(cat_label);
-        let sub_type = parse_sub_type(sub_label);
-
-        // Extract detection head (3rd output) if present
-        let detections = if outputs.len() >= 3 {
-            if let Some(inv_det) = self.inv_detection_map.as_ref() {
-                let (_det_shape, det_logits) = outputs[2].try_extract_tensor::<f32>()?;
-                let det_scores = sigmoid_vec(det_logits);
-                build_detections(&det_scores, inv_det, 0.5)
-            } else {
-                BTreeMap::new()
-            }
+        let det_logits = if outputs.len() >= 3 {
+            Some(outputs[2].try_extract_tensor::<f32>()?.1)
         } else {
-            BTreeMap::new()
+            None
         };
 
-        let _ = detections; // Will be used when Classification gains detections field
-
-        Ok(Classification {
-            category,
-            sub_type: Some(sub_type),
-            confidence: cat_conf,
-            reason: format!("onnx model: category={cat_label}, sub_type={sub_label}"),
-            tier: Tier::Model,
-            detections: BTreeMap::new(),
-        })
+        Ok(build_classification(
+            &cat_probs,
+            &sub_probs,
+            det_logits,
+            inv_cat,
+            inv_sub,
+            self.inv_detection_map.as_ref(),
+        ))
     }
 
     fn classify_fallback(&self, features: &FeatureVector) -> Classification {
@@ -421,6 +399,42 @@ fn build_detections(
         });
     }
     result
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+fn build_classification(
+    cat_probs: &[f32],
+    sub_probs: &[f32],
+    det_logits: Option<&[f32]>,
+    inv_cat: &HashMap<usize, String>,
+    inv_sub: &HashMap<usize, String>,
+    inv_det: Option<&HashMap<usize, String>>,
+) -> Classification {
+    let (cat_idx, cat_conf) = argmax(cat_probs);
+    let (sub_idx, _sub_conf) = argmax(sub_probs);
+
+    let cat_label = inv_cat.get(&cat_idx).map(|s| s.as_str()).unwrap_or("skip");
+    let sub_label = inv_sub
+        .get(&sub_idx)
+        .map(|s| s.as_str())
+        .unwrap_or("unknown");
+
+    let detections = match (det_logits, inv_det) {
+        (Some(logits), Some(inv_det)) => {
+            let det_scores = sigmoid_vec(logits);
+            build_detections(&det_scores, inv_det, 0.5)
+        }
+        _ => BTreeMap::new(),
+    };
+
+    Classification {
+        category: parse_category(cat_label),
+        sub_type: Some(parse_sub_type(sub_label)),
+        confidence: cat_conf,
+        reason: format!("onnx model: category={cat_label}, sub_type={sub_label}"),
+        tier: Tier::Model,
+        detections,
+    }
 }
 
 #[cfg(test)]
@@ -704,5 +718,50 @@ mod tests {
         let inv_map: HashMap<usize, String> = HashMap::new();
         let result = build_detections(&[], &inv_map, 0.5);
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_build_classification_includes_detections() {
+        use std::collections::HashMap;
+
+        let cat_probs = vec![0.1, 0.8, 0.1];
+        let sub_probs = vec![0.1, 0.9];
+        let det_logits = vec![2.0, 1.0];
+
+        let mut inv_cat = HashMap::new();
+        inv_cat.insert(0, "prose".to_string());
+        inv_cat.insert(1, "code".to_string());
+        inv_cat.insert(2, "structured".to_string());
+
+        let mut inv_sub = HashMap::new();
+        inv_sub.insert(0, "markdown".to_string());
+        inv_sub.insert(1, "python".to_string());
+
+        let mut inv_det = HashMap::new();
+        inv_det.insert(0, "python".to_string());
+        inv_det.insert(1, "markdown".to_string());
+
+        let classification = build_classification(
+            &cat_probs,
+            &sub_probs,
+            Some(&det_logits),
+            &inv_cat,
+            &inv_sub,
+            Some(&inv_det),
+        );
+
+        assert_eq!(classification.category, TextCategory::Code);
+        assert_eq!(classification.sub_type, Some(ContentSubType::Python));
+        assert_eq!(classification.tier, Tier::Model);
+        assert_eq!(classification.detections[&TextCategory::Code].len(), 1);
+        assert_eq!(
+            classification.detections[&TextCategory::Code][0].sub_type,
+            ContentSubType::Python
+        );
+        assert_eq!(classification.detections[&TextCategory::Prose].len(), 1);
+        assert_eq!(
+            classification.detections[&TextCategory::Prose][0].sub_type,
+            ContentSubType::Markdown
+        );
     }
 }
