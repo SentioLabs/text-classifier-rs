@@ -233,10 +233,15 @@ def stratified_sample(
 
     # Calculate per-group allocation
     allocations: dict[str, int] = {}
+    n_groups = len(groups)
+
+    # Clamp floor so guaranteed minimums can't exceed total budget
+    effective_floor = min(min_per_group, n // max(n_groups, 1))
+
     budget = n
     # First pass: guarantee floor
     for g in groups:
-        alloc = min(min_per_group, group_counts[g])
+        alloc = min(effective_floor, group_counts[g])
         allocations[g] = alloc
         budget -= alloc
 

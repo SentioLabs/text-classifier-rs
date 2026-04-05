@@ -505,12 +505,8 @@ def main(argv: list[str] | None = None) -> None:
             )
             write_prediction_records(output_path, predictions)
 
-        if args.json:
-            print(format_json_report(metrics, Path(eval_path).name))
-        else:
-            print(format_report(metrics, Path(eval_path).name))
-
-        # Auto-detect and report detection metrics
+        # Auto-detect detection metrics
+        det_metrics = None
         detection_map = config.get("detection_map")
         has_det_columns = any(
             key.startswith("det_") for sample in samples for key in sample
@@ -519,7 +515,20 @@ def main(argv: list[str] | None = None) -> None:
             det_metrics = compute_detection_metrics(
                 predictions, samples, detection_map
             )
-            if args.json:
-                print(json.dumps({"detection_metrics": det_metrics}, indent=2))
-            else:
+
+        if args.json:
+            output = {
+                "eval_file": Path(eval_path).name,
+                "overall_accuracy": metrics["overall_accuracy"],
+                "total_samples": metrics.get("total_samples"),
+                "per_category": metrics["per_category"],
+                "confusion_matrix": metrics["confusion_matrix"],
+                "categories": metrics["categories"],
+            }
+            if det_metrics is not None:
+                output["detection_metrics"] = det_metrics
+            print(json.dumps(output, indent=2))
+        else:
+            print(format_report(metrics, Path(eval_path).name))
+            if det_metrics is not None:
                 print(format_detection_report(det_metrics))
