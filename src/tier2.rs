@@ -2,7 +2,9 @@
 use crate::types::ContentSubType;
 use crate::types::{Classification, FeatureVector, TextCategory, Tier};
 
-#[cfg(feature = "onnx-model")]
+#[cfg(any(feature = "onnx-model", test))]
+use std::collections::BTreeMap;
+#[cfg(any(feature = "onnx-model", test))]
 use std::collections::HashMap;
 #[cfg(feature = "onnx-model")]
 use std::sync::Mutex;
@@ -19,6 +21,7 @@ struct ModelConfig {
     feature_std: Vec<f32>,
     category_map: HashMap<String, usize>,
     sub_type_map: HashMap<String, usize>,
+    detection_map: Option<HashMap<String, usize>>,
 }
 
 /// Tier 2 model-based classifier.
@@ -35,6 +38,8 @@ pub struct ModelClassifier {
     inv_category_map: Option<HashMap<usize, String>>,
     #[cfg(feature = "onnx-model")]
     inv_sub_type_map: Option<HashMap<usize, String>>,
+    #[cfg(feature = "onnx-model")]
+    inv_detection_map: Option<HashMap<usize, String>>,
 
     #[cfg(not(feature = "onnx-model"))]
     _phantom: (),
@@ -59,6 +64,7 @@ impl ModelClassifier {
                     config: None,
                     inv_category_map: None,
                     inv_sub_type_map: None,
+                    inv_detection_map: None,
                 }
             }
         }
@@ -85,6 +91,11 @@ impl ModelClassifier {
             .map(|(k, v)| (*v, k.clone()))
             .collect();
 
+        let inv_detection_map = config
+            .detection_map
+            .as_ref()
+            .map(|dm| dm.iter().map(|(k, v)| (*v, k.clone())).collect());
+
         let session = ort::session::Session::builder()?.commit_from_memory(MODEL_BYTES)?;
 
         Ok(Self {
@@ -92,6 +103,7 @@ impl ModelClassifier {
             config: Some(config),
             inv_category_map: Some(inv_category_map),
             inv_sub_type_map: Some(inv_sub_type_map),
+            inv_detection_map,
         })
     }
 
@@ -104,6 +116,7 @@ impl ModelClassifier {
                 config: None,
                 inv_category_map: None,
                 inv_sub_type_map: None,
+                inv_detection_map: None,
             }
         }
         #[cfg(not(feature = "onnx-model"))]
@@ -208,6 +221,21 @@ impl ModelClassifier {
 
         let category = parse_category(cat_label);
         let sub_type = parse_sub_type(sub_label);
+
+        // Extract detection head (3rd output) if present
+        let detections = if outputs.len() >= 3 {
+            if let Some(inv_det) = self.inv_detection_map.as_ref() {
+                let (_det_shape, det_logits) = outputs[2].try_extract_tensor::<f32>()?;
+                let det_scores = sigmoid_vec(det_logits);
+                build_detections(&det_scores, inv_det, 0.5)
+            } else {
+                BTreeMap::new()
+            }
+        } else {
+            BTreeMap::new()
+        };
+
+        let _ = detections; // Will be used when Classification gains detections field
 
         Ok(Classification {
             category,
@@ -350,6 +378,68 @@ fn parse_sub_type(s: &str) -> ContentSubType {
         "log_lines" => ContentSubType::LogLines,
         _ => ContentSubType::Unknown,
     }
+}
+
+/// A single detection from the multi-label detection head.
+#[cfg(any(feature = "onnx-model", test))]
+#[derive(Debug, Clone)]
+pub struct Detection {
+    pub sub_type: ContentSubType,
+    pub score: f32,
+}
+
+// TextCategory needs Ord for use as BTreeMap key.
+#[cfg(any(feature = "onnx-model", test))]
+impl PartialOrd for TextCategory {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+impl Ord for TextCategory {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (*self as u8).cmp(&(*other as u8))
+    }
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+fn sigmoid(x: f32) -> f32 {
+    1.0 / (1.0 + (-x).exp())
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+fn sigmoid_vec(logits: &[f32]) -> Vec<f32> {
+    logits.iter().map(|&x| sigmoid(x)).collect()
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+fn build_detections(
+    scores: &[f32],
+    inv_map: &HashMap<usize, String>,
+    threshold: f32,
+) -> BTreeMap<TextCategory, Vec<Detection>> {
+    let mut result = BTreeMap::new();
+    for (idx, &score) in scores.iter().enumerate() {
+        if score < threshold {
+            continue;
+        }
+        let label = inv_map.get(&idx).map(|s| s.as_str()).unwrap_or("unknown");
+        let sub_type = parse_sub_type(label);
+        let category = sub_type.category();
+        result
+            .entry(category)
+            .or_insert_with(Vec::new)
+            .push(Detection { sub_type, score });
+    }
+    for detections in result.values_mut() {
+        detections.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
+    result
 }
 
 #[cfg(test)]
@@ -510,5 +600,128 @@ mod tests {
     fn test_new_without_feature_has_no_model() {
         let classifier = ModelClassifier::new();
         assert!(!classifier.has_model());
+    }
+
+    #[test]
+    fn test_sigmoid_zero() {
+        let result = sigmoid(0.0);
+        assert!((result - 0.5).abs() < 1e-6, "sigmoid(0) should be 0.5");
+    }
+
+    #[test]
+    fn test_sigmoid_large_positive() {
+        let result = sigmoid(10.0);
+        assert!(result > 0.999, "sigmoid(10) should be close to 1.0");
+    }
+
+    #[test]
+    fn test_sigmoid_large_negative() {
+        let result = sigmoid(-10.0);
+        assert!(result < 0.001, "sigmoid(-10) should be close to 0.0");
+    }
+
+    #[test]
+    fn test_sigmoid_symmetry() {
+        let pos = sigmoid(2.0);
+        let neg = sigmoid(-2.0);
+        assert!(
+            (pos + neg - 1.0).abs() < 1e-6,
+            "sigmoid(x) + sigmoid(-x) should equal 1.0"
+        );
+    }
+
+    #[test]
+    fn test_sigmoid_vec_basic() {
+        let logits = vec![0.0, 10.0, -10.0];
+        let results = sigmoid_vec(&logits);
+        assert_eq!(results.len(), 3);
+        assert!((results[0] - 0.5).abs() < 1e-6);
+        assert!(results[1] > 0.999);
+        assert!(results[2] < 0.001);
+    }
+
+    #[test]
+    fn test_sigmoid_vec_empty() {
+        let results = sigmoid_vec(&[]);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_build_detections_above_threshold() {
+        use std::collections::HashMap;
+
+        let mut inv_map = HashMap::new();
+        inv_map.insert(0, "python".to_string());
+        inv_map.insert(1, "markdown".to_string());
+
+        let scores = vec![0.9, 0.8];
+        let result = build_detections(&scores, &inv_map, 0.5);
+
+        // python -> Code, markdown -> Prose
+        assert!(result.contains_key(&TextCategory::Code));
+        assert!(result.contains_key(&TextCategory::Prose));
+        assert_eq!(result[&TextCategory::Code].len(), 1);
+        assert_eq!(
+            result[&TextCategory::Code][0].sub_type,
+            ContentSubType::Python
+        );
+        assert!((result[&TextCategory::Code][0].score - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_build_detections_below_threshold() {
+        use std::collections::HashMap;
+
+        let mut inv_map = HashMap::new();
+        inv_map.insert(0, "python".to_string());
+
+        let scores = vec![0.3];
+        let result = build_detections(&scores, &inv_map, 0.5);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_build_detections_sorted_by_score_descending() {
+        use std::collections::HashMap;
+
+        let mut inv_map = HashMap::new();
+        inv_map.insert(0, "python".to_string());
+        inv_map.insert(1, "rust".to_string());
+        inv_map.insert(2, "javascript".to_string());
+
+        // All code subtypes, different scores
+        let scores = vec![0.7, 0.9, 0.8];
+        let result = build_detections(&scores, &inv_map, 0.5);
+
+        let code_detections = &result[&TextCategory::Code];
+        assert_eq!(code_detections.len(), 3);
+        assert_eq!(code_detections[0].sub_type, ContentSubType::Rust);
+        assert_eq!(code_detections[1].sub_type, ContentSubType::JavaScript);
+        assert_eq!(code_detections[2].sub_type, ContentSubType::Python);
+    }
+
+    #[test]
+    fn test_build_detections_unknown_label() {
+        use std::collections::HashMap;
+
+        let inv_map: HashMap<usize, String> = HashMap::new();
+        // index 0 has no entry in map
+        let scores = vec![0.9];
+        let result = build_detections(&scores, &inv_map, 0.5);
+
+        // "unknown" label maps to ContentSubType::Unknown, category Skip
+        assert!(result.contains_key(&TextCategory::Skip));
+        assert_eq!(
+            result[&TextCategory::Skip][0].sub_type,
+            ContentSubType::Unknown
+        );
+    }
+
+    #[test]
+    fn test_build_detections_empty_scores() {
+        use std::collections::HashMap;
+        let inv_map: HashMap<usize, String> = HashMap::new();
+        let result = build_detections(&[], &inv_map, 0.5);
+        assert!(result.is_empty());
     }
 }
