@@ -184,6 +184,8 @@ def _call_openrouter(text: str, model: str, api_key: str) -> str:
             "cache_control": {"type": "ephemeral", "ttl": "1h"},
         },
     )
+    if not getattr(response, "choices", None):
+        return ""
     return response.choices[0].message.content or ""
 
 
