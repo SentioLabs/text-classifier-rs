@@ -152,10 +152,10 @@ SUB_TYPE_CATEGORY: dict[str, str] = {
     "dockerfile": "code",
     "makefile": "code",
     "unknown": "code",
-    # config (category is "code" per types.rs — yaml/toml/ini are under Code)
-    "yaml": "code",
-    "toml": "code",
-    "ini": "code",
+    # config (structured per types.rs — yaml/toml/ini are under Structured)
+    "yaml": "structured",
+    "toml": "structured",
+    "ini": "structured",
     # structured
     "csv": "structured",
     "tsv": "structured",
