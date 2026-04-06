@@ -576,6 +576,7 @@ def save_config(
     feature_std: np.ndarray,
     sub_type_map: dict[str, int],
     detection_map: dict[str, int] | None = None,
+    detection_threshold: float = 0.3,
 ) -> None:
     """Save model configuration (feature stats, label maps) to JSON."""
     config = {
@@ -584,6 +585,7 @@ def save_config(
         "feature_std": feature_std.tolist(),
         "category_map": CATEGORY_MAP,
         "sub_type_map": sub_type_map,
+        "detection_threshold": detection_threshold,
     }
     if detection_map is not None:
         config["detection_map"] = detection_map
@@ -697,6 +699,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0.3,
         help="Detection loss weight (default: 0.3).",
     )
+    parser.add_argument(
+        "--detection-threshold",
+        type=float,
+        default=0.3,
+        help="Detection head threshold written to model_config.json (default: 0.3).",
+    )
     return parser.parse_args(argv)
 
 
@@ -750,6 +758,7 @@ def main(argv: list[str] | None = None) -> None:
         data["feature_std"],
         data["sub_type_map"],
         detection_map=data.get("detection_map"),
+        detection_threshold=args.detection_threshold,
     )
     print(f"Saved config to {config_path}", file=sys.stderr)
 

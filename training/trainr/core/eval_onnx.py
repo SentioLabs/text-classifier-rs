@@ -171,12 +171,13 @@ def predict_samples(
     feature_extractor: Callable[[str], dict[str, float]] | None = None,
 ) -> list[dict[str, Any]]:
     """Run ONNX inference for each sample and return prediction records."""
-    inv_map = invert_category_map(config["category_map"])
     inv_sub_map = invert_category_map(config["sub_type_map"])
     detection_map: dict[str, int] | None = config.get("detection_map")
     inv_detection_map: dict[int, str] | None = None
     if detection_map is not None:
         inv_detection_map = {v: k for k, v in detection_map.items()}
+
+    det_threshold: float = config.get("detection_threshold", 0.3)
 
     predictions: list[dict[str, Any]] = []
     if feature_extractor is None:
@@ -191,7 +192,8 @@ def predict_samples(
         outputs = session.run(None, {"features": normalized})
         # Marginalize category from sub-type probabilities
         sub_type_logits = outputs[1]
-        sub_probs = np.exp(sub_type_logits) / np.exp(sub_type_logits).sum(
+        shifted = sub_type_logits - sub_type_logits.max(axis=1, keepdims=True)
+        sub_probs = np.exp(shifted) / np.exp(shifted).sum(
             axis=1, keepdims=True
         )
         cat_accum: dict[str, float] = {}
@@ -213,7 +215,7 @@ def predict_samples(
             for idx, label in sorted(inv_detection_map.items()):
                 score = float(det_probs[idx])
                 scores[label] = score
-                if score >= 0.5:
+                if score >= det_threshold:
                     detected.append(label)
             record["detected_subtypes"] = detected
             record["detection_scores"] = scores

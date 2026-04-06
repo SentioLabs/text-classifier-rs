@@ -308,3 +308,7 @@ pub mod thresholds {
     pub const STRUCTURED: f32 = 0.60;
     pub const SUB_TYPE: f32 = 0.80;
 }
+
+/// Default detection-head threshold applied when `model_config.json` does not
+/// specify a value.  Shared by both Rust inference and the Python eval pipeline.
+pub const DEFAULT_DETECTION_THRESHOLD: f32 = 0.3;

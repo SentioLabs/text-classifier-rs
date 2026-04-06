@@ -2,7 +2,9 @@
 use crate::types::ContentSubType;
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::Detection;
-use crate::types::{Classification, FeatureVector, TextCategory, Tier};
+use crate::types::{
+    Classification, DEFAULT_DETECTION_THRESHOLD, FeatureVector, TextCategory, Tier,
+};
 use std::collections::BTreeMap;
 
 #[cfg(any(feature = "onnx-model", test))]
@@ -23,6 +25,7 @@ struct ModelConfig {
     category_map: HashMap<String, usize>,
     sub_type_map: HashMap<String, usize>,
     detection_map: Option<HashMap<String, usize>>,
+    detection_threshold: Option<f32>,
 }
 
 /// Tier 2 model-based classifier.
@@ -41,6 +44,8 @@ pub struct ModelClassifier {
     inv_sub_type_map: Option<HashMap<usize, String>>,
     #[cfg(feature = "onnx-model")]
     inv_detection_map: Option<HashMap<usize, String>>,
+    #[cfg(feature = "onnx-model")]
+    detection_threshold: f32,
 
     #[cfg(not(feature = "onnx-model"))]
     _phantom: (),
@@ -66,6 +71,7 @@ impl ModelClassifier {
                     inv_category_map: None,
                     inv_sub_type_map: None,
                     inv_detection_map: None,
+                    detection_threshold: DEFAULT_DETECTION_THRESHOLD,
                 }
             }
         }
@@ -99,12 +105,17 @@ impl ModelClassifier {
 
         let session = ort::session::Session::builder()?.commit_from_memory(MODEL_BYTES)?;
 
+        let detection_threshold = config
+            .detection_threshold
+            .unwrap_or(DEFAULT_DETECTION_THRESHOLD);
+
         Ok(Self {
             session: Some(Mutex::new(session)),
             config: Some(config),
             inv_category_map: Some(inv_category_map),
             inv_sub_type_map: Some(inv_sub_type_map),
             inv_detection_map,
+            detection_threshold,
         })
     }
 
@@ -118,6 +129,7 @@ impl ModelClassifier {
                 inv_category_map: None,
                 inv_sub_type_map: None,
                 inv_detection_map: None,
+                detection_threshold: DEFAULT_DETECTION_THRESHOLD,
             }
         }
         #[cfg(not(feature = "onnx-model"))]
@@ -223,6 +235,7 @@ impl ModelClassifier {
             inv_cat,
             inv_sub,
             self.inv_detection_map.as_ref(),
+            self.detection_threshold,
         ))
     }
 
@@ -409,6 +422,7 @@ fn build_classification(
     _inv_cat: &HashMap<usize, String>,
     inv_sub: &HashMap<usize, String>,
     inv_det: Option<&HashMap<usize, String>>,
+    detection_threshold: f32,
 ) -> Classification {
     let (sub_idx, _sub_conf) = argmax(sub_probs);
 
@@ -432,12 +446,10 @@ fn build_classification(
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or((TextCategory::Skip, 0.0));
 
-    let cat_label = marginalized_cat.to_string();
-
     let detections = match (det_logits, inv_det) {
         (Some(logits), Some(inv_det)) => {
             let det_scores = sigmoid_vec(logits);
-            build_detections(&det_scores, inv_det, 0.5)
+            build_detections(&det_scores, inv_det, detection_threshold)
         }
         _ => BTreeMap::new(),
     };
@@ -446,7 +458,9 @@ fn build_classification(
         category: marginalized_cat,
         sub_type: Some(parse_sub_type(sub_label)),
         confidence: marginalized_conf,
-        reason: format!("onnx model (marginalized): category={cat_label}, sub_type={sub_label}"),
+        reason: format!(
+            "onnx model (marginalized): category={marginalized_cat}, sub_type={sub_label}"
+        ),
         tier: Tier::Model,
         detections,
     }
@@ -758,8 +772,15 @@ mod tests {
 
         let sub_probs = vec![0.35, 0.30, 0.15, 0.12, 0.08];
 
-        let classification =
-            build_classification(&cat_probs, &sub_probs, None, &inv_cat, &inv_sub, None);
+        let classification = build_classification(
+            &cat_probs,
+            &sub_probs,
+            None,
+            &inv_cat,
+            &inv_sub,
+            None,
+            DEFAULT_DETECTION_THRESHOLD,
+        );
 
         // Marginalization should pick structured (0.80) over code (0.20)
         assert_eq!(
@@ -792,14 +813,94 @@ mod tests {
         let inv_sub: HashMap<usize, String> = HashMap::new();
         let sub_probs = vec![0.6, 0.4];
 
-        let classification =
-            build_classification(&cat_probs, &sub_probs, None, &inv_cat, &inv_sub, None);
+        let classification = build_classification(
+            &cat_probs,
+            &sub_probs,
+            None,
+            &inv_cat,
+            &inv_sub,
+            None,
+            DEFAULT_DETECTION_THRESHOLD,
+        );
 
         // Unknown sub-types map to ContentSubType::Unknown -> TextCategory::Skip
         assert_eq!(
             classification.category,
             TextCategory::Skip,
             "unknown sub-types should result in Skip category"
+        );
+    }
+
+    #[test]
+    fn test_detection_threshold_from_config() {
+        use std::collections::HashMap;
+
+        // Detection logits that produce sigmoid scores between 0.3 and 0.5:
+        // sigmoid(-0.4) ≈ 0.40, sigmoid(-0.8) ≈ 0.31
+        // These should be included at threshold 0.3 but excluded at 0.5.
+        let det_logits = vec![-0.4, -0.8]; // sigmoid ≈ [0.40, 0.31]
+
+        let cat_probs = vec![0.1, 0.8, 0.1];
+        let sub_probs = vec![0.1, 0.9];
+
+        let mut inv_cat = HashMap::new();
+        inv_cat.insert(0, "prose".to_string());
+        inv_cat.insert(1, "code".to_string());
+        inv_cat.insert(2, "structured".to_string());
+
+        let mut inv_sub = HashMap::new();
+        inv_sub.insert(0, "markdown".to_string());
+        inv_sub.insert(1, "python".to_string());
+
+        let mut inv_det = HashMap::new();
+        inv_det.insert(0, "python".to_string());
+        inv_det.insert(1, "markdown".to_string());
+
+        // With the default threshold of 0.3, both detections should be included
+        let default_threshold = crate::types::DEFAULT_DETECTION_THRESHOLD;
+        assert!(
+            (default_threshold - 0.3).abs() < f32::EPSILON,
+            "DEFAULT_DETECTION_THRESHOLD should be 0.3"
+        );
+
+        let classification_low = build_classification(
+            &cat_probs,
+            &sub_probs,
+            Some(&det_logits),
+            &inv_cat,
+            &inv_sub,
+            Some(&inv_det),
+            default_threshold,
+        );
+        // At 0.3 threshold, both scores (0.40, 0.30) should pass
+        assert!(
+            !classification_low.detections.is_empty(),
+            "detections should not be empty at threshold 0.3"
+        );
+        let total_detections_low: usize = classification_low
+            .detections
+            .values()
+            .map(|v| v.len())
+            .sum();
+        assert_eq!(
+            total_detections_low, 2,
+            "both detections should be included at threshold 0.3"
+        );
+
+        // With threshold 0.5, both should be excluded (scores are 0.40 and 0.30)
+        let classification_high = build_classification(
+            &cat_probs,
+            &sub_probs,
+            Some(&det_logits),
+            &inv_cat,
+            &inv_sub,
+            Some(&inv_det),
+            0.5,
+        );
+        assert!(
+            classification_high.detections.is_empty(),
+            "detections should be empty at threshold 0.5, got {:?}",
+            classification_high.detections
         );
     }
 
@@ -831,6 +932,7 @@ mod tests {
             &inv_cat,
             &inv_sub,
             Some(&inv_det),
+            DEFAULT_DETECTION_THRESHOLD,
         );
 
         assert_eq!(classification.category, TextCategory::Code);
