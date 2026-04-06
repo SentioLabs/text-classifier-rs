@@ -57,6 +57,10 @@ _C_FUNC_SIG = re.compile(
 _C_STRUCT = re.compile(r"\bstruct\s+\w+")
 _CODE_BRACES_SEMICOLONS = re.compile(r"[{};]")
 
+_C_SPECIFIC_INDICATORS = re.compile(
+    r"\*\w|\w\*|typedef\b|enum\s+\w+\s*\{|enum\s*\{|NULL\b|nullptr\b"
+)
+
 _LICENSE_WORDS = re.compile(
     r"(?:permission|license|granted|warranty|copyright|distribute|sublicense|"
     r"merchantability|liability|damages|software|modification|restriction)",
@@ -97,9 +101,10 @@ def classify_heuristic(text: str) -> str:
         if ratio > 0.10:
             return "prose_plain"
 
-    # Code-like syntax (braces + semicolons)
+    # Code-like syntax (braces + semicolons) — only classify as c_cpp if
+    # C-specific indicators are also present (pointers, typedef, enum{}, NULL/nullptr)
     brace_semi_count = len(_CODE_BRACES_SEMICOLONS.findall(text))
-    if brace_semi_count >= 3:
+    if brace_semi_count >= 3 and _C_SPECIFIC_INDICATORS.search(text):
         return "c_cpp"
 
     return "drop"
@@ -177,6 +182,25 @@ async def classify_batch_llm(
 
 
 # ---------------------------------------------------------------------------
+# Label normalization
+# ---------------------------------------------------------------------------
+
+_LABEL_MAP: dict[str, str] = {
+    "prose_plain": "prose",
+    "other": "unknown",
+}
+
+
+def _normalize_label(label: str) -> str:
+    """Map voter-specific labels to a canonical set.
+
+    Canonical labels: {c_cpp, objc, prose, drop, unknown, manual_review}.
+    Mappings: prose_plain -> prose, other -> unknown.
+    """
+    return _LABEL_MAP.get(label, label)
+
+
+# ---------------------------------------------------------------------------
 # Vote consensus
 # ---------------------------------------------------------------------------
 
@@ -199,6 +223,89 @@ def vote(heuristic: str, magika: str, llm: str) -> tuple[str, str]:
         return (magika, "majority")
 
     return ("manual_review", "tie")
+
+
+# ---------------------------------------------------------------------------
+# Apply voted labels (vectorized)
+# ---------------------------------------------------------------------------
+
+# Map voted label -> (category, sub_type). "drop" and "manual_review" are
+# handled specially: drops remove rows, manual_review leaves sub_type as-is.
+_LABEL_TO_CATEGORY_SUBTYPE: dict[str, tuple[str, str]] = {
+    "c_cpp": ("code", "c_cpp"),
+    "objc": ("code", "objc"),
+    "prose": ("prose", "plain"),
+    "unknown": ("unknown", "unknown"),
+}
+
+
+def apply_voted_labels(
+    df: pl.DataFrame,
+    indices: list[int],
+    labels: list[str],
+) -> tuple[pl.DataFrame, int]:
+    """Apply voted labels to the DataFrame using vectorized Polars operations.
+
+    Returns (updated_df, manual_review_count).
+
+    Label mapping:
+    - c_cpp   -> category="code",  sub_type="c_cpp"
+    - objc    -> category="code",  sub_type="objc"
+    - prose   -> category="prose", sub_type="plain"
+    - drop    -> row removed
+    - manual_review -> sub_type left as "unknown"
+    """
+    # Build a mapping DataFrame: __idx -> voted_category, voted_sub_type, is_drop
+    map_rows: list[dict] = []
+    manual_review_count = 0
+    for idx, label in zip(indices, labels):
+        if label == "manual_review":
+            manual_review_count += 1
+            continue  # leave row unchanged
+        if label == "drop":
+            map_rows.append({
+                "__idx": idx,
+                "__voted_category": "",
+                "__voted_sub_type": "",
+                "__is_drop": True,
+            })
+            continue
+        cat, sub = _LABEL_TO_CATEGORY_SUBTYPE.get(label, ("unknown", label))
+        map_rows.append({
+            "__idx": idx,
+            "__voted_category": cat,
+            "__voted_sub_type": sub,
+            "__is_drop": False,
+        })
+
+    if not map_rows:
+        return df, manual_review_count
+
+    mapping_df = pl.DataFrame(map_rows).cast({"__idx": pl.UInt32})
+
+    # Join mapping onto the original df with row indices
+    df = df.with_row_index("__idx")
+    df = df.join(mapping_df, on="__idx", how="left")
+
+    # Apply updates: use voted values where present, keep originals otherwise
+    df = df.with_columns([
+        pl.when(pl.col("__voted_category").is_not_null() & ~pl.col("__is_drop").fill_null(False))
+        .then(pl.col("__voted_category"))
+        .otherwise(pl.col("category"))
+        .alias("category"),
+        pl.when(pl.col("__voted_sub_type").is_not_null() & ~pl.col("__is_drop").fill_null(False))
+        .then(pl.col("__voted_sub_type"))
+        .otherwise(pl.col("sub_type"))
+        .alias("sub_type"),
+    ])
+
+    # Drop rows marked for removal
+    df = df.filter(~pl.col("__is_drop").fill_null(False))
+
+    # Clean up helper columns
+    df = df.drop("__idx", "__voted_category", "__voted_sub_type", "__is_drop")
+
+    return df, manual_review_count
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +401,8 @@ async def async_main(argv: list[str] | None = None) -> None:
         file=sys.stderr,
     )
 
+    manual_review_count = 0
+
     if n_unknowns > 0:
         # Initialize voters
         magika_instance = Magika()
@@ -321,6 +430,12 @@ async def async_main(argv: list[str] | None = None) -> None:
             llm_client, texts, args.model, args.concurrency
         )
 
+        # Normalize labels before voting
+        print("  Normalizing labels...", file=sys.stderr)
+        heuristic_labels = [_normalize_label(l) for l in heuristic_labels]
+        magika_labels = [_normalize_label(l) for l in magika_labels]
+        llm_labels = [_normalize_label(l) for l in llm_labels]
+
         # Vote
         print("  Computing votes...", file=sys.stderr)
         voted_labels = []
@@ -345,31 +460,16 @@ async def async_main(argv: list[str] | None = None) -> None:
                     }
                 )
 
-        # Apply voted labels to the DataFrame
-        # Build a mapping from row indices in original df to new labels
+        # Apply voted labels to the DataFrame (vectorized)
         stack_unknown_indices = (
             df.with_row_index("__idx")
             .filter(stack_unknown_mask)["__idx"]
             .to_list()
         )
 
-        # Create new sub_type and category columns
-        new_sub_type = df["sub_type"].to_list()
-        new_category = df["category"].to_list()
-
-        for idx, label in zip(stack_unknown_indices, voted_labels):
-            if label != "manual_review":
-                new_sub_type[idx] = label
-                # Infer category from sub_type
-                if label in ("c_cpp", "objc"):
-                    new_category[idx] = "code"
-                elif label in ("prose_plain", "prose"):
-                    new_category[idx] = "prose"
-
-        df = df.with_columns([
-            pl.Series("sub_type", new_sub_type),
-            pl.Series("category", new_category),
-        ])
+        df, manual_review_count = apply_voted_labels(
+            df, stack_unknown_indices, voted_labels
+        )
 
         # Write manual review rows
         if manual_review_rows and args.manual_review:
@@ -398,11 +498,22 @@ async def async_main(argv: list[str] | None = None) -> None:
             print(f"  {label}: {count:,}", file=sys.stderr)
         print(f"{'=' * 50}", file=sys.stderr)
 
-    # Final check
-    remaining_unknowns = df.filter(pl.col("sub_type") == "unknown").height
-    assert remaining_unknowns == 0, (
-        f"Expected 0 rows with sub_type == 'unknown', got {remaining_unknowns}"
-    )
+    # Final check: all the-stack-v2 unknowns should be relabeled OR in manual review
+    remaining_unknowns = df.filter(
+        (pl.col("source") == "real/the-stack-v2")
+        & (pl.col("sub_type") == "unknown")
+    ).height
+    if remaining_unknowns > manual_review_count:
+        raise ValueError(
+            f"Found {remaining_unknowns} the-stack-v2 rows with sub_type='unknown' "
+            f"but only {manual_review_count} are in manual review"
+        )
+    if remaining_unknowns > 0:
+        print(
+            f"\nWarning: {remaining_unknowns} the-stack-v2 rows still have "
+            f"sub_type='unknown' (all are pending manual review)",
+            file=sys.stderr,
+        )
 
     # Write output
     args.output.parent.mkdir(parents=True, exist_ok=True)

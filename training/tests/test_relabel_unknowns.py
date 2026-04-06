@@ -368,6 +368,244 @@ class TestClassifyBatchLlm:
 # ---------------------------------------------------------------------------
 
 
+class TestNormalizeLabel:
+    """Tests for _normalize_label() — canonical label mapping."""
+
+    def test_prose_plain_maps_to_prose(self):
+        from trainr.core.relabel_unknowns import _normalize_label
+
+        assert _normalize_label("prose_plain") == "prose"
+
+    def test_other_maps_to_unknown(self):
+        from trainr.core.relabel_unknowns import _normalize_label
+
+        assert _normalize_label("other") == "unknown"
+
+    def test_c_cpp_unchanged(self):
+        from trainr.core.relabel_unknowns import _normalize_label
+
+        assert _normalize_label("c_cpp") == "c_cpp"
+
+    def test_objc_unchanged(self):
+        from trainr.core.relabel_unknowns import _normalize_label
+
+        assert _normalize_label("objc") == "objc"
+
+    def test_prose_unchanged(self):
+        from trainr.core.relabel_unknowns import _normalize_label
+
+        assert _normalize_label("prose") == "prose"
+
+    def test_drop_unchanged(self):
+        from trainr.core.relabel_unknowns import _normalize_label
+
+        assert _normalize_label("drop") == "drop"
+
+    def test_unknown_unchanged(self):
+        from trainr.core.relabel_unknowns import _normalize_label
+
+        assert _normalize_label("unknown") == "unknown"
+
+    def test_manual_review_unchanged(self):
+        from trainr.core.relabel_unknowns import _normalize_label
+
+        assert _normalize_label("manual_review") == "manual_review"
+
+
+class TestCrossVoterNormalization:
+    """Tests for cross-voter label agreement after normalization."""
+
+    def test_heuristic_prose_plain_llm_prose_agree(self):
+        """Heuristic 'prose_plain' and LLM 'prose' should agree after normalization."""
+        from trainr.core.relabel_unknowns import _normalize_label, vote
+
+        h = _normalize_label("prose_plain")  # -> "prose"
+        m = _normalize_label("prose")         # -> "prose"
+        l = _normalize_label("prose")         # -> "prose"
+        label, method = vote(h, m, l)
+        assert label == "prose"
+        assert method == "unanimous"
+
+    def test_heuristic_prose_plain_llm_prose_majority(self):
+        """Heuristic 'prose_plain' + LLM 'prose' = majority even if magika differs."""
+        from trainr.core.relabel_unknowns import _normalize_label, vote
+
+        h = _normalize_label("prose_plain")  # -> "prose"
+        m = _normalize_label("unknown")       # -> "unknown"
+        l = _normalize_label("prose")         # -> "prose"
+        label, method = vote(h, m, l)
+        assert label == "prose"
+        assert method == "majority"
+
+    def test_magika_prose_plain_normalized_before_vote(self):
+        """Magika 'prose_plain' should normalize to 'prose' before voting."""
+        from trainr.core.relabel_unknowns import _normalize_label, vote
+
+        h = _normalize_label("prose_plain")   # -> "prose"
+        m = _normalize_label("prose_plain")    # -> "prose"
+        l = _normalize_label("other")          # -> "unknown"
+        label, method = vote(h, m, l)
+        assert label == "prose"
+        assert method == "majority"
+
+    def test_llm_other_normalized_to_unknown(self):
+        """LLM 'other' should normalize to 'unknown'."""
+        from trainr.core.relabel_unknowns import _normalize_label, vote
+
+        h = _normalize_label("c_cpp")
+        m = _normalize_label("c_cpp")
+        l = _normalize_label("other")  # -> "unknown"
+        label, method = vote(h, m, l)
+        assert label == "c_cpp"
+        assert method == "majority"
+
+
+class TestApplyVotedLabels:
+    """Tests for apply_voted_labels() — mapping voted labels to (category, sub_type)."""
+
+    def _make_df(self, rows: list[dict]) -> pl.DataFrame:
+        return pl.DataFrame(rows)
+
+    def test_c_cpp_label(self):
+        from trainr.core.relabel_unknowns import apply_voted_labels
+
+        df = self._make_df([
+            {"category": "code", "sub_type": "unknown", "text": "code"},
+        ])
+        indices = [0]
+        labels = ["c_cpp"]
+        result, _ = apply_voted_labels(df, indices, labels)
+        assert result["category"][0] == "code"
+        assert result["sub_type"][0] == "c_cpp"
+
+    def test_objc_label(self):
+        from trainr.core.relabel_unknowns import apply_voted_labels
+
+        df = self._make_df([
+            {"category": "code", "sub_type": "unknown", "text": "code"},
+        ])
+        indices = [0]
+        labels = ["objc"]
+        result, _ = apply_voted_labels(df, indices, labels)
+        assert result["category"][0] == "code"
+        assert result["sub_type"][0] == "objc"
+
+    def test_prose_label_maps_to_plain_subtype(self):
+        from trainr.core.relabel_unknowns import apply_voted_labels
+
+        df = self._make_df([
+            {"category": "unknown", "sub_type": "unknown", "text": "text"},
+        ])
+        indices = [0]
+        labels = ["prose"]
+        result, _ = apply_voted_labels(df, indices, labels)
+        assert result["category"][0] == "prose"
+        assert result["sub_type"][0] == "plain"
+
+    def test_drop_label_removes_row(self):
+        from trainr.core.relabel_unknowns import apply_voted_labels
+
+        df = self._make_df([
+            {"category": "code", "sub_type": "unknown", "text": "code1"},
+            {"category": "code", "sub_type": "unknown", "text": "code2"},
+            {"category": "code", "sub_type": "python", "text": "code3"},
+        ])
+        indices = [0, 1]
+        labels = ["c_cpp", "drop"]
+        result, _ = apply_voted_labels(df, indices, labels)
+        assert result.height == 2
+        assert result["sub_type"].to_list() == ["c_cpp", "python"]
+
+    def test_manual_review_leaves_unknown(self):
+        from trainr.core.relabel_unknowns import apply_voted_labels
+
+        df = self._make_df([
+            {"category": "code", "sub_type": "unknown", "text": "code"},
+        ])
+        indices = [0]
+        labels = ["manual_review"]
+        result, _ = apply_voted_labels(df, indices, labels)
+        assert result["sub_type"][0] == "unknown"
+
+    def test_manual_review_count_returned(self):
+        from trainr.core.relabel_unknowns import apply_voted_labels
+
+        df = self._make_df([
+            {"category": "code", "sub_type": "unknown", "text": "code1"},
+            {"category": "code", "sub_type": "unknown", "text": "code2"},
+        ])
+        indices = [0, 1]
+        labels = ["manual_review", "manual_review"]
+        _, manual_count = apply_voted_labels(df, indices, labels)
+        assert manual_count == 2
+
+    def test_mixed_labels(self):
+        from trainr.core.relabel_unknowns import apply_voted_labels
+
+        df = self._make_df([
+            {"category": "code", "sub_type": "unknown", "text": "a"},
+            {"category": "code", "sub_type": "unknown", "text": "b"},
+            {"category": "code", "sub_type": "unknown", "text": "c"},
+            {"category": "code", "sub_type": "unknown", "text": "d"},
+            {"category": "code", "sub_type": "python", "text": "e"},
+        ])
+        indices = [0, 1, 2, 3]
+        labels = ["c_cpp", "prose", "drop", "manual_review"]
+        result, manual_count = apply_voted_labels(df, indices, labels)
+        # "drop" removes 1 row, so 4 remain
+        assert result.height == 4
+        assert manual_count == 1
+
+
+class TestHeuristicNarrowedBraces:
+    """Tests that braces+semicolons heuristic requires C-specific indicators."""
+
+    def test_javascript_not_classified_as_c(self):
+        from trainr.core.relabel_unknowns import classify_heuristic
+
+        text = "function foo() {\n  let x = 1;\n  console.log(x);\n}"
+        # No C-specific indicators, should not be c_cpp
+        assert classify_heuristic(text) != "c_cpp"
+
+    def test_java_not_classified_as_c(self):
+        from trainr.core.relabel_unknowns import classify_heuristic
+
+        # Java code without C-specific keywords (no void/int/char function sigs)
+        text = "public class Foo {\n  String name = \"hello\";\n  System.out.println(name);\n}"
+        assert classify_heuristic(text) != "c_cpp"
+
+    def test_c_with_pointer_still_classified(self):
+        from trainr.core.relabel_unknowns import classify_heuristic
+
+        # Has braces, semicolons, AND pointer syntax
+        text = "char *buf; int *ptr; foo() { bar(); }"
+        assert classify_heuristic(text) == "c_cpp"
+
+    def test_c_with_typedef_still_classified(self):
+        from trainr.core.relabel_unknowns import classify_heuristic
+
+        text = "typedef int myint; struct { myint x; myint y; }"
+        assert classify_heuristic(text) == "c_cpp"
+
+    def test_c_with_null_still_classified(self):
+        from trainr.core.relabel_unknowns import classify_heuristic
+
+        text = "if (ptr == NULL) { free(ptr); ptr = NULL; }"
+        assert classify_heuristic(text) == "c_cpp"
+
+    def test_c_with_nullptr_still_classified(self):
+        from trainr.core.relabel_unknowns import classify_heuristic
+
+        text = "if (ptr == nullptr) { delete ptr; ptr = nullptr; }"
+        assert classify_heuristic(text) == "c_cpp"
+
+    def test_c_with_enum_brace_still_classified(self):
+        from trainr.core.relabel_unknowns import classify_heuristic
+
+        text = "enum Color { RED, GREEN, BLUE }; enum Size { S, M, L };"
+        assert classify_heuristic(text) == "c_cpp"
+
+
 class TestMain:
     def test_main_is_callable(self):
         from trainr.core.relabel_unknowns import main
