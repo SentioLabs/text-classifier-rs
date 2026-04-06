@@ -25,6 +25,7 @@ import numpy as np
 import polars as pl
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
 from trainr.core.featurize import FEATURES
@@ -42,6 +43,24 @@ CATEGORY_MAP: dict[str, int] = {
 }
 
 NUM_CATEGORIES = len(CATEGORY_MAP)
+
+
+class FocalLoss(nn.Module):
+    """Focal loss (Lin et al., 2017) for class-imbalanced classification.
+
+    When gamma=0, equivalent to nn.CrossEntropyLoss with weights.
+    """
+
+    def __init__(self, weight: torch.Tensor | None = None, gamma: float = 2.0):
+        super().__init__()
+        self.weight = weight
+        self.gamma = gamma
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        ce_loss = F.cross_entropy(logits, targets, weight=self.weight, reduction="none")
+        pt = torch.exp(-ce_loss)  # probability of correct class
+        focal_weight = (1 - pt) ** self.gamma
+        return (focal_weight * ce_loss).mean()
 
 
 def _parse_drop_features(raw_drop_features: list[str]) -> list[str]:
@@ -358,6 +377,7 @@ def train_model(
     dropout: float = 0.15,
     use_batchnorm: bool = True,
     detection_weight: float = 0.3,
+    focal_gamma: float = 2.0,
 ) -> tuple[TextClassifier, dict]:
     """Train the model and return it along with metrics."""
     if device is None:
@@ -402,7 +422,10 @@ def train_model(
         warmup_scheduler = None
 
     weight_tensor = torch.tensor(data["class_weights"], dtype=torch.float32).to(device)
-    cat_criterion = nn.CrossEntropyLoss(weight=weight_tensor)
+    if focal_gamma > 0:
+        cat_criterion = FocalLoss(weight=weight_tensor, gamma=focal_gamma)
+    else:
+        cat_criterion = nn.CrossEntropyLoss(weight=weight_tensor)
     sub_criterion = nn.CrossEntropyLoss()
     det_criterion = nn.BCEWithLogitsLoss() if has_detection else None
 
@@ -705,6 +728,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0.3,
         help="Detection head threshold written to model_config.json (default: 0.3).",
     )
+    parser.add_argument(
+        "--focal-gamma",
+        type=float,
+        default=2.0,
+        help="Focal loss gamma (0.0 = standard CE). Default: 2.0.",
+    )
     return parser.parse_args(argv)
 
 
@@ -744,6 +773,7 @@ def main(argv: list[str] | None = None) -> None:
         dropout=args.dropout,
         use_batchnorm=not args.no_batchnorm,
         detection_weight=args.detection_weight,
+        focal_gamma=args.focal_gamma,
     )
 
     onnx_path = args.output / "model.onnx"
