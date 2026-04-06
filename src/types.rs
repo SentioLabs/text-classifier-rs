@@ -249,6 +249,8 @@ pub struct FeatureVector {
     pub semicolon_line_ending_ratio: f32,
     pub list_item_ratio: f32,
     pub parenthesis_density: f32,
+    pub section_header_ratio: f32,
+    pub json_lines_ratio: f32,
     /// Number of lines in the sampled text. Used by rules that need
     /// a minimum sample size (e.g. tabular detection).
     pub line_count: usize,
@@ -296,6 +298,8 @@ impl FeatureVector {
             semicolon_line_ending_ratio: 0.0,
             list_item_ratio: 0.0,
             parenthesis_density: 0.0,
+            section_header_ratio: 0.0,
+            json_lines_ratio: 0.0,
             line_count: 0,
         }
     }

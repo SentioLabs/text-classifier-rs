@@ -264,7 +264,7 @@ impl ModelClassifier {
 
 /// Number of features in the feature vector (must match model input size).
 #[cfg(any(feature = "onnx-model", test))]
-const NUM_FEATURES: usize = 38;
+const NUM_FEATURES: usize = 40;
 
 /// Extract features from a FeatureVector in model-expected order.
 #[cfg(any(feature = "onnx-model", test))]
@@ -309,6 +309,8 @@ fn feature_vector_to_array(f: &FeatureVector) -> [f32; NUM_FEATURES] {
         f.semicolon_line_ending_ratio,
         f.list_item_ratio,
         f.parenthesis_density,
+        f.section_header_ratio,
+        f.json_lines_ratio,
     ]
 }
 

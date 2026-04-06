@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["polars", "tqdm"]
 # ///
-"""Compute 38 structural text features and enrich a training dataset.
+"""Compute 40 structural text features and enrich a training dataset.
 
 Ports the feature extraction logic from src/features.rs to Python.
 Each feature is a standalone ``str -> float`` function with exact parity
@@ -867,6 +867,25 @@ def parenthesis_density(text: str) -> float:
     return count / total_chars * 1000
 
 
+def section_header_ratio(text: str) -> float:
+    """Fraction of non-empty lines that are INI-style section headers: [section.name]."""
+    lines = [l for l in text.splitlines() if l.strip()]
+    if not lines:
+        return 0.0
+    pattern = re.compile(r'^\[[\w\s.\-]+\]$')
+    count = sum(1 for l in lines if pattern.match(l.strip()))
+    return count / len(lines)
+
+
+def json_lines_ratio(text: str) -> float:
+    """Fraction of non-empty lines that look like JSON lines ({...})."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return 0.0
+    count = sum(1 for l in lines if l.startswith('{') and l.endswith('}'))
+    return count / len(lines)
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -911,6 +930,8 @@ FEATURES: dict[str, Callable[[str], float]] = {
     "semicolon_line_ending_ratio": semicolon_line_ending_ratio,
     "list_item_ratio": list_item_ratio,
     "parenthesis_density": parenthesis_density,
+    "section_header_ratio": section_header_ratio,
+    "json_lines_ratio": json_lines_ratio,
 }
 
 
@@ -940,7 +961,7 @@ def extract_all(text: str) -> dict[str, float]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compute 38 structural text features and enrich a dataset."
+        description="Compute 40 structural text features and enrich a dataset."
     )
     parser.add_argument(
         "--input",
