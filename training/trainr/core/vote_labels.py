@@ -49,11 +49,11 @@ VALID_SUB_TYPES: set[str] = {
 # ---------------------------------------------------------------------------
 
 TIER2_ROUTING: dict[str, tuple[str, str]] = {
-    "go": ("claude-sonnet-4-6", "anthropic"),
-    "html": ("claude-sonnet-4-6", "anthropic"),
-    "jsonl": ("claude-sonnet-4-6", "anthropic"),
-    "markdown": ("claude-sonnet-4-6", "anthropic"),
-    "shell": ("claude-sonnet-4-6", "anthropic"),
+    "go": ("google/gemini-3-flash-preview", "openrouter"),
+    "html": ("google/gemini-3-flash-preview", "openrouter"),
+    "jsonl": ("google/gemini-3-flash-preview", "openrouter"),
+    "markdown": ("google/gemini-3-flash-preview", "openrouter"),
+    "shell": ("google/gemini-3-flash-preview", "openrouter"),
     "javascript": ("openai/gpt-5.4", "openrouter"),
     "key_value": ("openai/gpt-5.4", "openrouter"),
     "pipe_table": ("openai/gpt-5.4", "openrouter"),
@@ -61,9 +61,9 @@ TIER2_ROUTING: dict[str, tuple[str, str]] = {
     "sgml": ("openai/gpt-5.4", "openrouter"),
     "toml": ("openai/gpt-5.4", "openrouter"),
     "tsv": ("openai/gpt-5.4", "openrouter"),
-    "json": ("claude-haiku-4-5", "anthropic"),
-    "makefile": ("claude-haiku-4-5", "anthropic"),
-    "python": ("claude-haiku-4-5", "anthropic"),
+    "json": ("google/gemini-3-flash-preview", "openrouter"),
+    "makefile": ("google/gemini-3-flash-preview", "openrouter"),
+    "python": ("google/gemini-3-flash-preview", "openrouter"),
     "xml": ("openai/gpt-5.4-mini", "openrouter"),
 }
 
@@ -199,18 +199,18 @@ def _load_checkpoint(path: str) -> dict[int, dict]:
 def _flush_checkpoint(
     path: str,
     results: list[dict | None],
-    flushed_up_to: int,
-) -> int:
+    flushed: set[int],
+) -> None:
     """Append newly completed results to the checkpoint file.
 
-    Writes all completed results, skipping None entries still in progress.
+    Uses a set of already-flushed indices so non-contiguous completions
+    (from concurrent workers or resumed runs) are never missed.
     """
     with open(path, "a") as f:
-        for i in range(flushed_up_to, len(results)):
-            if results[i] is not None:
+        for i in range(len(results)):
+            if i not in flushed and results[i] is not None:
                 f.write(json.dumps({"idx": i, **results[i]}) + "\n")
-                flushed_up_to = i + 1
-    return flushed_up_to
+                flushed.add(i)
 
 
 # ---------------------------------------------------------------------------
@@ -267,14 +267,14 @@ def run_tier1(
 
     lock = threading.Lock()
     completed = n - len(todo_openrouter) - len(todo_anthropic)
-    flushed_up_to = 0
+    flushed: set[int] = set(prior.keys())
     pbar = tqdm(total=n, initial=completed, desc="Tier 1 voting", file=sys.stderr)
 
     def _process(
         idx: int, text: str, sub_type: str, model_id: str,
         backend: str, api_key: str,
     ) -> None:
-        nonlocal flushed_up_to, completed
+        nonlocal completed
         detections = call_llm(text, model=model_id, api_key=api_key, backend=backend)
         det_cols = {f"det_{label}": detections.get(label, 0) for label in DETECTION_LABELS}
         agrees = check_agreement(sub_type, det_cols)
@@ -288,7 +288,7 @@ def run_tier1(
             completed += 1
             pbar.update(1)
             if checkpoint_path and completed % CHECKPOINT_INTERVAL == 0:
-                flushed_up_to = _flush_checkpoint(checkpoint_path, results, flushed_up_to)
+                _flush_checkpoint(checkpoint_path, results, flushed)
 
     # Run OpenRouter
     if todo_openrouter:
@@ -315,7 +315,7 @@ def run_tier1(
     pbar.close()
 
     if checkpoint_path:
-        _flush_checkpoint(checkpoint_path, results, flushed_up_to)
+        _flush_checkpoint(checkpoint_path, results, flushed)
 
     # Verify all rows completed
     for i, r in enumerate(results):
@@ -397,7 +397,7 @@ def run_tier2(
     lock = threading.Lock()
     completed = len(tier2_results)
     total = len(escalation_indices)
-    flushed_up_to = 0
+    flushed: set[int] = set(tier2_results.keys())
     pbar = tqdm(total=total, initial=completed, desc="Tier 2 escalation", file=sys.stderr)
 
     # Collect checkpoint results as a flat list for flushing
@@ -409,7 +409,7 @@ def run_tier2(
         idx: int, text: str, sub_type: str, model_id: str,
         backend: str, api_key: str,
     ) -> None:
-        nonlocal flushed_up_to, completed
+        nonlocal completed
         detections = call_llm(text, model=model_id, api_key=api_key, backend=backend)
         det_cols = {f"det_{label}": detections.get(label, 0) for label in DETECTION_LABELS}
         agrees = check_agreement(sub_type, det_cols)
@@ -430,7 +430,7 @@ def run_tier2(
             completed += 1
             pbar.update(1)
             if checkpoint_path and completed % CHECKPOINT_INTERVAL == 0:
-                flushed_up_to = _flush_checkpoint(checkpoint_path, ckpt_results, flushed_up_to)
+                _flush_checkpoint(checkpoint_path, ckpt_results, flushed)
 
     # Run OpenRouter
     if todo_openrouter:
@@ -457,7 +457,7 @@ def run_tier2(
     pbar.close()
 
     if checkpoint_path:
-        _flush_checkpoint(checkpoint_path, ckpt_results, flushed_up_to)
+        _flush_checkpoint(checkpoint_path, ckpt_results, flushed)
 
     # Merge tier2 results into tier1 results
     merged = []

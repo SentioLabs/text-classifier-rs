@@ -47,12 +47,12 @@ TIER1_ROUTING: dict[str, tuple[str, str]] = {
     # gem3-flash
     "latex": ("google/gemini-3-flash-preview", "openrouter"),
     "yaml": ("google/gemini-3-flash-preview", "openrouter"),
-    # Premium models (Tier 1 for these types)
-    "markdown": ("claude-sonnet-4-6", "anthropic"),
-    "go": ("claude-sonnet-4-6", "anthropic"),
-    "html": ("claude-sonnet-4-6", "anthropic"),
-    "jsonl": ("claude-sonnet-4-6", "anthropic"),
-    "shell": ("claude-sonnet-4-6", "anthropic"),
+    # gem3-flash (was sonnet — identical TP rates, 30x cheaper)
+    "markdown": ("google/gemini-3-flash-preview", "openrouter"),
+    "go": ("google/gemini-3-flash-preview", "openrouter"),
+    "html": ("google/gemini-3-flash-preview", "openrouter"),
+    "jsonl": ("google/gemini-3-flash-preview", "openrouter"),
+    "shell": ("google/gemini-3-flash-preview", "openrouter"),
     "javascript": ("openai/gpt-5.4", "openrouter"),
     "key_value": ("openai/gpt-5.4", "openrouter"),
     "pipe_table": ("openai/gpt-5.4", "openrouter"),
@@ -60,9 +60,9 @@ TIER1_ROUTING: dict[str, tuple[str, str]] = {
     "sgml": ("openai/gpt-5.4", "openrouter"),
     "toml": ("openai/gpt-5.4", "openrouter"),
     "tsv": ("openai/gpt-5.4", "openrouter"),
-    "json": ("claude-haiku-4-5", "anthropic"),
-    "makefile": ("claude-haiku-4-5", "anthropic"),
-    "python": ("claude-haiku-4-5", "anthropic"),
+    "json": ("google/gemini-3-flash-preview", "openrouter"),
+    "makefile": ("google/gemini-3-flash-preview", "openrouter"),
+    "python": ("google/gemini-3-flash-preview", "openrouter"),
     "xml": ("openai/gpt-5.4-mini", "openrouter"),
     "unknown": ("openai/gpt-5.4-nano", "openrouter"),
 }
