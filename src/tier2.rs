@@ -1,10 +1,10 @@
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::ContentSubType;
 #[cfg(any(feature = "onnx-model", test))]
+use crate::types::DEFAULT_DETECTION_THRESHOLD;
+#[cfg(any(feature = "onnx-model", test))]
 use crate::types::Detection;
 use crate::types::{Classification, FeatureVector, TextCategory, Tier};
-#[cfg(any(feature = "onnx-model", test))]
-use crate::types::DEFAULT_DETECTION_THRESHOLD;
 use std::collections::BTreeMap;
 
 #[cfg(any(feature = "onnx-model", test))]
@@ -950,6 +950,65 @@ mod tests {
         assert_eq!(
             classification.detections[&TextCategory::Prose][0].sub_type,
             ContentSubType::Markdown
+        );
+    }
+
+    #[test]
+    fn test_model_config_has_40_features() {
+        let config: serde_json::Value =
+            serde_json::from_str(CONFIG_JSON).expect("CONFIG_JSON should parse");
+        let names = config["feature_names"]
+            .as_array()
+            .expect("feature_names should be an array");
+        assert_eq!(
+            names.len(),
+            40,
+            "model_config.json should have 40 features, got {}",
+            names.len()
+        );
+    }
+
+    #[test]
+    fn test_model_config_includes_new_features() {
+        let config: serde_json::Value =
+            serde_json::from_str(CONFIG_JSON).expect("CONFIG_JSON should parse");
+        let names: Vec<String> = config["feature_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        assert!(
+            names.contains(&"section_header_ratio".to_string()),
+            "should include section_header_ratio"
+        );
+        assert!(
+            names.contains(&"json_lines_ratio".to_string()),
+            "should include json_lines_ratio"
+        );
+    }
+
+    #[test]
+    fn test_model_config_detection_threshold() {
+        let config: serde_json::Value =
+            serde_json::from_str(CONFIG_JSON).expect("CONFIG_JSON should parse");
+        let threshold = config["detection_threshold"]
+            .as_f64()
+            .expect("detection_threshold should be a number");
+        assert!(
+            (threshold - 0.3).abs() < 0.01,
+            "detection_threshold should be 0.3, got {}",
+            threshold
+        );
+    }
+
+    #[cfg(feature = "onnx-model")]
+    #[test]
+    fn test_embedded_config_detection_threshold_is_0_3() {
+        let config: ModelConfig = serde_json::from_str(CONFIG_JSON).expect("config should parse");
+        assert!(
+            (config.detection_threshold.unwrap_or(0.5) - 0.3).abs() < 0.01,
+            "detection_threshold in config should be 0.3"
         );
     }
 }
