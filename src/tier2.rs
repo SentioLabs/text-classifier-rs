@@ -953,6 +953,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "onnx-model")]
     #[test]
     fn test_model_config_has_40_features() {
         let config: serde_json::Value =
@@ -968,6 +969,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "onnx-model")]
     #[test]
     fn test_model_config_includes_new_features() {
         let config: serde_json::Value =
@@ -988,6 +990,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "onnx-model")]
     #[test]
     fn test_model_config_detection_threshold() {
         let config: serde_json::Value =
