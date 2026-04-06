@@ -121,6 +121,44 @@ def ordered_categories(records: list[dict[str, Any]]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+# Maps sub_type labels to their canonical category, matching
+# ContentSubType::category() in Rust types.rs.
+SUB_TYPE_TO_CATEGORY: dict[str, str] = {
+    # prose
+    "plain": "prose",
+    "markdown": "prose",
+    "rst": "prose",
+    "latex": "prose",
+    # code
+    "python": "code",
+    "javascript": "code",
+    "typescript": "code",
+    "rust": "code",
+    "go": "code",
+    "java": "code",
+    "sql": "code",
+    "shell": "code",
+    "css": "code",
+    "dockerfile": "code",
+    "makefile": "code",
+    "html": "code",
+    "xml": "code",
+    "sgml": "code",
+    # structured
+    "csv": "structured",
+    "tsv": "structured",
+    "pipe_table": "structured",
+    "fixed_width": "structured",
+    "json": "structured",
+    "jsonl": "structured",
+    "key_value": "structured",
+    "log_lines": "structured",
+    "yaml": "structured",
+    "toml": "structured",
+    "ini": "structured",
+}
+
+
 def _sigmoid(x: np.ndarray) -> np.ndarray:
     """Element-wise sigmoid activation."""
     return 1.0 / (1.0 + np.exp(-x))
@@ -134,6 +172,7 @@ def predict_samples(
 ) -> list[dict[str, Any]]:
     """Run ONNX inference for each sample and return prediction records."""
     inv_map = invert_category_map(config["category_map"])
+    inv_sub_map = invert_category_map(config["sub_type_map"])
     detection_map: dict[str, int] | None = config.get("detection_map")
     inv_detection_map: dict[int, str] | None = None
     if detection_map is not None:
@@ -150,9 +189,19 @@ def predict_samples(
         normalized = normalize_features(raw_features, config)
 
         outputs = session.run(None, {"features": normalized})
-        category_logits = outputs[0]
-        predicted_idx = int(np.argmax(category_logits, axis=1)[0])
-        predicted = inv_map[predicted_idx]
+        # Marginalize category from sub-type probabilities
+        sub_type_logits = outputs[1]
+        sub_probs = np.exp(sub_type_logits) / np.exp(sub_type_logits).sum(
+            axis=1, keepdims=True
+        )
+        cat_accum: dict[str, float] = {}
+        for idx in range(sub_probs.shape[1]):
+            label = inv_sub_map.get(idx, "unknown")
+            category = SUB_TYPE_TO_CATEGORY.get(label, "skip")
+            cat_accum[category] = cat_accum.get(category, 0.0) + float(
+                sub_probs[0, idx]
+            )
+        predicted = max(cat_accum, key=cat_accum.get)  # type: ignore[arg-type]
         record = build_prediction_record(sample, predicted)
 
         # Extract detection head outputs when available

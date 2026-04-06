@@ -317,7 +317,7 @@ fn argmax(values: &[f32]) -> (usize, f32) {
         .unwrap_or((0, 0.0))
 }
 
-#[cfg(any(feature = "onnx-model", test))]
+#[cfg(test)]
 fn parse_category(s: &str) -> TextCategory {
     match s {
         "prose" => TextCategory::Prose,
@@ -403,21 +403,36 @@ fn build_detections(
 
 #[cfg(any(feature = "onnx-model", test))]
 fn build_classification(
-    cat_probs: &[f32],
+    _cat_probs: &[f32],
     sub_probs: &[f32],
     det_logits: Option<&[f32]>,
-    inv_cat: &HashMap<usize, String>,
+    _inv_cat: &HashMap<usize, String>,
     inv_sub: &HashMap<usize, String>,
     inv_det: Option<&HashMap<usize, String>>,
 ) -> Classification {
-    let (cat_idx, cat_conf) = argmax(cat_probs);
     let (sub_idx, _sub_conf) = argmax(sub_probs);
 
-    let cat_label = inv_cat.get(&cat_idx).map(|s| s.as_str()).unwrap_or("skip");
     let sub_label = inv_sub
         .get(&sub_idx)
         .map(|s| s.as_str())
         .unwrap_or("unknown");
+
+    // Marginalize category from sub-type probabilities: sum sub_type probs
+    // grouped by their canonical category.
+    let mut cat_accum: HashMap<TextCategory, f32> = HashMap::new();
+    for (idx, &prob) in sub_probs.iter().enumerate() {
+        let label = inv_sub.get(&idx).map(|s| s.as_str()).unwrap_or("unknown");
+        let sub_type = parse_sub_type(label);
+        let category = sub_type.category();
+        *cat_accum.entry(category).or_insert(0.0) += prob;
+    }
+
+    let (marginalized_cat, marginalized_conf) = cat_accum
+        .into_iter()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or((TextCategory::Skip, 0.0));
+
+    let cat_label = marginalized_cat.to_string();
 
     let detections = match (det_logits, inv_det) {
         (Some(logits), Some(inv_det)) => {
@@ -428,10 +443,10 @@ fn build_classification(
     };
 
     Classification {
-        category: parse_category(cat_label),
+        category: marginalized_cat,
         sub_type: Some(parse_sub_type(sub_label)),
-        confidence: cat_conf,
-        reason: format!("onnx model: category={cat_label}, sub_type={sub_label}"),
+        confidence: marginalized_conf,
+        reason: format!("onnx model (marginalized): category={cat_label}, sub_type={sub_label}"),
         tier: Tier::Model,
         detections,
     }
@@ -580,7 +595,7 @@ mod tests {
         assert!(result.confidence > 0.0);
         assert!(result.confidence <= 1.0);
         assert!(result.sub_type.is_some());
-        assert!(result.reason.starts_with("onnx model:"));
+        assert!(result.reason.starts_with("onnx model"));
     }
 
     #[cfg(feature = "onnx-model")]
@@ -718,6 +733,74 @@ mod tests {
         let inv_map: HashMap<usize, String> = HashMap::new();
         let result = build_detections(&[], &inv_map, 0.5);
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_marginalization_overrides_category_head() {
+        use std::collections::HashMap;
+
+        // cat_probs: code is highest at 0.60
+        let cat_probs = vec![0.15, 0.60, 0.20, 0.05]; // prose, code, structured, skip
+        let mut inv_cat = HashMap::new();
+        inv_cat.insert(0, "prose".to_string());
+        inv_cat.insert(1, "code".to_string());
+        inv_cat.insert(2, "structured".to_string());
+        inv_cat.insert(3, "skip".to_string());
+
+        // sub_probs: ini(0.35) + key_value(0.30) + toml(0.15) = 0.80 for structured
+        // remaining 0.20 spread across code sub-types
+        let mut inv_sub = HashMap::new();
+        inv_sub.insert(0, "ini".to_string());
+        inv_sub.insert(1, "key_value".to_string());
+        inv_sub.insert(2, "toml".to_string());
+        inv_sub.insert(3, "python".to_string());
+        inv_sub.insert(4, "rust".to_string());
+
+        let sub_probs = vec![0.35, 0.30, 0.15, 0.12, 0.08];
+
+        let classification =
+            build_classification(&cat_probs, &sub_probs, None, &inv_cat, &inv_sub, None);
+
+        // Marginalization should pick structured (0.80) over code (0.20)
+        assert_eq!(
+            classification.category,
+            TextCategory::Structured,
+            "marginalized category should be Structured, not Code"
+        );
+        assert!(
+            (classification.confidence - 0.80).abs() < 0.01,
+            "confidence should be ~0.80, got {}",
+            classification.confidence
+        );
+        assert!(
+            classification.reason.contains("marginalized"),
+            "reason should mention marginalized, got: {}",
+            classification.reason
+        );
+    }
+
+    #[test]
+    fn test_marginalization_unknown_sub_types_fall_to_skip() {
+        use std::collections::HashMap;
+
+        let cat_probs = vec![0.5, 0.5];
+        let mut inv_cat = HashMap::new();
+        inv_cat.insert(0, "prose".to_string());
+        inv_cat.insert(1, "code".to_string());
+
+        // inv_sub is empty — no indices map to known sub-types
+        let inv_sub: HashMap<usize, String> = HashMap::new();
+        let sub_probs = vec![0.6, 0.4];
+
+        let classification =
+            build_classification(&cat_probs, &sub_probs, None, &inv_cat, &inv_sub, None);
+
+        // Unknown sub-types map to ContentSubType::Unknown -> TextCategory::Skip
+        assert_eq!(
+            classification.category,
+            TextCategory::Skip,
+            "unknown sub-types should result in Skip category"
+        );
     }
 
     #[test]
