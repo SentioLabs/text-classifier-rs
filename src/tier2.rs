@@ -2,9 +2,9 @@
 use crate::types::ContentSubType;
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::Detection;
-use crate::types::{
-    Classification, DEFAULT_DETECTION_THRESHOLD, FeatureVector, TextCategory, Tier,
-};
+use crate::types::{Classification, FeatureVector, TextCategory, Tier};
+#[cfg(any(feature = "onnx-model", test))]
+use crate::types::DEFAULT_DETECTION_THRESHOLD;
 use std::collections::BTreeMap;
 
 #[cfg(any(feature = "onnx-model", test))]
@@ -194,8 +194,9 @@ impl ModelClassifier {
 
         let raw = feature_vector_to_array(features);
 
-        // Z-score standardize
-        let standardized: Vec<f32> = raw
+        // Z-score standardize (truncate to model's feature count if new features were added)
+        let n_model_features = config.feature_mean.len();
+        let standardized: Vec<f32> = raw[..n_model_features]
             .iter()
             .enumerate()
             .map(|(i, &val)| {
@@ -209,7 +210,7 @@ impl ModelClassifier {
             .collect();
 
         let input = ort::value::Tensor::from_array((
-            vec![1i64, NUM_FEATURES as i64],
+            vec![1i64, n_model_features as i64],
             standardized.into_boxed_slice(),
         ))?;
         let mut session = self.session.as_ref().unwrap().lock().map_err(|e| {
