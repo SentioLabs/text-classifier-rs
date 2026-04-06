@@ -177,6 +177,7 @@ def split_dataset(
     eval_per_pair: int = 1000,
     seed: int = 42,
     max_per_category: int = 0,
+    max_per_sub_type: int = 0,
 ) -> None:
     """Split *input_path* JSONL into eval and training sets."""
     all_samples = load_jsonl(input_path)
@@ -234,6 +235,22 @@ def split_dataset(
             else:
                 downsampled.extend(samples)
         training = downsampled
+
+    # Downsample overrepresented sub_types if requested
+    if max_per_sub_type > 0:
+        training_by_sub: dict[str, list[dict]] = defaultdict(list)
+        for s in training:
+            training_by_sub[s.get("expected_sub_type", s.get("sub_type", ""))].append(s)
+        rng_sub = random.Random(seed)
+        downsampled_sub: list[dict] = []
+        for sub in sorted(training_by_sub):
+            samples = training_by_sub[sub]
+            if len(samples) > max_per_sub_type:
+                rng_sub.shuffle(samples)
+                downsampled_sub.extend(samples[:max_per_sub_type])
+            else:
+                downsampled_sub.extend(samples)
+        training = downsampled_sub
 
     # Write eval clear JSONL (skip if path is None — frozen eval mode)
     if eval_clear_path is not None:
@@ -375,6 +392,12 @@ def main(argv: list[str] | None = None) -> None:
         help="Max training samples per category (0 = no limit)",
     )
     parser.add_argument(
+        "--max-per-sub-type",
+        type=int,
+        default=0,
+        help="Cap rows per sub_type (0=unlimited). E.g., 10000 to limit 'plain'.",
+    )
+    parser.add_argument(
         "--skip-eval",
         action="store_true",
         help="Skip eval set generation (for frozen eval mode)",
@@ -393,6 +416,7 @@ def main(argv: list[str] | None = None) -> None:
         eval_per_pair=args.eval_per_pair,
         seed=args.seed,
         max_per_category=args.max_per_category,
+        max_per_sub_type=args.max_per_sub_type,
     )
 
     # Verify diversity on eval sets (skip if frozen eval mode)
