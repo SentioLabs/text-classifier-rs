@@ -796,6 +796,24 @@ def main(argv: list[str] | None = None) -> None:
     save_metrics(metrics_path, metrics)
     print(f"Saved metrics to {metrics_path}", file=sys.stderr)
 
+    from trainr.core.manifest import compute_file_sha256, TrainingManifest
+    from datetime import datetime, timezone
+
+    manifest = TrainingManifest(
+        run_id=f"run-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}",
+        dataset_sha256=compute_file_sha256(args.data),
+        dataset_rows=len(data["X_train"]) + len(data["X_val"]),
+        featurizer_version="2.0",
+        feature_count=len(active_feature_columns),
+        feature_names=list(active_feature_columns),
+        eval_clear_sha256="",  # Filled by pipeline run
+        eval_boundary_sha256="",  # Filled by pipeline run
+        model_sha256=compute_file_sha256(str(args.output / "model.onnx")),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+    manifest.save(str(args.output / "training_manifest.json"))
+    print(f"Saved manifest to {args.output / 'training_manifest.json'}", file=sys.stderr)
+
     print("Done.", file=sys.stderr)
 
 
