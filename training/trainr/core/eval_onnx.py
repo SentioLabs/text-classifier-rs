@@ -144,6 +144,8 @@ SUB_TYPE_TO_CATEGORY: dict[str, str] = {
     "html": "code",
     "xml": "code",
     "sgml": "code",
+    "c_cpp": "code",
+    "objc": "code",
     # structured
     "csv": "structured",
     "tsv": "structured",
@@ -199,7 +201,15 @@ def predict_samples(
         cat_accum: dict[str, float] = {}
         for idx in range(sub_probs.shape[1]):
             label = inv_sub_map.get(idx, "unknown")
-            category = SUB_TYPE_TO_CATEGORY.get(label, "skip")
+            if label not in SUB_TYPE_TO_CATEGORY and label != "unknown":
+                import warnings
+                warnings.warn(
+                    f"Sub-type '{label}' not in SUB_TYPE_TO_CATEGORY — "
+                    f"probability will accumulate as 'prose' (fallback). "
+                    f"Add it to the mapping.",
+                    stacklevel=2,
+                )
+            category = SUB_TYPE_TO_CATEGORY.get(label, "prose")
             cat_accum[category] = cat_accum.get(category, 0.0) + float(
                 sub_probs[0, idx]
             )
