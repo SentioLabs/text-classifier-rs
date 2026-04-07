@@ -59,7 +59,9 @@ pub enum ContentSubType {
     Latex,
     // Code
     Python,
+    #[serde(rename = "javascript")]
     JavaScript,
+    #[serde(rename = "typescript")]
     TypeScript,
     Rust,
     Go,
@@ -72,6 +74,7 @@ pub enum ContentSubType {
     Makefile,
     // Code > Native
     CCpp,
+    #[serde(rename = "objc")]
     ObjC,
     // Code > Markup
     Html,
@@ -197,6 +200,10 @@ pub struct Classification {
     pub tier: Tier,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub detections: BTreeMap<TextCategory, Vec<Detection>>,
+    /// Full sub-type probability distribution from the softmax head,
+    /// grouped by parent category. All 31 sub-types, no threshold.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sub_type_scores: BTreeMap<TextCategory, Vec<Detection>>,
 }
 
 /// A detected sub-type with its confidence score.

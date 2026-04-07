@@ -21,6 +21,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
             reason: "empty or no content".to_string(),
             tier: Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
     }
 
@@ -40,6 +41,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
             ),
             tier: Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
     }
 
@@ -58,6 +60,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
             ),
             tier: Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
     }
 
@@ -77,6 +80,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
             ),
             tier: Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
     }
 
@@ -88,6 +92,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
         reason: "ambiguous — deferring to model".to_string(),
         tier: Tier::Structural,
         detections: BTreeMap::new(),
+        sub_type_scores: BTreeMap::new(),
     }
 }
 

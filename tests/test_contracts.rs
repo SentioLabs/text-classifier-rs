@@ -62,6 +62,7 @@ fn contract_classification_has_category_and_sub_type() {
         reason: "test".to_string(),
         tier: Tier::Structural,
         detections: BTreeMap::new(),
+        sub_type_scores: BTreeMap::new(),
     };
     assert_eq!(c.category, TextCategory::Code);
     assert_eq!(c.sub_type, Some(ContentSubType::Python));
@@ -138,6 +139,7 @@ fn contract_classification_text_type_deprecated_accessor() {
         reason: "test".to_string(),
         tier: Tier::Structural,
         detections: BTreeMap::new(),
+        sub_type_scores: BTreeMap::new(),
     };
     assert_eq!(c.text_type(), TextCategory::Code);
 }
@@ -316,6 +318,7 @@ fn contract_classification_has_detections() {
         reason: "test".to_string(),
         tier: Tier::Model,
         detections: BTreeMap::new(),
+        sub_type_scores: BTreeMap::new(),
     };
     assert!(c.detections.is_empty());
 }
@@ -337,6 +340,7 @@ fn contract_classification_detections_serialized() {
         reason: "test".to_string(),
         tier: Tier::Model,
         detections,
+        sub_type_scores: BTreeMap::new(),
     };
     let json = serde_json::to_string(&c).unwrap();
     assert!(json.contains("detections"));

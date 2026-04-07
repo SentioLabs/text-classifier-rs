@@ -249,6 +249,7 @@ impl ModelClassifier {
                 reason: "no model — fallback: moderate prose signals".to_string(),
                 tier: Tier::Structural,
                 detections: BTreeMap::new(),
+                sub_type_scores: BTreeMap::new(),
             }
         } else {
             Classification {
@@ -258,6 +259,7 @@ impl ModelClassifier {
                 reason: "no model — fallback: insufficient prose signals".to_string(),
                 tier: Tier::Structural,
                 detections: BTreeMap::new(),
+                sub_type_scores: BTreeMap::new(),
             }
         }
     }
@@ -365,8 +367,11 @@ fn parse_sub_type(s: &str) -> ContentSubType {
         "ini" | "ini_config" => ContentSubType::Ini,
         "dockerfile" => ContentSubType::Dockerfile,
         "makefile" => ContentSubType::Makefile,
+        "c_cpp" => ContentSubType::CCpp,
+        "objc" => ContentSubType::ObjC,
         "html" => ContentSubType::Html,
-        "xml" | "sgml" => ContentSubType::Xml,
+        "xml" => ContentSubType::Xml,
+        "sgml" => ContentSubType::Sgml,
         "csv" | "csv_data" => ContentSubType::Csv,
         "tsv" | "tsv_data" => ContentSubType::Tsv,
         "pipe_table" => ContentSubType::PipeTable,
@@ -458,6 +463,28 @@ fn build_classification(
         _ => BTreeMap::new(),
     };
 
+    // Full sub-type probability distribution (no threshold filtering)
+    let mut sub_type_scores: BTreeMap<TextCategory, Vec<Detection>> = BTreeMap::new();
+    for (idx, &prob) in sub_probs.iter().enumerate() {
+        let label = inv_sub.get(&idx).map(|s| s.as_str()).unwrap_or("unknown");
+        let sub_type = parse_sub_type(label);
+        let category = sub_type.category();
+        sub_type_scores
+            .entry(category)
+            .or_default()
+            .push(Detection {
+                sub_type,
+                score: prob,
+            });
+    }
+    for scores in sub_type_scores.values_mut() {
+        scores.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
+
     Classification {
         category: marginalized_cat,
         sub_type: Some(parse_sub_type(sub_label)),
@@ -467,6 +494,7 @@ fn build_classification(
         ),
         tier: Tier::Model,
         detections,
+        sub_type_scores,
     }
 }
 

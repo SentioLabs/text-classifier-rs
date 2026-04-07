@@ -26,6 +26,7 @@ pub fn classify(text: &str) -> Classification {
             reason: "too short".to_string(),
             tier: Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
     }
 
@@ -78,6 +79,7 @@ impl Classifier {
                 reason: "too short".to_string(),
                 tier: Tier::Structural,
                 detections: BTreeMap::new(),
+                sub_type_scores: BTreeMap::new(),
             };
         }
 

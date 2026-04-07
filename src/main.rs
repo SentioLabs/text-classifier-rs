@@ -457,13 +457,7 @@ fn classify_file(
         let mut doc: serde_json::Value = serde_json::from_str(&line)?;
         if let Some(text) = resolve_field(&doc, text_field) {
             let result = classifier.classify(text);
-            doc["_classification"] = serde_json::json!({
-                "category": result.category,
-                "sub_type": result.sub_type,
-                "confidence": result.confidence,
-                "reason": result.reason,
-                "tier": result.tier,
-            });
+            doc["_classification"] = serde_json::to_value(&result)?;
         } else {
             missing_field += 1;
         }
@@ -1081,6 +1075,7 @@ mod tests {
             reason: "high alpha ratio".to_string(),
             tier: text_classifier::Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert_eq!(output, "prose (confidence: 0.95, tier: structural)");
@@ -1095,6 +1090,7 @@ mod tests {
             reason: "config detected".to_string(),
             tier: text_classifier::Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert_eq!(output, "code/yaml (confidence: 0.85, tier: structural)");
@@ -1183,6 +1179,7 @@ mod tests {
             reason: "model".to_string(),
             tier: text_classifier::Tier::Model,
             detections,
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert!(output.contains("detections:"));
@@ -1220,6 +1217,7 @@ mod tests {
             reason: "model".to_string(),
             tier: text_classifier::Tier::Model,
             detections,
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         // Should contain detections sorted by score descending
@@ -1245,6 +1243,7 @@ mod tests {
             reason: "high alpha ratio".to_string(),
             tier: text_classifier::Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert!(!output.contains("detections:"));
@@ -1269,6 +1268,7 @@ mod tests {
             reason: "model".to_string(),
             tier: text_classifier::Tier::Model,
             detections,
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         // Score 0.40 is below 0.5 threshold, so no detections suffix
