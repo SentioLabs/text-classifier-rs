@@ -8,7 +8,6 @@ pub enum TextCategory {
     Prose,
     Code,
     Structured,
-    Skip,
 }
 
 /// Backward-compatible alias for `TextCategory`.
@@ -26,7 +25,6 @@ impl std::fmt::Display for TextCategory {
             TextCategory::Prose => write!(f, "prose"),
             TextCategory::Code => write!(f, "code"),
             TextCategory::Structured => write!(f, "structured"),
-            TextCategory::Skip => write!(f, "skip"),
         }
     }
 }
@@ -140,7 +138,7 @@ impl ContentSubType {
             | ContentSubType::Ini => TextCategory::Structured,
 
             // Fallback
-            ContentSubType::Unknown => TextCategory::Skip,
+            ContentSubType::Unknown => TextCategory::Prose,
         }
     }
 

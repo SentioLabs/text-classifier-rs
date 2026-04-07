@@ -16,14 +16,25 @@ use std::collections::BTreeMap;
 /// Classify a text string using Tier 1 structural features only.
 ///
 /// Convenience function for simple usage without a model.
-/// For short texts (< 5 words), returns Skip immediately.
+/// For short texts (< 5 words), returns low-confidence Prose.
 pub fn classify(text: &str) -> Classification {
-    if text.trim().is_empty() || tier1::is_too_short(text) {
+    if text.trim().is_empty() {
         return Classification {
-            category: TextCategory::Skip,
+            category: TextCategory::Prose,
             sub_type: None,
-            confidence: 1.0,
-            reason: "too short".to_string(),
+            confidence: 0.0,
+            reason: "empty or no content".to_string(),
+            tier: Tier::Structural,
+            detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
+        };
+    }
+    if tier1::is_too_short(text) {
+        return Classification {
+            category: TextCategory::Prose,
+            sub_type: None,
+            confidence: 0.5,
+            reason: "too short for reliable classification".to_string(),
             tier: Tier::Structural,
             detections: BTreeMap::new(),
             sub_type_scores: BTreeMap::new(),
@@ -71,12 +82,23 @@ impl Classifier {
     /// the model (model-first). When no model is available, falls back
     /// to Tier 1 rule-based classification.
     pub fn classify(&self, text: &str) -> Classification {
-        if text.trim().is_empty() || tier1::is_too_short(text) {
+        if text.trim().is_empty() {
             return Classification {
-                category: TextCategory::Skip,
+                category: TextCategory::Prose,
                 sub_type: None,
-                confidence: 1.0,
-                reason: "too short".to_string(),
+                confidence: 0.0,
+                reason: "empty or no content".to_string(),
+                tier: Tier::Structural,
+                detections: BTreeMap::new(),
+                sub_type_scores: BTreeMap::new(),
+            };
+        }
+        if tier1::is_too_short(text) {
+            return Classification {
+                category: TextCategory::Prose,
+                sub_type: None,
+                confidence: 0.5,
+                reason: "too short for reliable classification".to_string(),
                 tier: Tier::Structural,
                 detections: BTreeMap::new(),
                 sub_type_scores: BTreeMap::new(),

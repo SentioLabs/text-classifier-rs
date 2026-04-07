@@ -15,9 +15,9 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
     // Short-circuit: empty / no content
     if features.alpha_ratio == 0.0 && features.sentence_punctuation_rate == 0.0 {
         return Classification {
-            category: TextCategory::Skip,
+            category: TextCategory::Prose,
             sub_type: None,
-            confidence: 1.0,
+            confidence: 0.0,
             reason: "empty or no content".to_string(),
             tier: Tier::Structural,
             detections: BTreeMap::new(),
@@ -86,7 +86,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
 
     // Default fallback: low confidence to trigger Tier 2
     Classification {
-        category: TextCategory::Skip,
+        category: TextCategory::Prose,
         sub_type: None,
         confidence: 0.40,
         reason: "ambiguous — deferring to model".to_string(),
