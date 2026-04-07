@@ -13,6 +13,7 @@ import pytest
 from trainr.core.train import (
     CATEGORY_MAP,
     FEATURE_COLUMNS,
+    FocalLoss,
     NUM_CATEGORIES,
     TextClassifier,
     load_and_prepare_data,
@@ -160,6 +161,146 @@ class TestConstants:
     def test_no_artifact_or_skip_in_category_map(self):
         assert "artifact" not in CATEGORY_MAP
         assert "skip" not in CATEGORY_MAP
+
+
+class TestFocalLoss:
+    def test_focal_loss_is_importable(self):
+        """FocalLoss should be importable from train module."""
+        assert FocalLoss is not None
+
+    def test_focal_loss_returns_positive_scalar(self):
+        """FocalLoss forward should return a positive scalar loss."""
+        import torch
+
+        fl = FocalLoss(gamma=2.0)
+        logits = torch.randn(4, 3)
+        targets = torch.tensor([0, 1, 2, 1])
+        loss = fl(logits, targets)
+        assert loss.dim() == 0, "Loss should be a scalar"
+        assert loss.item() > 0, "Loss should be positive"
+
+    def test_focal_loss_gamma_zero_matches_cross_entropy(self):
+        """With gamma=0, focal loss should equal standard cross-entropy."""
+        import torch
+
+        torch.manual_seed(42)
+        logits = torch.randn(8, 3)
+        targets = torch.tensor([0, 1, 2, 0, 1, 2, 0, 1])
+
+        fl = FocalLoss(gamma=0.0)
+        ce = torch.nn.CrossEntropyLoss()
+
+        focal_val = fl(logits, targets).item()
+        ce_val = ce(logits, targets).item()
+        assert abs(focal_val - ce_val) < 1e-5, (
+            f"gamma=0 focal loss ({focal_val:.6f}) should match CE ({ce_val:.6f})"
+        )
+
+    def test_focal_loss_with_class_weights(self):
+        """FocalLoss should accept and use class weights."""
+        import torch
+
+        weights = torch.tensor([1.0, 2.0, 0.5])
+        fl = FocalLoss(weight=weights, gamma=2.0)
+        logits = torch.randn(4, 3)
+        targets = torch.tensor([0, 1, 2, 1])
+        loss = fl(logits, targets)
+        assert loss.item() > 0
+
+    def test_focal_loss_gamma_zero_with_weights_matches_weighted_ce_none_mean(self):
+        """With gamma=0 and weights, focal loss should match per-sample weighted CE averaged over N.
+
+        Note: FocalLoss uses reduction='none' then .mean(), which divides by N.
+        nn.CrossEntropyLoss(reduction='mean') divides by sum of per-sample weights,
+        so we compare against F.cross_entropy(reduction='none').mean() instead.
+        """
+        import torch
+        import torch.nn.functional as F
+
+        torch.manual_seed(42)
+        weights = torch.tensor([1.0, 2.0, 0.5])
+        logits = torch.randn(8, 3)
+        targets = torch.tensor([0, 1, 2, 0, 1, 2, 0, 1])
+
+        fl = FocalLoss(weight=weights, gamma=0.0)
+        expected = F.cross_entropy(logits, targets, weight=weights, reduction="none").mean()
+
+        focal_val = fl(logits, targets).item()
+        assert abs(focal_val - expected.item()) < 1e-5
+
+    def test_focal_loss_higher_gamma_downweights_easy_examples(self):
+        """Higher gamma should produce lower loss when examples are easy (high pt)."""
+        import torch
+
+        torch.manual_seed(42)
+        # Create "easy" logits where correct class has high probability
+        logits = torch.tensor([[5.0, -5.0, -5.0], [-5.0, 5.0, -5.0]])
+        targets = torch.tensor([0, 1])
+
+        fl_low = FocalLoss(gamma=0.0)
+        fl_high = FocalLoss(gamma=2.0)
+
+        loss_low = fl_low(logits, targets).item()
+        loss_high = fl_high(logits, targets).item()
+        assert loss_high < loss_low, (
+            f"Higher gamma should downweight easy examples: "
+            f"gamma=2 ({loss_high:.6f}) should be < gamma=0 ({loss_low:.6f})"
+        )
+
+    def test_focal_loss_is_nn_module(self):
+        """FocalLoss should be a torch.nn.Module."""
+        import torch.nn as nn
+
+        fl = FocalLoss(gamma=2.0)
+        assert isinstance(fl, nn.Module)
+
+    def test_focal_loss_default_gamma(self):
+        """Default gamma should be 2.0."""
+        fl = FocalLoss()
+        assert fl.gamma == 2.0
+
+
+class TestFocalGammaCLI:
+    def test_focal_gamma_default_is_2(self):
+        """Default --focal-gamma should be 2.0."""
+        args = parse_args(["--data", "dummy.parquet", "--output", "out"])
+        assert args.focal_gamma == pytest.approx(2.0)
+
+    def test_focal_gamma_custom_value(self):
+        """--focal-gamma should accept a custom value."""
+        args = parse_args(["--data", "dummy.parquet", "--output", "out", "--focal-gamma", "0.5"])
+        assert args.focal_gamma == pytest.approx(0.5)
+
+    def test_focal_gamma_zero(self):
+        """--focal-gamma 0 should be valid (standard CE fallback)."""
+        args = parse_args(["--data", "dummy.parquet", "--output", "out", "--focal-gamma", "0"])
+        assert args.focal_gamma == pytest.approx(0.0)
+
+    def test_focal_gamma_passed_to_train_model(self, dummy_parquet):
+        """train_model should accept focal_gamma parameter."""
+        import torch
+
+        data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
+        n_sub_types = len(data["sub_type_map"])
+        model, metrics = train_model(
+            data, n_sub_types=n_sub_types, epochs=2, patience=5,
+            device=torch.device("cpu"), focal_gamma=2.0,
+        )
+        assert model is not None
+        assert "best_val_loss" in metrics
+
+    def test_focal_gamma_zero_uses_cross_entropy(self, dummy_parquet):
+        """When focal_gamma=0, train_model should use standard CrossEntropyLoss."""
+        import torch
+
+        data = load_and_prepare_data(dummy_parquet, val_fraction=0.2, seed=42)
+        n_sub_types = len(data["sub_type_map"])
+        model, metrics = train_model(
+            data, n_sub_types=n_sub_types, epochs=2, patience=5,
+            device=torch.device("cpu"), focal_gamma=0.0,
+        )
+        assert model is not None
+        assert "best_val_loss" in metrics
 
 
 class TestModel:

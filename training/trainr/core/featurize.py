@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["polars", "tqdm"]
 # ///
-"""Compute 38 structural text features and enrich a training dataset.
+"""Compute 40 structural text features and enrich a training dataset.
 
 Ports the feature extraction logic from src/features.rs to Python.
 Each feature is a standalone ``str -> float`` function with exact parity
@@ -867,6 +867,30 @@ def parenthesis_density(text: str) -> float:
     return count / total_chars * 1000
 
 
+def section_header_ratio(text: str) -> float:
+    """Fraction of non-empty lines that are INI-style section headers: [section.name]."""
+    lines = [l for l in text.splitlines() if l.strip()]
+    if not lines:
+        return 0.0
+    pattern = re.compile(r'^\[[\w\s.\-]+\]$')
+    count = sum(1 for l in lines if pattern.match(l.strip()))
+    return count / len(lines)
+
+
+def json_lines_ratio(text: str) -> float:
+    """Fraction of non-empty lines that look like JSON lines ({...})."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return 0.0
+    count = sum(1 for l in lines if l.startswith('{') and l.endswith('}'))
+    return count / len(lines)
+
+
+def shebang_present(text: str) -> float:
+    """1.0 if text starts with a shebang (#!), 0.0 otherwise."""
+    return 1.0 if text.lstrip().startswith("#!") else 0.0
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -911,6 +935,9 @@ FEATURES: dict[str, Callable[[str], float]] = {
     "semicolon_line_ending_ratio": semicolon_line_ending_ratio,
     "list_item_ratio": list_item_ratio,
     "parenthesis_density": parenthesis_density,
+    "section_header_ratio": section_header_ratio,
+    "json_lines_ratio": json_lines_ratio,
+    "shebang_present": shebang_present,
 }
 
 
@@ -929,8 +956,16 @@ def extract_all(text: str) -> dict[str, float]:
     if not text:
         return {name: 0.0 for name in FEATURES}
 
-    sample = _normalize_escaped_newlines(text[:SAMPLE_SIZE])
-    return {name: fn(sample) for name, fn in FEATURES.items()}
+    raw_sample = text[:SAMPLE_SIZE]
+    sample = _normalize_escaped_newlines(raw_sample)
+
+    # json_lines_ratio must run on raw text (before newline normalization)
+    # because normalization breaks JSONL structure: {"text": "hello\nworld"}
+    # becomes two lines, destroying the {..} line pattern.
+    result: dict[str, float] = {}
+    for name, fn in FEATURES.items():
+        result[name] = fn(raw_sample) if name == "json_lines_ratio" else fn(sample)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -940,7 +975,7 @@ def extract_all(text: str) -> dict[str, float]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compute 38 structural text features and enrich a dataset."
+        description="Compute 40 structural text features and enrich a dataset."
     )
     parser.add_argument(
         "--input",

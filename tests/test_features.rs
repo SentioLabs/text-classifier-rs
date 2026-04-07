@@ -578,3 +578,47 @@ fn test_single_line_no_panic() {
     assert!(features.repeated_ngram_ratio >= 0.0);
     assert!(features.sentence_coherence_score >= 0.0);
 }
+
+#[test]
+fn test_section_header_ratio_ini() {
+    let text = "[section]\nkey=value\n[other]\nkey2=value2";
+    let features = extract_features(text);
+    assert!(
+        (features.section_header_ratio - 0.5).abs() < 0.01,
+        "section_header_ratio={} should be ~0.5 for INI with 2/4 section headers",
+        features.section_header_ratio
+    );
+}
+
+#[test]
+fn test_section_header_ratio_key_value() {
+    let text = "key=value\nkey2=value2";
+    let features = extract_features(text);
+    assert_eq!(
+        features.section_header_ratio, 0.0,
+        "section_header_ratio={} should be 0.0 for plain key-value text",
+        features.section_header_ratio
+    );
+}
+
+#[test]
+fn test_json_lines_ratio_jsonl() {
+    let text = "{\"a\":1}\n{\"b\":2}\n{\"c\":3}";
+    let features = extract_features(text);
+    assert!(
+        (features.json_lines_ratio - 1.0).abs() < 0.01,
+        "json_lines_ratio={} should be ~1.0 for pure JSONL",
+        features.json_lines_ratio
+    );
+}
+
+#[test]
+fn test_json_lines_ratio_code() {
+    let text = "function foo() {\n  return 1;\n}";
+    let features = extract_features(text);
+    assert_eq!(
+        features.json_lines_ratio, 0.0,
+        "json_lines_ratio={} should be 0.0 for code",
+        features.json_lines_ratio
+    );
+}

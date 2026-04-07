@@ -11,6 +11,8 @@ pub use types::{
     Classification, ContentSubType, FeatureVector, TextCategory, TextType, Tier, thresholds,
 };
 
+use std::collections::BTreeMap;
+
 /// Classify a text string using Tier 1 structural features only.
 ///
 /// Convenience function for simple usage without a model.
@@ -23,6 +25,7 @@ pub fn classify(text: &str) -> Classification {
             confidence: 1.0,
             reason: "too short".to_string(),
             tier: Tier::Structural,
+            detections: BTreeMap::new(),
         };
     }
 
@@ -64,6 +67,7 @@ impl Classifier {
                 confidence: 1.0,
                 reason: "too short".to_string(),
                 tier: Tier::Structural,
+                detections: BTreeMap::new(),
             };
         }
 
