@@ -354,16 +354,25 @@ def relabel_bulk(df: pl.DataFrame) -> pl.DataFrame:
     - the_stack_text_licenses, arxiv_summarization, finepdfs → prose/plain
     - generated_ocr, generated_skip → drop rows
     """
-    # Drop rows from sources that should be removed
-    df = df.filter(~pl.col("source").is_in(list(_DROP_SOURCES)))
+    # Drop unknown rows from sources that should be removed
+    df = df.filter(
+        ~(
+            pl.col("source").is_in(list(_DROP_SOURCES))
+            & (pl.col("sub_type") == "unknown")
+        )
+    )
 
-    # Relabel prose/plain sources
+    # Relabel unknown rows from prose/plain sources
+    is_target = (
+        pl.col("source").is_in(list(_PROSE_PLAIN_SOURCES))
+        & (pl.col("sub_type") == "unknown")
+    )
     df = df.with_columns([
-        pl.when(pl.col("source").is_in(list(_PROSE_PLAIN_SOURCES)))
+        pl.when(is_target)
         .then(pl.lit("prose"))
         .otherwise(pl.col("category"))
         .alias("category"),
-        pl.when(pl.col("source").is_in(list(_PROSE_PLAIN_SOURCES)))
+        pl.when(is_target)
         .then(pl.lit("plain"))
         .otherwise(pl.col("sub_type"))
         .alias("sub_type"),
