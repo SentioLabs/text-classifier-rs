@@ -265,7 +265,7 @@ impl ModelClassifier {
 
 /// Number of features in the feature vector (must match model input size).
 #[cfg(any(feature = "onnx-model", test))]
-const NUM_FEATURES: usize = 40;
+const NUM_FEATURES: usize = 41;
 
 /// Extract features from a FeatureVector in model-expected order.
 #[cfg(any(feature = "onnx-model", test))]
@@ -312,6 +312,7 @@ fn feature_vector_to_array(f: &FeatureVector) -> [f32; NUM_FEATURES] {
         f.parenthesis_density,
         f.section_header_ratio,
         f.json_lines_ratio,
+        f.shebang_present,
     ]
 }
 
@@ -955,7 +956,7 @@ mod tests {
 
     #[cfg(feature = "onnx-model")]
     #[test]
-    fn test_model_config_has_40_features() {
+    fn test_model_config_has_expected_features() {
         let config: serde_json::Value =
             serde_json::from_str(CONFIG_JSON).expect("CONFIG_JSON should parse");
         let names = config["feature_names"]
@@ -963,8 +964,8 @@ mod tests {
             .expect("feature_names should be an array");
         assert_eq!(
             names.len(),
-            40,
-            "model_config.json should have 40 features, got {}",
+            NUM_FEATURES,
+            "model_config.json should have {NUM_FEATURES} features, got {}",
             names.len()
         );
     }

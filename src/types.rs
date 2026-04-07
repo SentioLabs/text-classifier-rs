@@ -70,6 +70,9 @@ pub enum ContentSubType {
     // Code > Config
     Dockerfile,
     Makefile,
+    // Code > Native
+    CCpp,
+    ObjC,
     // Code > Markup
     Html,
     Xml,
@@ -114,6 +117,8 @@ impl ContentSubType {
             | ContentSubType::Css
             | ContentSubType::Dockerfile
             | ContentSubType::Makefile
+            | ContentSubType::CCpp
+            | ContentSubType::ObjC
             | ContentSubType::Html
             | ContentSubType::Xml
             | ContentSubType::Sgml => TextCategory::Code,
@@ -157,6 +162,8 @@ impl ContentSubType {
             ContentSubType::Ini => "ini",
             ContentSubType::Dockerfile => "dockerfile",
             ContentSubType::Makefile => "makefile",
+            ContentSubType::CCpp => "c_cpp",
+            ContentSubType::ObjC => "objc",
             ContentSubType::Html => "html",
             ContentSubType::Xml => "xml",
             ContentSubType::Sgml => "sgml",
@@ -251,6 +258,7 @@ pub struct FeatureVector {
     pub parenthesis_density: f32,
     pub section_header_ratio: f32,
     pub json_lines_ratio: f32,
+    pub shebang_present: f32,
     /// Number of lines in the sampled text. Used by rules that need
     /// a minimum sample size (e.g. tabular detection).
     pub line_count: usize,
@@ -300,6 +308,7 @@ impl FeatureVector {
             parenthesis_density: 0.0,
             section_header_ratio: 0.0,
             json_lines_ratio: 0.0,
+            shebang_present: 0.0,
             line_count: 0,
         }
     }
