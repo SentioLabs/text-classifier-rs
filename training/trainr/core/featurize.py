@@ -886,6 +886,11 @@ def json_lines_ratio(text: str) -> float:
     return count / len(lines)
 
 
+def shebang_present(text: str) -> float:
+    """1.0 if text starts with a shebang (#!), 0.0 otherwise."""
+    return 1.0 if text.lstrip().startswith("#!") else 0.0
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -932,6 +937,7 @@ FEATURES: dict[str, Callable[[str], float]] = {
     "parenthesis_density": parenthesis_density,
     "section_header_ratio": section_header_ratio,
     "json_lines_ratio": json_lines_ratio,
+    "shebang_present": shebang_present,
 }
 
 

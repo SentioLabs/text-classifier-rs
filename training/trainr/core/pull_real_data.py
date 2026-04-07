@@ -27,7 +27,7 @@ except ImportError:
     datasets = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
-# Feature columns (40 total) — must match existing parquet schema
+# Feature columns (41 total) — must match existing parquet schema
 # ---------------------------------------------------------------------------
 
 FEATURE_COLUMNS: list[str] = [
@@ -71,6 +71,7 @@ FEATURE_COLUMNS: list[str] = [
     "parenthesis_density",
     "section_header_ratio",
     "json_lines_ratio",
+    "shebang_present",
 ]
 
 # ---------------------------------------------------------------------------
