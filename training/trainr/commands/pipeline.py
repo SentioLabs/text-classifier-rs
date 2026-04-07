@@ -182,3 +182,16 @@ def run(ctx, input_path, output_dir, eval_paths):
                 "--predictions", str(output / f"eval_predictions.{stem}.jsonl"),
                 "--output", str(output / f"slice_report.{stem}.json"),
             ])
+
+        manifest_path = output / "training_manifest.json"
+        if manifest_path.exists():
+            from trainr.core.manifest import TrainingManifest, compute_file_sha256
+
+            m = TrainingManifest.load(str(manifest_path))
+            for ep in eval_paths:
+                stem = Path(ep).stem
+                if "clear" in stem:
+                    m.eval_clear_sha256 = compute_file_sha256(ep)
+                elif "boundary" in stem:
+                    m.eval_boundary_sha256 = compute_file_sha256(ep)
+            m.save(str(manifest_path))

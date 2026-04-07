@@ -93,6 +93,8 @@ pub fn extract_features(text: &str) -> FeatureVector {
         semicolon_line_ending_ratio: compute_semicolon_line_ending_ratio(&non_empty, n_non_empty),
         list_item_ratio: compute_list_item_ratio(&non_empty, n_non_empty),
         parenthesis_density: compute_parenthesis_density(sample, total_chars),
+        section_header_ratio: compute_section_header_ratio(&non_empty, n_non_empty),
+        json_lines_ratio: compute_json_lines_ratio(&non_empty, n_non_empty),
         line_count: n_lines,
     }
 }
@@ -1213,4 +1215,52 @@ fn is_list_item(line: &str) -> bool {
 fn compute_parenthesis_density(text: &str, total_chars: f32) -> f32 {
     let count = text.chars().filter(|&c| c == '(' || c == ')').count();
     count as f32 / total_chars * 1000.0
+}
+
+/// Fraction of non-empty lines that are INI-style section headers: `[section.name]`.
+/// Line must start with `[`, end with `]`, and contain only word chars, spaces, dots, hyphens.
+fn compute_section_header_ratio(non_empty: &[&str], n_non_empty: usize) -> f32 {
+    if n_non_empty == 0 {
+        return 0.0;
+    }
+
+    let count = non_empty
+        .iter()
+        .filter(|line| is_section_header(line.trim()))
+        .count();
+    count as f32 / n_non_empty as f32
+}
+
+fn is_section_header(trimmed: &str) -> bool {
+    let bytes = trimmed.as_bytes();
+    if bytes.len() < 3 {
+        return false;
+    }
+    if bytes[0] != b'[' || bytes[bytes.len() - 1] != b']' {
+        return false;
+    }
+    // Check contents (between [ and ]) are only word chars, spaces, dots, hyphens
+    for &b in &bytes[1..bytes.len() - 1] {
+        if b.is_ascii_alphanumeric() || b == b'_' || b == b' ' || b == b'.' || b == b'-' {
+            continue;
+        }
+        return false;
+    }
+    true
+}
+
+/// Fraction of non-empty lines that look like JSON lines (start with `{`, end with `}`).
+fn compute_json_lines_ratio(non_empty: &[&str], n_non_empty: usize) -> f32 {
+    if n_non_empty == 0 {
+        return 0.0;
+    }
+
+    let count = non_empty
+        .iter()
+        .filter(|line| {
+            let trimmed = line.trim();
+            trimmed.starts_with('{') && trimmed.ends_with('}')
+        })
+        .count();
+    count as f32 / n_non_empty as f32
 }

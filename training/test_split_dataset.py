@@ -691,3 +691,215 @@ class TestReclassificationInSplit:
         categories = set(train_df.get_column("category").to_list())
         assert "unknown_garbage" not in categories
         assert len(train_df) == 5
+
+
+# ---------------------------------------------------------------------------
+# Tests for per-sub_type downsampling (max_per_sub_type)
+# ---------------------------------------------------------------------------
+
+
+class TestSubTypeDownsampling:
+    def test_caps_large_sub_types(self, tmp_path):
+        from trainr.core.split_dataset import split_dataset
+
+        # 10 "plain" samples, 3 "markdown" samples — cap at 5
+        samples = []
+        for i in range(10):
+            samples.append(
+                _make_sample(
+                    text=f"plain sample {i}",
+                    expected_category="prose",
+                    sub_type="plain",
+                    model=f"m{i % 3}",
+                )
+            )
+        for i in range(3):
+            samples.append(
+                _make_sample(
+                    text=f"markdown sample {i}",
+                    expected_category="prose",
+                    sub_type="markdown",
+                    model=f"m{i}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        eval_clear = str(tmp_path / "eval_clear.jsonl")
+        eval_boundary = str(tmp_path / "eval_boundary.jsonl")
+        train_path = str(tmp_path / "train.parquet")
+
+        _write_jsonl(input_path, samples)
+
+        split_dataset(
+            input_path=input_path,
+            eval_clear_path=eval_clear,
+            eval_boundary_path=eval_boundary,
+            train_path=train_path,
+            eval_per_category=0,
+            eval_per_pair=0,
+            seed=42,
+            max_per_sub_type=5,
+        )
+
+        train_df = pl.read_parquet(train_path)
+        train_rows = train_df.to_dicts()
+
+        from collections import Counter
+
+        subs = Counter(r["sub_type"] for r in train_rows)
+        assert subs["plain"] == 5
+        assert subs["markdown"] == 3
+
+    def test_zero_means_no_limit(self, tmp_path):
+        from trainr.core.split_dataset import split_dataset
+
+        samples = []
+        for i in range(10):
+            samples.append(
+                _make_sample(
+                    text=f"plain sample {i}",
+                    expected_category="prose",
+                    sub_type="plain",
+                    model=f"m{i % 3}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        eval_clear = str(tmp_path / "eval_clear.jsonl")
+        eval_boundary = str(tmp_path / "eval_boundary.jsonl")
+        train_path = str(tmp_path / "train.parquet")
+
+        _write_jsonl(input_path, samples)
+
+        split_dataset(
+            input_path=input_path,
+            eval_clear_path=eval_clear,
+            eval_boundary_path=eval_boundary,
+            train_path=train_path,
+            eval_per_category=0,
+            eval_per_pair=0,
+            seed=42,
+            max_per_sub_type=0,
+        )
+
+        train_df = pl.read_parquet(train_path)
+        assert len(train_df) == 10
+
+    def test_is_deterministic(self, tmp_path):
+        from trainr.core.split_dataset import split_dataset
+
+        samples = []
+        for i in range(20):
+            samples.append(
+                _make_sample(
+                    text=f"plain sample {i}",
+                    expected_category="prose",
+                    sub_type="plain",
+                    model=f"m{i % 5}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        _write_jsonl(input_path, samples)
+
+        results = []
+        for run in range(2):
+            eval_clear = str(tmp_path / f"eval_clear_{run}.jsonl")
+            eval_boundary = str(tmp_path / f"eval_boundary_{run}.jsonl")
+            train_path = str(tmp_path / f"train_{run}.parquet")
+
+            split_dataset(
+                input_path=input_path,
+                eval_clear_path=eval_clear,
+                eval_boundary_path=eval_boundary,
+                train_path=train_path,
+                eval_per_category=0,
+                eval_per_pair=0,
+                seed=42,
+                max_per_sub_type=5,
+            )
+
+            train_df = pl.read_parquet(train_path)
+            results.append(train_df.get_column("text").to_list())
+
+        assert results[0] == results[1]
+
+    def test_both_category_and_sub_type_caps_applied(self, tmp_path):
+        """Both --max-per-category and --max-per-sub-type can be used together."""
+        from trainr.core.split_dataset import split_dataset
+
+        samples = []
+        # 10 prose/plain, 10 prose/markdown, 10 code/python
+        for i in range(10):
+            samples.append(
+                _make_sample(
+                    text=f"plain {i}",
+                    expected_category="prose",
+                    sub_type="plain",
+                    model=f"m{i % 3}",
+                )
+            )
+        for i in range(10):
+            samples.append(
+                _make_sample(
+                    text=f"markdown {i}",
+                    expected_category="prose",
+                    sub_type="markdown",
+                    model=f"m{i % 3}",
+                )
+            )
+        for i in range(10):
+            samples.append(
+                _make_sample(
+                    text=f"python {i}",
+                    expected_category="code",
+                    sub_type="python",
+                    model=f"m{i % 3}",
+                )
+            )
+
+        input_path = str(tmp_path / "input.jsonl")
+        eval_clear = str(tmp_path / "eval_clear.jsonl")
+        eval_boundary = str(tmp_path / "eval_boundary.jsonl")
+        train_path = str(tmp_path / "train.parquet")
+
+        _write_jsonl(input_path, samples)
+
+        # Cap category at 15 (prose has 20, code has 10)
+        # Then cap sub_type at 4
+        split_dataset(
+            input_path=input_path,
+            eval_clear_path=eval_clear,
+            eval_boundary_path=eval_boundary,
+            train_path=train_path,
+            eval_per_category=0,
+            eval_per_pair=0,
+            seed=42,
+            max_per_category=15,
+            max_per_sub_type=4,
+        )
+
+        train_df = pl.read_parquet(train_path)
+        train_rows = train_df.to_dicts()
+
+        from collections import Counter
+
+        subs = Counter(r["sub_type"] for r in train_rows)
+        # Each sub_type should be capped at 4
+        assert subs["plain"] <= 4
+        assert subs["markdown"] <= 4
+        assert subs["python"] <= 4
+
+    def test_cli_flag_appears_in_help(self):
+        """The --max-per-sub-type flag should appear in CLI help."""
+        from trainr.core.split_dataset import main
+        import io
+        import contextlib
+
+        f = io.StringIO()
+        with pytest.raises(SystemExit):
+            with contextlib.redirect_stdout(f):
+                main(["--help"])
+
+        help_text = f.getvalue()
+        assert "--max-per-sub-type" in help_text

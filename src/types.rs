@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Text content category.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextCategory {
     Prose,
@@ -187,6 +188,15 @@ pub struct Classification {
     pub confidence: f32,
     pub reason: String,
     pub tier: Tier,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub detections: BTreeMap<TextCategory, Vec<Detection>>,
+}
+
+/// A detected sub-type with its confidence score.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Detection {
+    pub sub_type: ContentSubType,
+    pub score: f32,
 }
 
 impl Classification {
@@ -239,6 +249,8 @@ pub struct FeatureVector {
     pub semicolon_line_ending_ratio: f32,
     pub list_item_ratio: f32,
     pub parenthesis_density: f32,
+    pub section_header_ratio: f32,
+    pub json_lines_ratio: f32,
     /// Number of lines in the sampled text. Used by rules that need
     /// a minimum sample size (e.g. tabular detection).
     pub line_count: usize,
@@ -286,6 +298,8 @@ impl FeatureVector {
             semicolon_line_ending_ratio: 0.0,
             list_item_ratio: 0.0,
             parenthesis_density: 0.0,
+            section_header_ratio: 0.0,
+            json_lines_ratio: 0.0,
             line_count: 0,
         }
     }
@@ -298,3 +312,7 @@ pub mod thresholds {
     pub const STRUCTURED: f32 = 0.60;
     pub const SUB_TYPE: f32 = 0.80;
 }
+
+/// Default detection-head threshold applied when `model_config.json` does not
+/// specify a value.  Shared by both Rust inference and the Python eval pipeline.
+pub const DEFAULT_DETECTION_THRESHOLD: f32 = 0.3;

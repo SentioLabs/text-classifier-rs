@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["torch", "polars", "numpy", "onnx", "onnxscript", "onnxruntime", "scikit-learn"]
 # ///
-"""Train a dual-head feedforward neural network on structural text features.
+"""Train a multi-head feedforward neural network on structural text features.
 
 Reads Parquet files produced by generate.py and exports the trained model to ONNX
 format along with configuration and metrics JSON files.
@@ -25,6 +25,7 @@ import numpy as np
 import polars as pl
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
 from trainr.core.featurize import FEATURES
@@ -42,6 +43,24 @@ CATEGORY_MAP: dict[str, int] = {
 }
 
 NUM_CATEGORIES = len(CATEGORY_MAP)
+
+
+class FocalLoss(nn.Module):
+    """Focal loss (Lin et al., 2017) for class-imbalanced classification.
+
+    When gamma=0, equivalent to nn.CrossEntropyLoss with weights.
+    """
+
+    def __init__(self, weight: torch.Tensor | None = None, gamma: float = 2.0):
+        super().__init__()
+        self.weight = weight
+        self.gamma = gamma
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        ce_loss = F.cross_entropy(logits, targets, weight=self.weight, reduction="none")
+        pt = torch.exp(-ce_loss)  # probability of correct class
+        focal_weight = (1 - pt) ** self.gamma
+        return (focal_weight * ce_loss).mean()
 
 
 def _parse_drop_features(raw_drop_features: list[str]) -> list[str]:
@@ -267,6 +286,17 @@ def load_and_prepare_data(
     if source_values is not None:
         result["source_train"] = source_values[train_idx]
         result["source_val"] = source_values[val_idx]
+
+    # Detect det_* columns for multi-label detection head
+    det_cols = sorted([c for c in df.columns if c.startswith("det_")])
+    if det_cols:
+        det_labels = [c.removeprefix("det_") for c in det_cols]
+        detection_map: dict[str, int] = {label: i for i, label in enumerate(det_labels)}
+        y_det = df.select(det_cols).to_numpy().astype(np.float32)
+        result["detection_map"] = detection_map
+        result["y_det_train"] = y_det[train_idx]
+        result["y_det_val"] = y_det[val_idx]
+
     return result
 
 
@@ -276,7 +306,7 @@ def load_and_prepare_data(
 
 
 class TextClassifier(nn.Module):
-    """Dual-head feedforward network for category and sub-type classification."""
+    """Multi-head feedforward network for category, sub-type, and detection classification."""
 
     def __init__(
         self,
@@ -286,6 +316,7 @@ class TextClassifier(nn.Module):
         hidden_dim: int = 256,
         dropout: float = 0.15,
         use_batchnorm: bool = True,
+        n_detection_labels: int = 0,
     ):
         super().__init__()
         layers: list[nn.Module] = []
@@ -299,10 +330,16 @@ class TextClassifier(nn.Module):
         self.shared = nn.Sequential(*layers)
         self.category_head = nn.Linear(32, n_categories)
         self.sub_type_head = nn.Linear(32, n_sub_types)
+        self.detection_head: nn.Linear | None = (
+            nn.Linear(32, n_detection_labels) if n_detection_labels > 0 else None
+        )
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         shared = self.shared(x)
-        return self.category_head(shared), self.sub_type_head(shared)
+        det_logits = self.detection_head(shared) if self.detection_head is not None else None
+        return self.category_head(shared), self.sub_type_head(shared), det_logits
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +376,8 @@ def train_model(
     hidden_dim: int = 256,
     dropout: float = 0.15,
     use_batchnorm: bool = True,
+    detection_weight: float = 0.3,
+    focal_gamma: float = 2.0,
 ) -> tuple[TextClassifier, dict]:
     """Train the model and return it along with metrics."""
     if device is None:
@@ -352,6 +391,13 @@ def train_model(
     y_sub_train = torch.from_numpy(data["y_sub_train"]).to(device)
     y_sub_val = torch.from_numpy(data["y_sub_val"]).to(device)
 
+    has_detection = "y_det_train" in data
+    n_detection_labels = data["y_det_train"].shape[1] if has_detection else 0
+
+    if has_detection:
+        y_det_train = torch.from_numpy(data["y_det_train"]).to(device)
+        y_det_val = torch.from_numpy(data["y_det_val"]).to(device)
+
     model = TextClassifier(
         n_features=len(data["feature_names"]),
         n_categories=NUM_CATEGORIES,
@@ -359,6 +405,7 @@ def train_model(
         hidden_dim=hidden_dim,
         dropout=dropout,
         use_batchnorm=use_batchnorm,
+        n_detection_labels=n_detection_labels,
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -375,8 +422,12 @@ def train_model(
         warmup_scheduler = None
 
     weight_tensor = torch.tensor(data["class_weights"], dtype=torch.float32).to(device)
-    cat_criterion = nn.CrossEntropyLoss(weight=weight_tensor)
+    if focal_gamma > 0:
+        cat_criterion = FocalLoss(weight=weight_tensor, gamma=focal_gamma)
+    else:
+        cat_criterion = nn.CrossEntropyLoss(weight=weight_tensor)
     sub_criterion = nn.CrossEntropyLoss()
+    det_criterion = nn.BCEWithLogitsLoss() if has_detection else None
 
     best_val_loss = float("inf")
     best_epoch = 0
@@ -384,7 +435,12 @@ def train_model(
     epochs_without_improvement = 0
     total_epochs = 0
 
-    dataset = torch.utils.data.TensorDataset(X_train, y_cat_train, y_sub_train)
+    if has_detection:
+        dataset = torch.utils.data.TensorDataset(
+            X_train, y_cat_train, y_sub_train, y_det_train
+        )
+    else:
+        dataset = torch.utils.data.TensorDataset(X_train, y_cat_train, y_sub_train)
     loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     for epoch in range(1, epochs + 1):
@@ -396,12 +452,19 @@ def train_model(
         train_cat_correct = 0
         train_count = 0
 
-        for batch_x, batch_y_cat, batch_y_sub in loader:
+        for batch in loader:
+            if has_detection:
+                batch_x, batch_y_cat, batch_y_sub, batch_y_det = batch
+            else:
+                batch_x, batch_y_cat, batch_y_sub = batch
+
             optimizer.zero_grad()
-            cat_logits, sub_logits = model(batch_x)
+            cat_logits, sub_logits, det_logits = model(batch_x)
             loss = cat_criterion(cat_logits, batch_y_cat) + sub_type_weight * sub_criterion(
                 sub_logits, batch_y_sub
             )
+            if has_detection and det_logits is not None and det_criterion is not None:
+                loss = loss + detection_weight * det_criterion(det_logits, batch_y_det)
             loss.backward()
             optimizer.step()
 
@@ -415,11 +478,16 @@ def train_model(
         # --- Validate ---
         model.eval()  # noqa: eval – nn.Module.eval(), not builtin
         with torch.no_grad():
-            val_cat_logits, val_sub_logits = model(X_val)
-            val_loss = (
+            val_cat_logits, val_sub_logits, val_det_logits = model(X_val)
+            val_loss_t = (
                 cat_criterion(val_cat_logits, y_cat_val)
                 + sub_type_weight * sub_criterion(val_sub_logits, y_sub_val)
-            ).item()
+            )
+            if has_detection and val_det_logits is not None and det_criterion is not None:
+                val_loss_t = val_loss_t + detection_weight * det_criterion(
+                    val_det_logits, y_det_val
+                )
+            val_loss = val_loss_t.item()
             val_cat_acc = (val_cat_logits.argmax(dim=1) == y_cat_val).float().mean().item()
             val_sub_acc = (val_sub_logits.argmax(dim=1) == y_sub_val).float().mean().item()
 
@@ -457,9 +525,9 @@ def train_model(
         model.load_state_dict(best_state)
 
     # Final validation metrics with best model
-    model.eval()
+    model.eval()  # noqa: eval – nn.Module.eval(), not builtin
     with torch.no_grad():
-        val_cat_logits, val_sub_logits = model(X_val)
+        val_cat_logits, val_sub_logits, val_det_logits = model(X_val)
         final_cat_acc = (val_cat_logits.argmax(dim=1) == y_cat_val).float().mean().item()
         final_sub_acc = (val_sub_logits.argmax(dim=1) == y_sub_val).float().mean().item()
 
@@ -470,6 +538,20 @@ def train_model(
         "val_category_accuracy": final_cat_acc,
         "val_sub_type_accuracy": final_sub_acc,
     }
+
+    if has_detection and val_det_logits is not None:
+        det_preds = (torch.sigmoid(val_det_logits) >= 0.5).float()
+        det_targets = y_det_val
+        # Micro-averaged F1
+        tp = (det_preds * det_targets).sum().item()
+        fp = (det_preds * (1 - det_targets)).sum().item()
+        fn = ((1 - det_preds) * det_targets).sum().item()
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        metrics["val_detection_f1"] = f1
+        metrics["val_detection_precision"] = precision
+        metrics["val_detection_recall"] = recall
 
     return model, metrics
 
@@ -488,17 +570,24 @@ def export_onnx(model: TextClassifier, output_path: Path, n_features: int) -> No
     model = model.cpu()
     model.eval()  # noqa: eval – this is nn.Module.eval(), not builtin eval
     dummy_input = torch.randn(1, n_features)
+
+    output_names = ["category_logits", "sub_type_logits"]
+    dynamic_axes: dict[str, dict[int, str]] = {
+        "features": {0: "batch"},
+        "category_logits": {0: "batch"},
+        "sub_type_logits": {0: "batch"},
+    }
+    if model.detection_head is not None:
+        output_names.append("detection_logits")
+        dynamic_axes["detection_logits"] = {0: "batch"}
+
     torch.onnx.export(
         model,
         dummy_input,
         str(output_path),
         input_names=["features"],
-        output_names=["category_logits", "sub_type_logits"],
-        dynamic_axes={
-            "features": {0: "batch"},
-            "category_logits": {0: "batch"},
-            "sub_type_logits": {0: "batch"},
-        },
+        output_names=output_names,
+        dynamic_axes=dynamic_axes,
         opset_version=17,
     )
 
@@ -509,6 +598,8 @@ def save_config(
     feature_mean: np.ndarray,
     feature_std: np.ndarray,
     sub_type_map: dict[str, int],
+    detection_map: dict[str, int] | None = None,
+    detection_threshold: float = 0.3,
 ) -> None:
     """Save model configuration (feature stats, label maps) to JSON."""
     config = {
@@ -517,7 +608,10 @@ def save_config(
         "feature_std": feature_std.tolist(),
         "category_map": CATEGORY_MAP,
         "sub_type_map": sub_type_map,
+        "detection_threshold": detection_threshold,
     }
+    if detection_map is not None:
+        config["detection_map"] = detection_map
     output_path.write_text(json.dumps(config, indent=2) + "\n")
 
 
@@ -622,6 +716,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=10,
         help="LR warmup epochs (default: 10, 0 to disable).",
     )
+    parser.add_argument(
+        "--detection-weight",
+        type=float,
+        default=0.3,
+        help="Detection loss weight (default: 0.3).",
+    )
+    parser.add_argument(
+        "--detection-threshold",
+        type=float,
+        default=0.3,
+        help="Detection head threshold written to model_config.json (default: 0.3).",
+    )
+    parser.add_argument(
+        "--focal-gamma",
+        type=float,
+        default=2.0,
+        help="Focal loss gamma (0.0 = standard CE). Default: 2.0.",
+    )
     return parser.parse_args(argv)
 
 
@@ -660,6 +772,8 @@ def main(argv: list[str] | None = None) -> None:
         hidden_dim=args.hidden_dim,
         dropout=args.dropout,
         use_batchnorm=not args.no_batchnorm,
+        detection_weight=args.detection_weight,
+        focal_gamma=args.focal_gamma,
     )
 
     onnx_path = args.output / "model.onnx"
@@ -673,12 +787,32 @@ def main(argv: list[str] | None = None) -> None:
         data["feature_mean"],
         data["feature_std"],
         data["sub_type_map"],
+        detection_map=data.get("detection_map"),
+        detection_threshold=args.detection_threshold,
     )
     print(f"Saved config to {config_path}", file=sys.stderr)
 
     metrics_path = args.output / "metrics.json"
     save_metrics(metrics_path, metrics)
     print(f"Saved metrics to {metrics_path}", file=sys.stderr)
+
+    from trainr.core.manifest import compute_file_sha256, TrainingManifest
+    from datetime import datetime, timezone
+
+    manifest = TrainingManifest(
+        run_id=f"run-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}",
+        dataset_sha256=compute_file_sha256(args.data),
+        dataset_rows=len(data["X_train"]) + len(data["X_val"]),
+        featurizer_version="2.0",
+        feature_count=len(active_feature_columns),
+        feature_names=list(active_feature_columns),
+        eval_clear_sha256="",  # Filled by pipeline run
+        eval_boundary_sha256="",  # Filled by pipeline run
+        model_sha256=compute_file_sha256(str(args.output / "model.onnx")),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+    manifest.save(str(args.output / "training_manifest.json"))
+    print(f"Saved manifest to {args.output / 'training_manifest.json'}", file=sys.stderr)
 
     print("Done.", file=sys.stderr)
 

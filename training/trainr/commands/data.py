@@ -79,6 +79,35 @@ def split_cmd(**kwargs):
     _main(argv)
 
 
+@data.command("annotate-detections")
+@click.option("--input", required=True, help="Path to input Parquet file.")
+@click.option("--output", required=True, help="Path to output Parquet file.")
+@click.option("--model", default=None, help="Model ID (auto-selected per backend if omitted).")
+@click.option("--concurrency", type=int, default=None, help="Concurrent workers (default: 20).")
+@click.option("--sample", type=int, default=None, help="Stratified sample N rows (0=all).")
+@click.option("--backend", default=None, type=click.Choice(["openrouter", "anthropic"]), help="API backend.")
+def annotate_detections_cmd(**kwargs):
+    """Annotate training data with multi-label content detections via LLM."""
+    from trainr.core.annotate_detections import main as _main
+
+    argv = _build_argv(kwargs)
+    _main(argv)
+
+
+@data.command("relabel-unknowns")
+@click.option("--input", required=True, help="Path to input Parquet file with unknown sub_types.")
+@click.option("--output", required=True, help="Path to output Parquet file.")
+@click.option("--model", default=None, help="OpenRouter model for LLM voter (default: gemini-3.1-flash-lite-preview).")
+@click.option("--concurrency", type=int, default=None, help="Max concurrent LLM requests (default: 20).")
+@click.option("--manual-review", default=None, help="Output JSONL for 3-way disagreement rows.")
+def relabel_unknowns_cmd(**kwargs):
+    """Relabel unknown sub_type rows via 3-way voting (heuristic + Magika + LLM)."""
+    from trainr.core.relabel_unknowns import main as _main
+
+    argv = _build_argv(kwargs)
+    _main(argv)
+
+
 def _build_argv(kwargs: dict, flags: tuple[str, ...] = ()) -> list[str]:
     """Convert click kwargs to an argv list for argparse-based entry points."""
     argv: list[str] = []

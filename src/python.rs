@@ -19,10 +19,13 @@ struct PyClassification {
     reason: String,
     #[pyo3(get)]
     tier: String,
+    #[pyo3(get)]
+    detections: String,
 }
 
 impl From<Classification> for PyClassification {
     fn from(c: Classification) -> Self {
+        let detections = serde_json::to_string(&c.detections).unwrap_or_default();
         PyClassification {
             category: c.category.to_string(),
             sub_type: c.sub_type.map(|s| s.label().to_string()),
@@ -30,6 +33,7 @@ impl From<Classification> for PyClassification {
             confidence: c.confidence,
             reason: c.reason,
             tier: c.tier.to_string(),
+            detections,
         }
     }
 }
@@ -37,15 +41,26 @@ impl From<Classification> for PyClassification {
 #[pymethods]
 impl PyClassification {
     fn __repr__(&self) -> String {
+        let detection_count = serde_json::from_str::<serde_json::Value>(&self.detections)
+            .ok()
+            .and_then(|v| {
+                v.as_object().map(|obj| {
+                    obj.values()
+                        .filter_map(|arr| arr.as_array().map(|a| a.len()))
+                        .sum::<usize>()
+                })
+            })
+            .unwrap_or(0);
         format!(
-            "Classification(category='{}', sub_type={}, confidence={:.2}, reason='{}', tier='{}')",
+            "Classification(category='{}', sub_type={}, confidence={:.2}, reason='{}', tier='{}', {} detections)",
             self.category,
             self.sub_type
                 .as_deref()
                 .map_or("None".to_string(), |s| format!("'{s}'")),
             self.confidence,
             self.reason,
-            self.tier
+            self.tier,
+            detection_count
         )
     }
 }
@@ -115,4 +130,87 @@ fn text_classifier(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyClassification>()?;
     m.add_function(wrap_pyfunction!(classify, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Classification, ContentSubType, Detection, TextCategory, Tier};
+    use std::collections::BTreeMap;
+
+    fn make_classification_with_detections() -> Classification {
+        let mut detections = BTreeMap::new();
+        detections.insert(
+            TextCategory::Code,
+            vec![
+                Detection {
+                    sub_type: ContentSubType::Python,
+                    score: 0.85,
+                },
+                Detection {
+                    sub_type: ContentSubType::Shell,
+                    score: 0.10,
+                },
+            ],
+        );
+        Classification {
+            category: TextCategory::Code,
+            sub_type: Some(ContentSubType::Python),
+            confidence: 0.85,
+            reason: "code detected".to_string(),
+            tier: Tier::Structural,
+            detections,
+        }
+    }
+
+    #[test]
+    fn test_py_classification_has_detections_field() {
+        let c = make_classification_with_detections();
+        let py_c = PyClassification::from(c);
+        // The detections field should be a JSON string
+        assert!(!py_c.detections.is_empty());
+    }
+
+    #[test]
+    fn test_py_classification_detections_is_valid_json() {
+        let c = make_classification_with_detections();
+        let py_c = PyClassification::from(c);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&py_c.detections).expect("detections should be valid JSON");
+        assert!(parsed.is_object());
+        // Should contain the "code" key
+        assert!(parsed.get("code").is_some());
+        let code_detections = parsed["code"].as_array().unwrap();
+        assert_eq!(code_detections.len(), 2);
+        assert_eq!(code_detections[0]["sub_type"], "python");
+        assert_eq!(code_detections[0]["score"], 0.85);
+    }
+
+    #[test]
+    fn test_py_classification_empty_detections() {
+        let c = Classification {
+            category: TextCategory::Prose,
+            sub_type: Some(ContentSubType::Plain),
+            confidence: 0.90,
+            reason: "prose detected".to_string(),
+            tier: Tier::Structural,
+            detections: BTreeMap::new(),
+        };
+        let py_c = PyClassification::from(c);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&py_c.detections).expect("detections should be valid JSON");
+        assert!(parsed.is_object());
+        assert_eq!(parsed.as_object().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_py_classification_repr_includes_detections() {
+        let c = make_classification_with_detections();
+        let py_c = PyClassification::from(c);
+        let repr = py_c.__repr__();
+        assert!(
+            repr.contains("2 detections"),
+            "repr should mention detection count, got: {repr}"
+        );
+    }
 }

@@ -1,8 +1,13 @@
 #[cfg(any(feature = "onnx-model", test))]
 use crate::types::ContentSubType;
+#[cfg(any(feature = "onnx-model", test))]
+use crate::types::DEFAULT_DETECTION_THRESHOLD;
+#[cfg(any(feature = "onnx-model", test))]
+use crate::types::Detection;
 use crate::types::{Classification, FeatureVector, TextCategory, Tier};
+use std::collections::BTreeMap;
 
-#[cfg(feature = "onnx-model")]
+#[cfg(any(feature = "onnx-model", test))]
 use std::collections::HashMap;
 #[cfg(feature = "onnx-model")]
 use std::sync::Mutex;
@@ -19,6 +24,8 @@ struct ModelConfig {
     feature_std: Vec<f32>,
     category_map: HashMap<String, usize>,
     sub_type_map: HashMap<String, usize>,
+    detection_map: Option<HashMap<String, usize>>,
+    detection_threshold: Option<f32>,
 }
 
 /// Tier 2 model-based classifier.
@@ -35,6 +42,10 @@ pub struct ModelClassifier {
     inv_category_map: Option<HashMap<usize, String>>,
     #[cfg(feature = "onnx-model")]
     inv_sub_type_map: Option<HashMap<usize, String>>,
+    #[cfg(feature = "onnx-model")]
+    inv_detection_map: Option<HashMap<usize, String>>,
+    #[cfg(feature = "onnx-model")]
+    detection_threshold: f32,
 
     #[cfg(not(feature = "onnx-model"))]
     _phantom: (),
@@ -59,6 +70,8 @@ impl ModelClassifier {
                     config: None,
                     inv_category_map: None,
                     inv_sub_type_map: None,
+                    inv_detection_map: None,
+                    detection_threshold: DEFAULT_DETECTION_THRESHOLD,
                 }
             }
         }
@@ -85,13 +98,24 @@ impl ModelClassifier {
             .map(|(k, v)| (*v, k.clone()))
             .collect();
 
+        let inv_detection_map = config
+            .detection_map
+            .as_ref()
+            .map(|dm| dm.iter().map(|(k, v)| (*v, k.clone())).collect());
+
         let session = ort::session::Session::builder()?.commit_from_memory(MODEL_BYTES)?;
+
+        let detection_threshold = config
+            .detection_threshold
+            .unwrap_or(DEFAULT_DETECTION_THRESHOLD);
 
         Ok(Self {
             session: Some(Mutex::new(session)),
             config: Some(config),
             inv_category_map: Some(inv_category_map),
             inv_sub_type_map: Some(inv_sub_type_map),
+            inv_detection_map,
+            detection_threshold,
         })
     }
 
@@ -104,6 +128,8 @@ impl ModelClassifier {
                 config: None,
                 inv_category_map: None,
                 inv_sub_type_map: None,
+                inv_detection_map: None,
+                detection_threshold: DEFAULT_DETECTION_THRESHOLD,
             }
         }
         #[cfg(not(feature = "onnx-model"))]
@@ -168,8 +194,9 @@ impl ModelClassifier {
 
         let raw = feature_vector_to_array(features);
 
-        // Z-score standardize
-        let standardized: Vec<f32> = raw
+        // Z-score standardize (truncate to model's feature count if new features were added)
+        let n_model_features = config.feature_mean.len();
+        let standardized: Vec<f32> = raw[..n_model_features]
             .iter()
             .enumerate()
             .map(|(i, &val)| {
@@ -183,7 +210,7 @@ impl ModelClassifier {
             .collect();
 
         let input = ort::value::Tensor::from_array((
-            vec![1i64, NUM_FEATURES as i64],
+            vec![1i64, n_model_features as i64],
             standardized.into_boxed_slice(),
         ))?;
         let mut session = self.session.as_ref().unwrap().lock().map_err(|e| {
@@ -196,26 +223,21 @@ impl ModelClassifier {
 
         let cat_probs = softmax(cat_logits);
         let sub_probs = softmax(sub_logits);
+        let det_logits = if outputs.len() >= 3 {
+            Some(outputs[2].try_extract_tensor::<f32>()?.1)
+        } else {
+            None
+        };
 
-        let (cat_idx, cat_conf) = argmax(&cat_probs);
-        let (sub_idx, _sub_conf) = argmax(&sub_probs);
-
-        let cat_label = inv_cat.get(&cat_idx).map(|s| s.as_str()).unwrap_or("skip");
-        let sub_label = inv_sub
-            .get(&sub_idx)
-            .map(|s| s.as_str())
-            .unwrap_or("unknown");
-
-        let category = parse_category(cat_label);
-        let sub_type = parse_sub_type(sub_label);
-
-        Ok(Classification {
-            category,
-            sub_type: Some(sub_type),
-            confidence: cat_conf,
-            reason: format!("onnx model: category={cat_label}, sub_type={sub_label}"),
-            tier: Tier::Model,
-        })
+        Ok(build_classification(
+            &cat_probs,
+            &sub_probs,
+            det_logits,
+            inv_cat,
+            inv_sub,
+            self.inv_detection_map.as_ref(),
+            self.detection_threshold,
+        ))
     }
 
     fn classify_fallback(&self, features: &FeatureVector) -> Classification {
@@ -226,6 +248,7 @@ impl ModelClassifier {
                 confidence: 0.5,
                 reason: "no model — fallback: moderate prose signals".to_string(),
                 tier: Tier::Structural,
+                detections: BTreeMap::new(),
             }
         } else {
             Classification {
@@ -234,6 +257,7 @@ impl ModelClassifier {
                 confidence: 0.5,
                 reason: "no model — fallback: insufficient prose signals".to_string(),
                 tier: Tier::Structural,
+                detections: BTreeMap::new(),
             }
         }
     }
@@ -241,7 +265,7 @@ impl ModelClassifier {
 
 /// Number of features in the feature vector (must match model input size).
 #[cfg(any(feature = "onnx-model", test))]
-const NUM_FEATURES: usize = 38;
+const NUM_FEATURES: usize = 40;
 
 /// Extract features from a FeatureVector in model-expected order.
 #[cfg(any(feature = "onnx-model", test))]
@@ -286,6 +310,8 @@ fn feature_vector_to_array(f: &FeatureVector) -> [f32; NUM_FEATURES] {
         f.semicolon_line_ending_ratio,
         f.list_item_ratio,
         f.parenthesis_density,
+        f.section_header_ratio,
+        f.json_lines_ratio,
     ]
 }
 
@@ -307,7 +333,7 @@ fn argmax(values: &[f32]) -> (usize, f32) {
         .unwrap_or((0, 0.0))
 }
 
-#[cfg(any(feature = "onnx-model", test))]
+#[cfg(test)]
 fn parse_category(s: &str) -> TextCategory {
     match s {
         "prose" => TextCategory::Prose,
@@ -349,6 +375,97 @@ fn parse_sub_type(s: &str) -> ContentSubType {
         "key_value" => ContentSubType::KeyValue,
         "log_lines" => ContentSubType::LogLines,
         _ => ContentSubType::Unknown,
+    }
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+fn sigmoid(x: f32) -> f32 {
+    1.0 / (1.0 + (-x).exp())
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+fn sigmoid_vec(logits: &[f32]) -> Vec<f32> {
+    logits.iter().map(|&x| sigmoid(x)).collect()
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+fn build_detections(
+    scores: &[f32],
+    inv_map: &HashMap<usize, String>,
+    threshold: f32,
+) -> BTreeMap<TextCategory, Vec<Detection>> {
+    let mut result = BTreeMap::new();
+    for (idx, &score) in scores.iter().enumerate() {
+        if score < threshold {
+            continue;
+        }
+        let label = inv_map.get(&idx).map(|s| s.as_str()).unwrap_or("unknown");
+        let sub_type = parse_sub_type(label);
+        let category = sub_type.category();
+        result
+            .entry(category)
+            .or_insert_with(Vec::new)
+            .push(Detection { sub_type, score });
+    }
+    for detections in result.values_mut() {
+        detections.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
+    result
+}
+
+#[cfg(any(feature = "onnx-model", test))]
+fn build_classification(
+    _cat_probs: &[f32],
+    sub_probs: &[f32],
+    det_logits: Option<&[f32]>,
+    _inv_cat: &HashMap<usize, String>,
+    inv_sub: &HashMap<usize, String>,
+    inv_det: Option<&HashMap<usize, String>>,
+    detection_threshold: f32,
+) -> Classification {
+    let (sub_idx, _sub_conf) = argmax(sub_probs);
+
+    let sub_label = inv_sub
+        .get(&sub_idx)
+        .map(|s| s.as_str())
+        .unwrap_or("unknown");
+
+    // Marginalize category from sub-type probabilities: sum sub_type probs
+    // grouped by their canonical category.
+    let mut cat_accum: HashMap<TextCategory, f32> = HashMap::new();
+    for (idx, &prob) in sub_probs.iter().enumerate() {
+        let label = inv_sub.get(&idx).map(|s| s.as_str()).unwrap_or("unknown");
+        let sub_type = parse_sub_type(label);
+        let category = sub_type.category();
+        *cat_accum.entry(category).or_insert(0.0) += prob;
+    }
+
+    let (marginalized_cat, marginalized_conf) = cat_accum
+        .into_iter()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or((TextCategory::Skip, 0.0));
+
+    let detections = match (det_logits, inv_det) {
+        (Some(logits), Some(inv_det)) => {
+            let det_scores = sigmoid_vec(logits);
+            build_detections(&det_scores, inv_det, detection_threshold)
+        }
+        _ => BTreeMap::new(),
+    };
+
+    Classification {
+        category: marginalized_cat,
+        sub_type: Some(parse_sub_type(sub_label)),
+        confidence: marginalized_conf,
+        reason: format!(
+            "onnx model (marginalized): category={marginalized_cat}, sub_type={sub_label}"
+        ),
+        tier: Tier::Model,
+        detections,
     }
 }
 
@@ -495,7 +612,7 @@ mod tests {
         assert!(result.confidence > 0.0);
         assert!(result.confidence <= 1.0);
         assert!(result.sub_type.is_some());
-        assert!(result.reason.starts_with("onnx model:"));
+        assert!(result.reason.starts_with("onnx model"));
     }
 
     #[cfg(feature = "onnx-model")]
@@ -510,5 +627,391 @@ mod tests {
     fn test_new_without_feature_has_no_model() {
         let classifier = ModelClassifier::new();
         assert!(!classifier.has_model());
+    }
+
+    #[test]
+    fn test_sigmoid_zero() {
+        let result = sigmoid(0.0);
+        assert!((result - 0.5).abs() < 1e-6, "sigmoid(0) should be 0.5");
+    }
+
+    #[test]
+    fn test_sigmoid_large_positive() {
+        let result = sigmoid(10.0);
+        assert!(result > 0.999, "sigmoid(10) should be close to 1.0");
+    }
+
+    #[test]
+    fn test_sigmoid_large_negative() {
+        let result = sigmoid(-10.0);
+        assert!(result < 0.001, "sigmoid(-10) should be close to 0.0");
+    }
+
+    #[test]
+    fn test_sigmoid_symmetry() {
+        let pos = sigmoid(2.0);
+        let neg = sigmoid(-2.0);
+        assert!(
+            (pos + neg - 1.0).abs() < 1e-6,
+            "sigmoid(x) + sigmoid(-x) should equal 1.0"
+        );
+    }
+
+    #[test]
+    fn test_sigmoid_vec_basic() {
+        let logits = vec![0.0, 10.0, -10.0];
+        let results = sigmoid_vec(&logits);
+        assert_eq!(results.len(), 3);
+        assert!((results[0] - 0.5).abs() < 1e-6);
+        assert!(results[1] > 0.999);
+        assert!(results[2] < 0.001);
+    }
+
+    #[test]
+    fn test_sigmoid_vec_empty() {
+        let results = sigmoid_vec(&[]);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_build_detections_above_threshold() {
+        use std::collections::HashMap;
+
+        let mut inv_map = HashMap::new();
+        inv_map.insert(0, "python".to_string());
+        inv_map.insert(1, "markdown".to_string());
+
+        let scores = vec![0.9, 0.8];
+        let result = build_detections(&scores, &inv_map, 0.5);
+
+        // python -> Code, markdown -> Prose
+        assert!(result.contains_key(&TextCategory::Code));
+        assert!(result.contains_key(&TextCategory::Prose));
+        assert_eq!(result[&TextCategory::Code].len(), 1);
+        assert_eq!(
+            result[&TextCategory::Code][0].sub_type,
+            ContentSubType::Python
+        );
+        assert!((result[&TextCategory::Code][0].score - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_build_detections_below_threshold() {
+        use std::collections::HashMap;
+
+        let mut inv_map = HashMap::new();
+        inv_map.insert(0, "python".to_string());
+
+        let scores = vec![0.3];
+        let result = build_detections(&scores, &inv_map, 0.5);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_build_detections_sorted_by_score_descending() {
+        use std::collections::HashMap;
+
+        let mut inv_map = HashMap::new();
+        inv_map.insert(0, "python".to_string());
+        inv_map.insert(1, "rust".to_string());
+        inv_map.insert(2, "javascript".to_string());
+
+        // All code subtypes, different scores
+        let scores = vec![0.7, 0.9, 0.8];
+        let result = build_detections(&scores, &inv_map, 0.5);
+
+        let code_detections = &result[&TextCategory::Code];
+        assert_eq!(code_detections.len(), 3);
+        assert_eq!(code_detections[0].sub_type, ContentSubType::Rust);
+        assert_eq!(code_detections[1].sub_type, ContentSubType::JavaScript);
+        assert_eq!(code_detections[2].sub_type, ContentSubType::Python);
+    }
+
+    #[test]
+    fn test_build_detections_unknown_label() {
+        use std::collections::HashMap;
+
+        let inv_map: HashMap<usize, String> = HashMap::new();
+        // index 0 has no entry in map
+        let scores = vec![0.9];
+        let result = build_detections(&scores, &inv_map, 0.5);
+
+        // "unknown" label maps to ContentSubType::Unknown, category Skip
+        assert!(result.contains_key(&TextCategory::Skip));
+        assert_eq!(
+            result[&TextCategory::Skip][0].sub_type,
+            ContentSubType::Unknown
+        );
+    }
+
+    #[test]
+    fn test_build_detections_empty_scores() {
+        use std::collections::HashMap;
+        let inv_map: HashMap<usize, String> = HashMap::new();
+        let result = build_detections(&[], &inv_map, 0.5);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_marginalization_overrides_category_head() {
+        use std::collections::HashMap;
+
+        // cat_probs: code is highest at 0.60
+        let cat_probs = vec![0.15, 0.60, 0.20, 0.05]; // prose, code, structured, skip
+        let mut inv_cat = HashMap::new();
+        inv_cat.insert(0, "prose".to_string());
+        inv_cat.insert(1, "code".to_string());
+        inv_cat.insert(2, "structured".to_string());
+        inv_cat.insert(3, "skip".to_string());
+
+        // sub_probs: ini(0.35) + key_value(0.30) + toml(0.15) = 0.80 for structured
+        // remaining 0.20 spread across code sub-types
+        let mut inv_sub = HashMap::new();
+        inv_sub.insert(0, "ini".to_string());
+        inv_sub.insert(1, "key_value".to_string());
+        inv_sub.insert(2, "toml".to_string());
+        inv_sub.insert(3, "python".to_string());
+        inv_sub.insert(4, "rust".to_string());
+
+        let sub_probs = vec![0.35, 0.30, 0.15, 0.12, 0.08];
+
+        let classification = build_classification(
+            &cat_probs,
+            &sub_probs,
+            None,
+            &inv_cat,
+            &inv_sub,
+            None,
+            DEFAULT_DETECTION_THRESHOLD,
+        );
+
+        // Marginalization should pick structured (0.80) over code (0.20)
+        assert_eq!(
+            classification.category,
+            TextCategory::Structured,
+            "marginalized category should be Structured, not Code"
+        );
+        assert!(
+            (classification.confidence - 0.80).abs() < 0.01,
+            "confidence should be ~0.80, got {}",
+            classification.confidence
+        );
+        assert!(
+            classification.reason.contains("marginalized"),
+            "reason should mention marginalized, got: {}",
+            classification.reason
+        );
+    }
+
+    #[test]
+    fn test_marginalization_unknown_sub_types_fall_to_skip() {
+        use std::collections::HashMap;
+
+        let cat_probs = vec![0.5, 0.5];
+        let mut inv_cat = HashMap::new();
+        inv_cat.insert(0, "prose".to_string());
+        inv_cat.insert(1, "code".to_string());
+
+        // inv_sub is empty — no indices map to known sub-types
+        let inv_sub: HashMap<usize, String> = HashMap::new();
+        let sub_probs = vec![0.6, 0.4];
+
+        let classification = build_classification(
+            &cat_probs,
+            &sub_probs,
+            None,
+            &inv_cat,
+            &inv_sub,
+            None,
+            DEFAULT_DETECTION_THRESHOLD,
+        );
+
+        // Unknown sub-types map to ContentSubType::Unknown -> TextCategory::Skip
+        assert_eq!(
+            classification.category,
+            TextCategory::Skip,
+            "unknown sub-types should result in Skip category"
+        );
+    }
+
+    #[test]
+    fn test_detection_threshold_from_config() {
+        use std::collections::HashMap;
+
+        // Detection logits that produce sigmoid scores between 0.3 and 0.5:
+        // sigmoid(-0.4) ≈ 0.40, sigmoid(-0.8) ≈ 0.31
+        // These should be included at threshold 0.3 but excluded at 0.5.
+        let det_logits = vec![-0.4, -0.8]; // sigmoid ≈ [0.40, 0.31]
+
+        let cat_probs = vec![0.1, 0.8, 0.1];
+        let sub_probs = vec![0.1, 0.9];
+
+        let mut inv_cat = HashMap::new();
+        inv_cat.insert(0, "prose".to_string());
+        inv_cat.insert(1, "code".to_string());
+        inv_cat.insert(2, "structured".to_string());
+
+        let mut inv_sub = HashMap::new();
+        inv_sub.insert(0, "markdown".to_string());
+        inv_sub.insert(1, "python".to_string());
+
+        let mut inv_det = HashMap::new();
+        inv_det.insert(0, "python".to_string());
+        inv_det.insert(1, "markdown".to_string());
+
+        // With the default threshold of 0.3, both detections should be included
+        let default_threshold = crate::types::DEFAULT_DETECTION_THRESHOLD;
+        assert!(
+            (default_threshold - 0.3).abs() < f32::EPSILON,
+            "DEFAULT_DETECTION_THRESHOLD should be 0.3"
+        );
+
+        let classification_low = build_classification(
+            &cat_probs,
+            &sub_probs,
+            Some(&det_logits),
+            &inv_cat,
+            &inv_sub,
+            Some(&inv_det),
+            default_threshold,
+        );
+        // At 0.3 threshold, both scores (0.40, 0.30) should pass
+        assert!(
+            !classification_low.detections.is_empty(),
+            "detections should not be empty at threshold 0.3"
+        );
+        let total_detections_low: usize = classification_low
+            .detections
+            .values()
+            .map(|v| v.len())
+            .sum();
+        assert_eq!(
+            total_detections_low, 2,
+            "both detections should be included at threshold 0.3"
+        );
+
+        // With threshold 0.5, both should be excluded (scores are 0.40 and 0.30)
+        let classification_high = build_classification(
+            &cat_probs,
+            &sub_probs,
+            Some(&det_logits),
+            &inv_cat,
+            &inv_sub,
+            Some(&inv_det),
+            0.5,
+        );
+        assert!(
+            classification_high.detections.is_empty(),
+            "detections should be empty at threshold 0.5, got {:?}",
+            classification_high.detections
+        );
+    }
+
+    #[test]
+    fn test_build_classification_includes_detections() {
+        use std::collections::HashMap;
+
+        let cat_probs = vec![0.1, 0.8, 0.1];
+        let sub_probs = vec![0.1, 0.9];
+        let det_logits = vec![2.0, 1.0];
+
+        let mut inv_cat = HashMap::new();
+        inv_cat.insert(0, "prose".to_string());
+        inv_cat.insert(1, "code".to_string());
+        inv_cat.insert(2, "structured".to_string());
+
+        let mut inv_sub = HashMap::new();
+        inv_sub.insert(0, "markdown".to_string());
+        inv_sub.insert(1, "python".to_string());
+
+        let mut inv_det = HashMap::new();
+        inv_det.insert(0, "python".to_string());
+        inv_det.insert(1, "markdown".to_string());
+
+        let classification = build_classification(
+            &cat_probs,
+            &sub_probs,
+            Some(&det_logits),
+            &inv_cat,
+            &inv_sub,
+            Some(&inv_det),
+            DEFAULT_DETECTION_THRESHOLD,
+        );
+
+        assert_eq!(classification.category, TextCategory::Code);
+        assert_eq!(classification.sub_type, Some(ContentSubType::Python));
+        assert_eq!(classification.tier, Tier::Model);
+        assert_eq!(classification.detections[&TextCategory::Code].len(), 1);
+        assert_eq!(
+            classification.detections[&TextCategory::Code][0].sub_type,
+            ContentSubType::Python
+        );
+        assert_eq!(classification.detections[&TextCategory::Prose].len(), 1);
+        assert_eq!(
+            classification.detections[&TextCategory::Prose][0].sub_type,
+            ContentSubType::Markdown
+        );
+    }
+
+    #[cfg(feature = "onnx-model")]
+    #[test]
+    fn test_model_config_has_40_features() {
+        let config: serde_json::Value =
+            serde_json::from_str(CONFIG_JSON).expect("CONFIG_JSON should parse");
+        let names = config["feature_names"]
+            .as_array()
+            .expect("feature_names should be an array");
+        assert_eq!(
+            names.len(),
+            40,
+            "model_config.json should have 40 features, got {}",
+            names.len()
+        );
+    }
+
+    #[cfg(feature = "onnx-model")]
+    #[test]
+    fn test_model_config_includes_new_features() {
+        let config: serde_json::Value =
+            serde_json::from_str(CONFIG_JSON).expect("CONFIG_JSON should parse");
+        let names: Vec<String> = config["feature_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        assert!(
+            names.contains(&"section_header_ratio".to_string()),
+            "should include section_header_ratio"
+        );
+        assert!(
+            names.contains(&"json_lines_ratio".to_string()),
+            "should include json_lines_ratio"
+        );
+    }
+
+    #[cfg(feature = "onnx-model")]
+    #[test]
+    fn test_model_config_detection_threshold() {
+        let config: serde_json::Value =
+            serde_json::from_str(CONFIG_JSON).expect("CONFIG_JSON should parse");
+        let threshold = config["detection_threshold"]
+            .as_f64()
+            .expect("detection_threshold should be a number");
+        assert!(
+            (threshold - 0.3).abs() < 0.01,
+            "detection_threshold should be 0.3, got {}",
+            threshold
+        );
+    }
+
+    #[cfg(feature = "onnx-model")]
+    #[test]
+    fn test_embedded_config_detection_threshold_is_0_3() {
+        let config: ModelConfig = serde_json::from_str(CONFIG_JSON).expect("config should parse");
+        assert!(
+            (config.detection_threshold.unwrap_or(0.5) - 0.3).abs() < 0.01,
+            "detection_threshold in config should be 0.3"
+        );
     }
 }

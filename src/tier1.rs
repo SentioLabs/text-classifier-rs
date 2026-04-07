@@ -1,4 +1,5 @@
 use crate::types::{Classification, FeatureVector, TextCategory, Tier};
+use std::collections::BTreeMap;
 
 /// Minimum confidence to accept a Tier 1 classification.
 /// Set high so only unambiguous short-circuits are accepted;
@@ -19,6 +20,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
             confidence: 1.0,
             reason: "empty or no content".to_string(),
             tier: Tier::Structural,
+            detections: BTreeMap::new(),
         };
     }
 
@@ -37,6 +39,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
                 features.line_length_cv
             ),
             tier: Tier::Structural,
+            detections: BTreeMap::new(),
         };
     }
 
@@ -54,6 +57,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
                 features.leading_whitespace_ratio, features.symbol_ratio
             ),
             tier: Tier::Structural,
+            detections: BTreeMap::new(),
         };
     }
 
@@ -72,6 +76,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
                 features.sentence_punctuation_rate, features.alpha_ratio
             ),
             tier: Tier::Structural,
+            detections: BTreeMap::new(),
         };
     }
 
@@ -82,6 +87,7 @@ pub fn classify_tier1(features: &FeatureVector) -> Classification {
         confidence: 0.40,
         reason: "ambiguous — deferring to model".to_string(),
         tier: Tier::Structural,
+        detections: BTreeMap::new(),
     }
 }
 
