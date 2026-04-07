@@ -77,10 +77,13 @@ struct PyClassifier {
 #[pymethods]
 impl PyClassifier {
     #[new]
-    fn new() -> PyResult<Self> {
-        Ok(PyClassifier {
-            inner: RustClassifier::with_embedded_model(),
-        })
+    #[pyo3(signature = (min_score=None))]
+    fn new(min_score: Option<f32>) -> PyResult<Self> {
+        let mut clf = RustClassifier::with_embedded_model();
+        if let Some(threshold) = min_score {
+            clf = clf.min_score(threshold);
+        }
+        Ok(PyClassifier { inner: clf })
     }
 
     fn classify(&self, text: &str) -> PyClassification {

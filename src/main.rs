@@ -15,6 +15,11 @@ struct Cli {
     #[arg(long)]
     human: bool,
 
+    /// Minimum score threshold for sub-type scores and detections.
+    /// Scores below this are dropped from output.
+    #[arg(long)]
+    min_score: Option<f32>,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -286,7 +291,10 @@ impl Evaluator {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let classifier = Classifier::with_embedded_model();
+    let mut classifier = Classifier::with_embedded_model();
+    if let Some(threshold) = cli.min_score {
+        classifier = classifier.min_score(threshold);
+    }
 
     match cli.command {
         None => {

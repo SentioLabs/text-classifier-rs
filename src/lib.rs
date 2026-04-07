@@ -48,6 +48,7 @@ pub fn classify(text: &str) -> Classification {
 /// Main classifier combining Tier 1 (structural) and Tier 2 (model).
 pub struct Classifier {
     model: ModelClassifier,
+    min_score: Option<f32>,
 }
 
 impl Classifier {
@@ -55,6 +56,7 @@ impl Classifier {
     pub fn new() -> Self {
         Self {
             model: ModelClassifier::without_model(),
+            min_score: None,
         }
     }
 
@@ -66,6 +68,7 @@ impl Classifier {
     pub fn with_embedded_model() -> Self {
         Self {
             model: ModelClassifier::new(),
+            min_score: None,
         }
     }
 
@@ -73,7 +76,17 @@ impl Classifier {
     pub fn with_model(model_path: &str) -> Result<Self, String> {
         Ok(Self {
             model: ModelClassifier::with_model(model_path)?,
+            min_score: None,
         })
+    }
+
+    /// Set a minimum score threshold for `sub_type_scores` and `detections`.
+    ///
+    /// Scores below this threshold are dropped from the output.
+    /// Default is `None` (no filtering — all scores included).
+    pub fn min_score(mut self, threshold: f32) -> Self {
+        self.min_score = Some(threshold);
+        self
     }
 
     /// Classify a single text string.
@@ -107,12 +120,18 @@ impl Classifier {
 
         let features = features::extract_features(text);
 
-        if self.model.has_model() {
-            return self.model.classify(&features);
+        let mut result = if self.model.has_model() {
+            self.model.classify(&features)
+        } else {
+            tier1::classify_tier1(&features)
+        };
+
+        if let Some(threshold) = self.min_score {
+            filter_scores(&mut result.sub_type_scores, threshold);
+            filter_scores(&mut result.detections, threshold);
         }
 
-        // No model loaded — use Tier 1 rules
-        tier1::classify_tier1(&features)
+        result
     }
 
     /// Classify multiple texts in parallel using rayon.
@@ -125,6 +144,13 @@ impl Classifier {
     pub fn extract_features(&self, text: &str) -> FeatureVector {
         features::extract_features(text)
     }
+}
+
+fn filter_scores(scores: &mut BTreeMap<TextCategory, Vec<types::Detection>>, threshold: f32) {
+    scores.retain(|_, detections| {
+        detections.retain(|d| d.score >= threshold);
+        !detections.is_empty()
+    });
 }
 
 impl Default for Classifier {
