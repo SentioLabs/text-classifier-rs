@@ -46,6 +46,17 @@ impl Classifier {
         }
     }
 
+    /// Create a classifier with the embedded ONNX model for Tier 2.
+    ///
+    /// When compiled with `--features onnx-model`, loads the model
+    /// baked into the binary at compile time. Without the feature,
+    /// this is equivalent to `new()`.
+    pub fn with_embedded_model() -> Self {
+        Self {
+            model: ModelClassifier::new(),
+        }
+    }
+
     /// Create a classifier with a fasttext model for Tier 2.
     pub fn with_model(model_path: &str) -> Result<Self, String> {
         Ok(Self {
@@ -55,10 +66,9 @@ impl Classifier {
 
     /// Classify a single text string.
     ///
-    /// 1. Short text (< 5 words) -> Skip
-    /// 2. Tier 1 structural features -> if confidence >= 0.95, return
-    /// 3. Tier 2 model (if loaded) -> return model decision
-    /// 4. No model -> return low-confidence fallback
+    /// When the ONNX model is loaded, all non-trivial samples go through
+    /// the model (model-first). When no model is available, falls back
+    /// to Tier 1 rule-based classification.
     pub fn classify(&self, text: &str) -> Classification {
         if text.trim().is_empty() || tier1::is_too_short(text) {
             return Classification {
@@ -72,16 +82,13 @@ impl Classifier {
         }
 
         let features = features::extract_features(text);
-        let tier1_result = tier1::classify_tier1(&features);
 
-        // Only accept Tier 1 for very high-confidence short-circuits
-        let threshold = 0.95;
-        if tier1_result.confidence >= threshold {
-            return tier1_result;
+        if self.model.has_model() {
+            return self.model.classify(&features);
         }
 
-        // Otherwise, fall through to Tier 2
-        self.model.classify(&features)
+        // No model loaded — use Tier 1 rules
+        tier1::classify_tier1(&features)
     }
 
     /// Classify multiple texts in parallel using rayon.

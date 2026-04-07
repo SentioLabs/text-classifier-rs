@@ -286,7 +286,7 @@ impl Evaluator {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let classifier = Classifier::new();
+    let classifier = Classifier::with_embedded_model();
 
     match cli.command {
         None => {
