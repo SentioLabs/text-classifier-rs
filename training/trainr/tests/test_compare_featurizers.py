@@ -1,8 +1,4 @@
-import json
-import tempfile
-from pathlib import Path
-
-from trainr.core.compare_featurizers import compare_features, ComparisonReport
+from trainr.core.compare_featurizers import ComparisonReport
 
 
 def test_comparison_report_structure():
