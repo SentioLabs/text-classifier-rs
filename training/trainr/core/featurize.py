@@ -950,8 +950,16 @@ def extract_all(text: str) -> dict[str, float]:
     if not text:
         return {name: 0.0 for name in FEATURES}
 
-    sample = _normalize_escaped_newlines(text[:SAMPLE_SIZE])
-    return {name: fn(sample) for name, fn in FEATURES.items()}
+    raw_sample = text[:SAMPLE_SIZE]
+    sample = _normalize_escaped_newlines(raw_sample)
+
+    # json_lines_ratio must run on raw text (before newline normalization)
+    # because normalization breaks JSONL structure: {"text": "hello\nworld"}
+    # becomes two lines, destroying the {..} line pattern.
+    result: dict[str, float] = {}
+    for name, fn in FEATURES.items():
+        result[name] = fn(raw_sample) if name == "json_lines_ratio" else fn(sample)
+    return result
 
 
 # ---------------------------------------------------------------------------
