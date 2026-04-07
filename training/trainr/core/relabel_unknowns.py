@@ -10,9 +10,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import random
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import openai
 import polars as pl
@@ -146,27 +148,45 @@ async def _classify_one_llm(
     text: str,
     model: str,
     semaphore: asyncio.Semaphore,
+    pbar: Any = None,
+    max_retries: int = 5,
 ) -> str:
-    """Single LLM classification call."""
+    """Single LLM classification call with exponential backoff on 429s."""
     async with semaphore:
-        try:
-            response = await client.chat.completions.create(
-                model=model,
-                max_tokens=16,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": CLASSIFY_PROMPT.format(
-                            text=text[:MAX_TEXT_LEN]
-                        ),
-                    }
-                ],
-            )
-            answer = response.choices[0].message.content or ""
-            return _parse_llm_label(answer)
-        except Exception as exc:
-            print(f"  LLM error: {exc}", file=sys.stderr)
-            return "other"
+        for attempt in range(max_retries + 1):
+            try:
+                response = await client.chat.completions.create(
+                    model=model,
+                    max_tokens=16,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": CLASSIFY_PROMPT.format(
+                                text=text[:MAX_TEXT_LEN]
+                            ),
+                        }
+                    ],
+                )
+                answer = response.choices[0].message.content or ""
+                label = _parse_llm_label(answer)
+                if pbar is not None:
+                    pbar.update(1)
+                return label
+            except openai.RateLimitError:
+                if attempt < max_retries:
+                    wait = 2 ** attempt + random.random()
+                    await asyncio.sleep(wait)
+                    continue
+                print("  LLM rate limit: max retries exceeded", file=sys.stderr)
+                if pbar is not None:
+                    pbar.update(1)
+                return "other"
+            except Exception as exc:
+                print(f"  LLM error: {exc}", file=sys.stderr)
+                if pbar is not None:
+                    pbar.update(1)
+                return "other"
+        return "other"
 
 
 async def classify_batch_llm(
@@ -176,9 +196,17 @@ async def classify_batch_llm(
     concurrency: int,
 ) -> list[str]:
     """Classify a batch of texts concurrently via LLM."""
+    from tqdm import tqdm
+
     semaphore = asyncio.Semaphore(concurrency)
-    tasks = [_classify_one_llm(client, t, model, semaphore) for t in texts]
-    return await asyncio.gather(*tasks)
+    pbar = tqdm(total=len(texts), desc="    LLM voting", file=sys.stderr)
+    tasks = [
+        _classify_one_llm(client, t, model, semaphore, pbar)
+        for t in texts
+    ]
+    results = await asyncio.gather(*tasks)
+    pbar.close()
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +287,7 @@ def apply_voted_labels(
     map_rows: list[dict] = []
     manual_review_count = 0
     for idx, label in zip(indices, labels):
-        if label == "manual_review":
+        if label in ("manual_review", "unknown"):
             manual_review_count += 1
             continue  # leave row unchanged
         if label == "drop":
