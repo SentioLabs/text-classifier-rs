@@ -94,7 +94,8 @@ pub fn extract_features(text: &str) -> FeatureVector {
         list_item_ratio: compute_list_item_ratio(&non_empty, n_non_empty),
         parenthesis_density: compute_parenthesis_density(sample, total_chars),
         section_header_ratio: compute_section_header_ratio(&non_empty, n_non_empty),
-        json_lines_ratio: compute_json_lines_ratio(&non_empty, n_non_empty),
+        json_lines_ratio: compute_json_lines_ratio(truncated),
+        shebang_present: compute_shebang_present(sample),
         line_count: n_lines,
     }
 }
@@ -972,62 +973,129 @@ fn compute_operator_density(text: &str, total_chars: f32) -> f32 {
 /// Inline markup patterns per 1000 characters.
 /// Detects **bold**, `code`, *italic*, [link](url).
 fn compute_inline_markup_count(text: &str, total_chars: f32) -> f32 {
+    // Mirrors Python regex: **bold** | `code` | *italic* | [link](url)
+    // Uses a single-pass scan to match Python's re.findall (non-overlapping).
+    let bytes = text.as_bytes();
+    let len = bytes.len();
     let mut count = 0usize;
+    let mut i = 0;
 
-    // Count **bold** patterns
-    let mut rest = text;
-    while let Some(start) = rest.find("**") {
-        let after = &rest[start + 2..];
-        if let Some(end) = after.find("**") {
-            if end > 0 {
+    while i < len {
+        if bytes[i] == b'*' && i + 1 < len && bytes[i + 1] == b'*' {
+            // Try **bold**: \*\*[^*]+\*\*
+            if let Some(end) = find_bold_end(bytes, i + 2) {
                 count += 1;
+                i = end;
+                continue;
             }
-            rest = &after[end + 2..];
-        } else {
-            break;
         }
-    }
-
-    // Count `code` patterns
-    rest = text;
-    while let Some(start) = rest.find('`') {
-        let after = &rest[start + 1..];
-        if let Some(stripped) = after.strip_prefix('`') {
-            // Skip `` (double backtick)
-            rest = stripped;
-            continue;
-        }
-        if let Some(end) = after.find('`') {
-            if end > 0 {
+        if bytes[i] == b'`' {
+            // Try `code`: `[^`]+`
+            if let Some(end) = find_backtick_end(bytes, i + 1) {
                 count += 1;
+                i = end;
+                continue;
             }
-            rest = &after[end + 1..];
-        } else {
-            break;
         }
-    }
-
-    // Count [link](url) patterns
-    rest = text;
-    while let Some(start) = rest.find("](") {
-        // Check for [ before ]
-        let before = &rest[..start];
-        if before.rfind('[').is_some() {
-            let after = &rest[start + 2..];
-            if let Some(end) = after.find(')') {
-                if end > 0 {
-                    count += 1;
-                }
-                rest = &after[end + 1..];
-            } else {
-                break;
+        if bytes[i] == b'*' {
+            // Try *italic*: \*[^*\s][^*]*\*
+            if let Some(end) = find_italic_end(bytes, i + 1) {
+                count += 1;
+                i = end;
+                continue;
             }
-        } else {
-            rest = &rest[start + 2..];
         }
+        if bytes[i] == b'[' {
+            // Try [link](url): \[[^\]]+\]\([^)]+\)
+            if let Some(end) = find_link_end(bytes, i + 1) {
+                count += 1;
+                i = end;
+                continue;
+            }
+        }
+        i += 1;
     }
 
     count as f32 / total_chars * 1000.0
+}
+
+/// Match `[^*]+\*\*` starting at `start` (after the opening `**`).
+fn find_bold_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut i = start;
+    let len = bytes.len();
+    // Must have at least one non-* char
+    if i >= len || bytes[i] == b'*' {
+        return None;
+    }
+    while i < len {
+        if bytes[i] == b'*' && i + 1 < len && bytes[i + 1] == b'*' {
+            return Some(i + 2);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Match `[^`]+`` starting at `start` (after the opening backtick).
+fn find_backtick_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut i = start;
+    let len = bytes.len();
+    if i >= len || bytes[i] == b'`' {
+        return None;
+    }
+    while i < len {
+        if bytes[i] == b'`' {
+            return Some(i + 1);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Match `[^*\s][^*]*\*` starting at `start` (after the opening `*`).
+fn find_italic_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut i = start;
+    let len = bytes.len();
+    // First char must be non-* and non-whitespace
+    if i >= len || bytes[i] == b'*' || bytes[i].is_ascii_whitespace() {
+        return None;
+    }
+    i += 1;
+    while i < len {
+        if bytes[i] == b'*' {
+            return Some(i + 1);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Match `[^\]]+\]\([^)]+\)` starting at `start` (after the opening `[`).
+fn find_link_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut i = start;
+    let len = bytes.len();
+    // Must have at least one non-] char
+    if i >= len || bytes[i] == b']' {
+        return None;
+    }
+    // Find ]
+    while i < len && bytes[i] != b']' {
+        i += 1;
+    }
+    // Must be followed by ](
+    if i + 1 >= len || bytes[i + 1] != b'(' {
+        return None;
+    }
+    i += 2; // skip ](
+    let paren_start = i;
+    // Find ) with at least one char inside
+    while i < len && bytes[i] != b')' {
+        i += 1;
+    }
+    if i >= len || i == paren_start {
+        return None;
+    }
+    Some(i + 1)
 }
 
 /// Whether indentation follows a regular pattern (0.0-1.0).
@@ -1250,8 +1318,14 @@ fn is_section_header(trimmed: &str) -> bool {
 }
 
 /// Fraction of non-empty lines that look like JSON lines (start with `{`, end with `}`).
-fn compute_json_lines_ratio(non_empty: &[&str], n_non_empty: usize) -> f32 {
-    if n_non_empty == 0 {
+///
+/// Must be computed on **raw** text (before `\n` normalization) because
+/// normalization splits embedded newlines inside JSON strings, destroying
+/// the `{…}` single-line pattern that defines JSONL.
+fn compute_json_lines_ratio(raw: &str) -> f32 {
+    let non_empty: Vec<&str> = raw.lines().filter(|l| !l.trim().is_empty()).collect();
+    let n = non_empty.len();
+    if n == 0 {
         return 0.0;
     }
 
@@ -1262,5 +1336,14 @@ fn compute_json_lines_ratio(non_empty: &[&str], n_non_empty: usize) -> f32 {
             trimmed.starts_with('{') && trimmed.ends_with('}')
         })
         .count();
-    count as f32 / n_non_empty as f32
+    count as f32 / n as f32
+}
+
+/// 1.0 if the text starts with a shebang (`#!`), 0.0 otherwise.
+fn compute_shebang_present(sample: &str) -> f32 {
+    if sample.trim_start().starts_with("#!") {
+        1.0
+    } else {
+        0.0
+    }
 }

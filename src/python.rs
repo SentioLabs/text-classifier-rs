@@ -21,11 +21,14 @@ struct PyClassification {
     tier: String,
     #[pyo3(get)]
     detections: String,
+    #[pyo3(get)]
+    sub_type_scores: String,
 }
 
 impl From<Classification> for PyClassification {
     fn from(c: Classification) -> Self {
         let detections = serde_json::to_string(&c.detections).unwrap_or_default();
+        let sub_type_scores = serde_json::to_string(&c.sub_type_scores).unwrap_or_default();
         PyClassification {
             category: c.category.to_string(),
             sub_type: c.sub_type.map(|s| s.label().to_string()),
@@ -34,6 +37,7 @@ impl From<Classification> for PyClassification {
             reason: c.reason,
             tier: c.tier.to_string(),
             detections,
+            sub_type_scores,
         }
     }
 }
@@ -73,10 +77,13 @@ struct PyClassifier {
 #[pymethods]
 impl PyClassifier {
     #[new]
-    fn new() -> PyResult<Self> {
-        Ok(PyClassifier {
-            inner: RustClassifier::new(),
-        })
+    #[pyo3(signature = (min_score=None))]
+    fn new(min_score: Option<f32>) -> PyResult<Self> {
+        let mut clf = RustClassifier::with_embedded_model();
+        if let Some(threshold) = min_score {
+            clf = clf.min_score(threshold);
+        }
+        Ok(PyClassifier { inner: clf })
     }
 
     fn classify(&self, text: &str) -> PyClassification {
@@ -113,14 +120,36 @@ impl PyClassifier {
         dict.set_item("comment_ratio", f.comment_ratio)?;
         dict.set_item("numeric_field_ratio", f.numeric_field_ratio)?;
         dict.set_item("repetitive_structure_score", f.repetitive_structure_score)?;
-        dict.set_item("line_count", f.line_count)?;
+        dict.set_item("hyphenated_line_break_ratio", f.hyphenated_line_break_ratio)?;
+        dict.set_item("short_repeated_line_ratio", f.short_repeated_line_ratio)?;
+        dict.set_item("page_number_density", f.page_number_density)?;
+        dict.set_item("label_value_line_ratio", f.label_value_line_ratio)?;
+        dict.set_item("table_fragment_score", f.table_fragment_score)?;
+        dict.set_item("uppercase_header_ratio", f.uppercase_header_ratio)?;
+        dict.set_item("dictionary_word_ratio", f.dictionary_word_ratio)?;
+        dict.set_item("encoding_error_ratio", f.encoding_error_ratio)?;
+        dict.set_item("repeated_ngram_ratio", f.repeated_ngram_ratio)?;
+        dict.set_item("sentence_coherence_score", f.sentence_coherence_score)?;
+        dict.set_item("avg_words_per_line", f.avg_words_per_line)?;
+        dict.set_item("operator_density", f.operator_density)?;
+        dict.set_item("inline_markup_count", f.inline_markup_count)?;
+        dict.set_item("indentation_consistency", f.indentation_consistency)?;
+        dict.set_item("markup_heading_ratio", f.markup_heading_ratio)?;
+        dict.set_item("code_fence_density", f.code_fence_density)?;
+        dict.set_item("prose_paragraph_ratio", f.prose_paragraph_ratio)?;
+        dict.set_item("semicolon_line_ending_ratio", f.semicolon_line_ending_ratio)?;
+        dict.set_item("list_item_ratio", f.list_item_ratio)?;
+        dict.set_item("parenthesis_density", f.parenthesis_density)?;
+        dict.set_item("section_header_ratio", f.section_header_ratio)?;
+        dict.set_item("json_lines_ratio", f.json_lines_ratio)?;
+        dict.set_item("shebang_present", f.shebang_present)?;
         Ok(dict)
     }
 }
 
 #[pyfunction]
 fn classify(text: &str) -> PyClassification {
-    let classifier = RustClassifier::new();
+    let classifier = RustClassifier::with_embedded_model();
     classifier.classify(text).into()
 }
 
@@ -195,6 +224,7 @@ mod tests {
             reason: "prose detected".to_string(),
             tier: Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
         let py_c = PyClassification::from(c);
         let parsed: serde_json::Value =

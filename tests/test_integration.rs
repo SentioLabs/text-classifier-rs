@@ -127,18 +127,19 @@ fn end_to_end_shell_code() {
 // --- Basic skip tests ---
 
 #[test]
-fn short_text_is_skip() {
+fn short_text_is_low_confidence_prose() {
     let clf = Classifier::new();
     let result = clf.classify("hello");
-    assert_eq!(result.category, TextCategory::Skip);
-    assert_eq!(result.confidence, 1.0);
+    assert_eq!(result.category, TextCategory::Prose);
+    assert!((result.confidence - 0.5).abs() < f32::EPSILON);
 }
 
 #[test]
-fn empty_text_is_skip() {
+fn empty_text_is_zero_confidence_prose() {
     let clf = Classifier::new();
     let result = clf.classify("");
-    assert_eq!(result.category, TextCategory::Skip);
+    assert_eq!(result.category, TextCategory::Prose);
+    assert_eq!(result.confidence, 0.0);
 }
 
 #[test]
@@ -151,7 +152,7 @@ fn batch_classification_works() {
     ];
     let results = clf.classify_batch(&texts);
     assert_eq!(results.len(), 3);
-    assert_eq!(results[2].category, TextCategory::Skip);
+    assert_eq!(results[2].category, TextCategory::Prose);
 }
 
 #[test]
