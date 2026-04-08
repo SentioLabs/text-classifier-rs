@@ -249,15 +249,17 @@ impl ModelClassifier {
                 reason: "no model — fallback: moderate prose signals".to_string(),
                 tier: Tier::Structural,
                 detections: BTreeMap::new(),
+                sub_type_scores: BTreeMap::new(),
             }
         } else {
             Classification {
-                category: TextCategory::Skip,
+                category: TextCategory::Prose,
                 sub_type: None,
-                confidence: 0.5,
+                confidence: 0.3,
                 reason: "no model — fallback: insufficient prose signals".to_string(),
                 tier: Tier::Structural,
                 detections: BTreeMap::new(),
+                sub_type_scores: BTreeMap::new(),
             }
         }
     }
@@ -265,7 +267,7 @@ impl ModelClassifier {
 
 /// Number of features in the feature vector (must match model input size).
 #[cfg(any(feature = "onnx-model", test))]
-const NUM_FEATURES: usize = 40;
+const NUM_FEATURES: usize = 41;
 
 /// Extract features from a FeatureVector in model-expected order.
 #[cfg(any(feature = "onnx-model", test))]
@@ -312,6 +314,7 @@ fn feature_vector_to_array(f: &FeatureVector) -> [f32; NUM_FEATURES] {
         f.parenthesis_density,
         f.section_header_ratio,
         f.json_lines_ratio,
+        f.shebang_present,
     ]
 }
 
@@ -339,7 +342,7 @@ fn parse_category(s: &str) -> TextCategory {
         "prose" => TextCategory::Prose,
         "code" => TextCategory::Code,
         "structured" => TextCategory::Structured,
-        _ => TextCategory::Skip,
+        _ => TextCategory::Prose,
     }
 }
 
@@ -364,8 +367,11 @@ fn parse_sub_type(s: &str) -> ContentSubType {
         "ini" | "ini_config" => ContentSubType::Ini,
         "dockerfile" => ContentSubType::Dockerfile,
         "makefile" => ContentSubType::Makefile,
+        "c_cpp" => ContentSubType::CCpp,
+        "objc" => ContentSubType::ObjC,
         "html" => ContentSubType::Html,
-        "xml" | "sgml" => ContentSubType::Xml,
+        "xml" => ContentSubType::Xml,
+        "sgml" => ContentSubType::Sgml,
         "csv" | "csv_data" => ContentSubType::Csv,
         "tsv" | "tsv_data" => ContentSubType::Tsv,
         "pipe_table" => ContentSubType::PipeTable,
@@ -447,7 +453,7 @@ fn build_classification(
     let (marginalized_cat, marginalized_conf) = cat_accum
         .into_iter()
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .unwrap_or((TextCategory::Skip, 0.0));
+        .unwrap_or((TextCategory::Prose, 0.0));
 
     let detections = match (det_logits, inv_det) {
         (Some(logits), Some(inv_det)) => {
@@ -456,6 +462,28 @@ fn build_classification(
         }
         _ => BTreeMap::new(),
     };
+
+    // Full sub-type probability distribution (no threshold filtering)
+    let mut sub_type_scores: BTreeMap<TextCategory, Vec<Detection>> = BTreeMap::new();
+    for (idx, &prob) in sub_probs.iter().enumerate() {
+        let label = inv_sub.get(&idx).map(|s| s.as_str()).unwrap_or("unknown");
+        let sub_type = parse_sub_type(label);
+        let category = sub_type.category();
+        sub_type_scores
+            .entry(category)
+            .or_default()
+            .push(Detection {
+                sub_type,
+                score: prob,
+            });
+    }
+    for scores in sub_type_scores.values_mut() {
+        scores.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
 
     Classification {
         category: marginalized_cat,
@@ -466,6 +494,7 @@ fn build_classification(
         ),
         tier: Tier::Model,
         detections,
+        sub_type_scores,
     }
 }
 
@@ -531,9 +560,9 @@ mod tests {
         assert_eq!(parse_category("prose"), TextCategory::Prose);
         assert_eq!(parse_category("code"), TextCategory::Code);
         assert_eq!(parse_category("structured"), TextCategory::Structured);
-        assert_eq!(parse_category("skip"), TextCategory::Skip);
-        assert_eq!(parse_category("artifact"), TextCategory::Skip); // removed category falls to default
-        assert_eq!(parse_category("unknown_value"), TextCategory::Skip);
+        assert_eq!(parse_category("skip"), TextCategory::Prose);
+        assert_eq!(parse_category("artifact"), TextCategory::Prose); // removed category falls to default
+        assert_eq!(parse_category("unknown_value"), TextCategory::Prose);
     }
 
     #[test]
@@ -577,12 +606,12 @@ mod tests {
     }
 
     #[test]
-    fn test_fallback_skip() {
+    fn test_fallback_low_confidence_prose() {
         let classifier = ModelClassifier::without_model();
         let features = skip_features();
         let result = classifier.classify(&features);
-        assert_eq!(result.category, TextCategory::Skip);
-        assert!((result.confidence - 0.5).abs() < f32::EPSILON);
+        assert_eq!(result.category, TextCategory::Prose);
+        assert!((result.confidence - 0.3).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -736,10 +765,10 @@ mod tests {
         let scores = vec![0.9];
         let result = build_detections(&scores, &inv_map, 0.5);
 
-        // "unknown" label maps to ContentSubType::Unknown, category Skip
-        assert!(result.contains_key(&TextCategory::Skip));
+        // "unknown" label maps to ContentSubType::Unknown, category Prose
+        assert!(result.contains_key(&TextCategory::Prose));
         assert_eq!(
-            result[&TextCategory::Skip][0].sub_type,
+            result[&TextCategory::Prose][0].sub_type,
             ContentSubType::Unknown
         );
     }
@@ -757,12 +786,11 @@ mod tests {
         use std::collections::HashMap;
 
         // cat_probs: code is highest at 0.60
-        let cat_probs = vec![0.15, 0.60, 0.20, 0.05]; // prose, code, structured, skip
+        let cat_probs = vec![0.15, 0.60, 0.25]; // prose, code, structured
         let mut inv_cat = HashMap::new();
         inv_cat.insert(0, "prose".to_string());
         inv_cat.insert(1, "code".to_string());
         inv_cat.insert(2, "structured".to_string());
-        inv_cat.insert(3, "skip".to_string());
 
         // sub_probs: ini(0.35) + key_value(0.30) + toml(0.15) = 0.80 for structured
         // remaining 0.20 spread across code sub-types
@@ -826,11 +854,11 @@ mod tests {
             DEFAULT_DETECTION_THRESHOLD,
         );
 
-        // Unknown sub-types map to ContentSubType::Unknown -> TextCategory::Skip
+        // Unknown sub-types map to ContentSubType::Unknown -> TextCategory::Prose
         assert_eq!(
             classification.category,
-            TextCategory::Skip,
-            "unknown sub-types should result in Skip category"
+            TextCategory::Prose,
+            "unknown sub-types should result in Prose category"
         );
     }
 
@@ -955,7 +983,7 @@ mod tests {
 
     #[cfg(feature = "onnx-model")]
     #[test]
-    fn test_model_config_has_40_features() {
+    fn test_model_config_has_expected_features() {
         let config: serde_json::Value =
             serde_json::from_str(CONFIG_JSON).expect("CONFIG_JSON should parse");
         let names = config["feature_names"]
@@ -963,8 +991,8 @@ mod tests {
             .expect("feature_names should be an array");
         assert_eq!(
             names.len(),
-            40,
-            "model_config.json should have 40 features, got {}",
+            NUM_FEATURES,
+            "model_config.json should have {NUM_FEATURES} features, got {}",
             names.len()
         );
     }

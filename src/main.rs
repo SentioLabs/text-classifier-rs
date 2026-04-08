@@ -15,6 +15,11 @@ struct Cli {
     #[arg(long)]
     human: bool,
 
+    /// Minimum score threshold for sub-type scores and detections.
+    /// Scores below this are dropped from output.
+    #[arg(long)]
+    min_score: Option<f32>,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -286,7 +291,10 @@ impl Evaluator {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let classifier = Classifier::new();
+    let mut classifier = Classifier::with_embedded_model();
+    if let Some(threshold) = cli.min_score {
+        classifier = classifier.min_score(threshold);
+    }
 
     match cli.command {
         None => {
@@ -457,13 +465,7 @@ fn classify_file(
         let mut doc: serde_json::Value = serde_json::from_str(&line)?;
         if let Some(text) = resolve_field(&doc, text_field) {
             let result = classifier.classify(text);
-            doc["_classification"] = serde_json::json!({
-                "category": result.category,
-                "sub_type": result.sub_type,
-                "confidence": result.confidence,
-                "reason": result.reason,
-                "tier": result.tier,
-            });
+            doc["_classification"] = serde_json::to_value(&result)?;
         } else {
             missing_field += 1;
         }
@@ -590,10 +592,21 @@ fn extract_features_file(
     let reader = open_reader(input)?;
     let mut out = io::BufWriter::new(std::fs::File::create(output)?);
 
-    // CSV header
+    // CSV header — all 41 model features in model-expected order
     writeln!(
         out,
-        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,short_line_ratio,symbol_ratio,delimiter_consistency,json_brace_depth,key_value_ratio,xml_tag_ratio,log_line_ratio,comment_ratio,numeric_field_ratio,repetitive_structure_score,line_count"
+        "line_length_cv,char_entropy,leading_whitespace_ratio,tab_density,\
+         sentence_punctuation_rate,paragraph_break_rate,alpha_ratio,line_uniqueness,\
+         short_line_ratio,symbol_ratio,delimiter_consistency,json_brace_depth,\
+         key_value_ratio,xml_tag_ratio,log_line_ratio,comment_ratio,\
+         numeric_field_ratio,repetitive_structure_score,hyphenated_line_break_ratio,\
+         short_repeated_line_ratio,page_number_density,label_value_line_ratio,\
+         table_fragment_score,uppercase_header_ratio,dictionary_word_ratio,\
+         encoding_error_ratio,repeated_ngram_ratio,sentence_coherence_score,\
+         avg_words_per_line,operator_density,inline_markup_count,\
+         indentation_consistency,markup_heading_ratio,code_fence_density,\
+         prose_paragraph_ratio,semicolon_line_ending_ratio,list_item_ratio,\
+         parenthesis_density,section_header_ratio,json_lines_ratio,shebang_present"
     )?;
 
     let mut count = 0;
@@ -608,7 +621,11 @@ fn extract_features_file(
             let f = classifier.extract_features(text);
             writeln!(
                 out,
-                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{}",
+                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},\
+                 {:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},\
+                 {:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},\
+                 {:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},\
+                 {:.4}",
                 f.line_length_cv,
                 f.char_entropy,
                 f.leading_whitespace_ratio,
@@ -627,7 +644,29 @@ fn extract_features_file(
                 f.comment_ratio,
                 f.numeric_field_ratio,
                 f.repetitive_structure_score,
-                f.line_count
+                f.hyphenated_line_break_ratio,
+                f.short_repeated_line_ratio,
+                f.page_number_density,
+                f.label_value_line_ratio,
+                f.table_fragment_score,
+                f.uppercase_header_ratio,
+                f.dictionary_word_ratio,
+                f.encoding_error_ratio,
+                f.repeated_ngram_ratio,
+                f.sentence_coherence_score,
+                f.avg_words_per_line,
+                f.operator_density,
+                f.inline_markup_count,
+                f.indentation_consistency,
+                f.markup_heading_ratio,
+                f.code_fence_density,
+                f.prose_paragraph_ratio,
+                f.semicolon_line_ending_ratio,
+                f.list_item_ratio,
+                f.parenthesis_density,
+                f.section_header_ratio,
+                f.json_lines_ratio,
+                f.shebang_present,
             )?;
             count += 1;
         }
@@ -696,6 +735,29 @@ fn label_corpus(
                     "comment_ratio": features.comment_ratio,
                     "numeric_field_ratio": features.numeric_field_ratio,
                     "repetitive_structure_score": features.repetitive_structure_score,
+                    "hyphenated_line_break_ratio": features.hyphenated_line_break_ratio,
+                    "short_repeated_line_ratio": features.short_repeated_line_ratio,
+                    "page_number_density": features.page_number_density,
+                    "label_value_line_ratio": features.label_value_line_ratio,
+                    "table_fragment_score": features.table_fragment_score,
+                    "uppercase_header_ratio": features.uppercase_header_ratio,
+                    "dictionary_word_ratio": features.dictionary_word_ratio,
+                    "encoding_error_ratio": features.encoding_error_ratio,
+                    "repeated_ngram_ratio": features.repeated_ngram_ratio,
+                    "sentence_coherence_score": features.sentence_coherence_score,
+                    "avg_words_per_line": features.avg_words_per_line,
+                    "operator_density": features.operator_density,
+                    "inline_markup_count": features.inline_markup_count,
+                    "indentation_consistency": features.indentation_consistency,
+                    "markup_heading_ratio": features.markup_heading_ratio,
+                    "code_fence_density": features.code_fence_density,
+                    "prose_paragraph_ratio": features.prose_paragraph_ratio,
+                    "semicolon_line_ending_ratio": features.semicolon_line_ending_ratio,
+                    "list_item_ratio": features.list_item_ratio,
+                    "parenthesis_density": features.parenthesis_density,
+                    "section_header_ratio": features.section_header_ratio,
+                    "json_lines_ratio": features.json_lines_ratio,
+                    "shebang_present": features.shebang_present,
                 });
             }
 
@@ -943,7 +1005,7 @@ mod tests {
             .get("features")
             .expect("features should be present when with_features is true");
         assert!(features.is_object());
-        // Check all 18 feature fields are present
+        // Check all 41 feature fields are present
         let expected_fields = [
             "line_length_cv",
             "char_entropy",
@@ -963,6 +1025,29 @@ mod tests {
             "comment_ratio",
             "numeric_field_ratio",
             "repetitive_structure_score",
+            "hyphenated_line_break_ratio",
+            "short_repeated_line_ratio",
+            "page_number_density",
+            "label_value_line_ratio",
+            "table_fragment_score",
+            "uppercase_header_ratio",
+            "dictionary_word_ratio",
+            "encoding_error_ratio",
+            "repeated_ngram_ratio",
+            "sentence_coherence_score",
+            "avg_words_per_line",
+            "operator_density",
+            "inline_markup_count",
+            "indentation_consistency",
+            "markup_heading_ratio",
+            "code_fence_density",
+            "prose_paragraph_ratio",
+            "semicolon_line_ending_ratio",
+            "list_item_ratio",
+            "parenthesis_density",
+            "section_header_ratio",
+            "json_lines_ratio",
+            "shebang_present",
         ];
         for field in &expected_fields {
             assert!(
@@ -998,6 +1083,7 @@ mod tests {
             reason: "high alpha ratio".to_string(),
             tier: text_classifier::Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert_eq!(output, "prose (confidence: 0.95, tier: structural)");
@@ -1012,6 +1098,7 @@ mod tests {
             reason: "config detected".to_string(),
             tier: text_classifier::Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert_eq!(output, "code/yaml (confidence: 0.85, tier: structural)");
@@ -1100,6 +1187,7 @@ mod tests {
             reason: "model".to_string(),
             tier: text_classifier::Tier::Model,
             detections,
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert!(output.contains("detections:"));
@@ -1137,6 +1225,7 @@ mod tests {
             reason: "model".to_string(),
             tier: text_classifier::Tier::Model,
             detections,
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         // Should contain detections sorted by score descending
@@ -1162,6 +1251,7 @@ mod tests {
             reason: "high alpha ratio".to_string(),
             tier: text_classifier::Tier::Structural,
             detections: BTreeMap::new(),
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         assert!(!output.contains("detections:"));
@@ -1186,6 +1276,7 @@ mod tests {
             reason: "model".to_string(),
             tier: text_classifier::Tier::Model,
             detections,
+            sub_type_scores: BTreeMap::new(),
         };
         let output = format_human_friendly(&result);
         // Score 0.40 is below 0.5 threshold, so no detections suffix

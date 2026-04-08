@@ -27,7 +27,6 @@ fn contract_text_category_variants() {
     let _: TextCategory = TextCategory::Prose;
     let _: TextCategory = TextCategory::Code;
     let _: TextCategory = TextCategory::Structured;
-    let _: TextCategory = TextCategory::Skip;
 }
 
 #[test]
@@ -43,7 +42,7 @@ fn contract_content_sub_type_category_mapping() {
         ContentSubType::LogLines.category(),
         TextCategory::Structured
     );
-    assert_eq!(ContentSubType::Unknown.category(), TextCategory::Skip);
+    assert_eq!(ContentSubType::Unknown.category(), TextCategory::Prose);
 }
 
 #[test]
@@ -62,6 +61,7 @@ fn contract_classification_has_category_and_sub_type() {
         reason: "test".to_string(),
         tier: Tier::Structural,
         detections: BTreeMap::new(),
+        sub_type_scores: BTreeMap::new(),
     };
     assert_eq!(c.category, TextCategory::Code);
     assert_eq!(c.sub_type, Some(ContentSubType::Python));
@@ -101,7 +101,6 @@ fn contract_text_category_display() {
     assert_eq!(TextCategory::Prose.to_string(), "prose");
     assert_eq!(TextCategory::Code.to_string(), "code");
     assert_eq!(TextCategory::Structured.to_string(), "structured");
-    assert_eq!(TextCategory::Skip.to_string(), "skip");
 }
 
 #[test]
@@ -109,7 +108,6 @@ fn contract_text_category_is_prose() {
     assert!(TextCategory::Prose.is_prose());
     assert!(!TextCategory::Code.is_prose());
     assert!(!TextCategory::Structured.is_prose());
-    assert!(!TextCategory::Skip.is_prose());
 }
 
 #[test]
@@ -138,6 +136,7 @@ fn contract_classification_text_type_deprecated_accessor() {
         reason: "test".to_string(),
         tier: Tier::Structural,
         detections: BTreeMap::new(),
+        sub_type_scores: BTreeMap::new(),
     };
     assert_eq!(c.text_type(), TextCategory::Code);
 }
@@ -200,7 +199,7 @@ fn contract_content_sub_type_all_category_mappings() {
     assert_eq!(ContentSubType::Ini.category(), TextCategory::Structured);
 
     // Fallback
-    assert_eq!(ContentSubType::Unknown.category(), TextCategory::Skip);
+    assert_eq!(ContentSubType::Unknown.category(), TextCategory::Prose);
 }
 
 #[test]
@@ -271,29 +270,24 @@ fn contract_feature_vector_zeroed_all_zero() {
     assert_eq!(f.line_count, 0);
 }
 
-/// Verify that TextCategory has exactly 4 variants after simplification.
+/// Verify that TextCategory has exactly 3 variants: Prose, Code, Structured.
 #[test]
-fn contract_text_category_no_artifact_variants() {
-    // TextCategory should only have Prose, Code, Structured, Skip
-    // This test verifies the enum is exhaustive with exactly these 4 variants
+fn contract_text_category_exhaustive() {
     let categories = [
         TextCategory::Prose,
         TextCategory::Code,
         TextCategory::Structured,
-        TextCategory::Skip,
     ];
     for cat in &categories {
-        // Each variant should have a valid display string
         let s = cat.to_string();
         assert!(!s.is_empty());
     }
 }
 
-/// Verify that ContentSubType no longer has artifact or skip sub-types.
+/// Verify that ContentSubType::Unknown maps to Prose (safe fallback).
 #[test]
-fn contract_content_sub_type_no_artifact_skip_subtypes() {
-    // Unknown is the only fallback, mapping to Skip
-    assert_eq!(ContentSubType::Unknown.category(), TextCategory::Skip);
+fn contract_content_sub_type_unknown_maps_to_prose() {
+    assert_eq!(ContentSubType::Unknown.category(), TextCategory::Prose);
     assert_eq!(ContentSubType::Unknown.label(), "unknown");
 }
 
@@ -316,6 +310,7 @@ fn contract_classification_has_detections() {
         reason: "test".to_string(),
         tier: Tier::Model,
         detections: BTreeMap::new(),
+        sub_type_scores: BTreeMap::new(),
     };
     assert!(c.detections.is_empty());
 }
@@ -337,6 +332,7 @@ fn contract_classification_detections_serialized() {
         reason: "test".to_string(),
         tier: Tier::Model,
         detections,
+        sub_type_scores: BTreeMap::new(),
     };
     let json = serde_json::to_string(&c).unwrap();
     assert!(json.contains("detections"));

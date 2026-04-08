@@ -8,7 +8,6 @@ pub enum TextCategory {
     Prose,
     Code,
     Structured,
-    Skip,
 }
 
 /// Backward-compatible alias for `TextCategory`.
@@ -26,7 +25,6 @@ impl std::fmt::Display for TextCategory {
             TextCategory::Prose => write!(f, "prose"),
             TextCategory::Code => write!(f, "code"),
             TextCategory::Structured => write!(f, "structured"),
-            TextCategory::Skip => write!(f, "skip"),
         }
     }
 }
@@ -59,7 +57,9 @@ pub enum ContentSubType {
     Latex,
     // Code
     Python,
+    #[serde(rename = "javascript")]
     JavaScript,
+    #[serde(rename = "typescript")]
     TypeScript,
     Rust,
     Go,
@@ -70,6 +70,10 @@ pub enum ContentSubType {
     // Code > Config
     Dockerfile,
     Makefile,
+    // Code > Native
+    CCpp,
+    #[serde(rename = "objc")]
+    ObjC,
     // Code > Markup
     Html,
     Xml,
@@ -114,6 +118,8 @@ impl ContentSubType {
             | ContentSubType::Css
             | ContentSubType::Dockerfile
             | ContentSubType::Makefile
+            | ContentSubType::CCpp
+            | ContentSubType::ObjC
             | ContentSubType::Html
             | ContentSubType::Xml
             | ContentSubType::Sgml => TextCategory::Code,
@@ -132,7 +138,7 @@ impl ContentSubType {
             | ContentSubType::Ini => TextCategory::Structured,
 
             // Fallback
-            ContentSubType::Unknown => TextCategory::Skip,
+            ContentSubType::Unknown => TextCategory::Prose,
         }
     }
 
@@ -157,6 +163,8 @@ impl ContentSubType {
             ContentSubType::Ini => "ini",
             ContentSubType::Dockerfile => "dockerfile",
             ContentSubType::Makefile => "makefile",
+            ContentSubType::CCpp => "c_cpp",
+            ContentSubType::ObjC => "objc",
             ContentSubType::Html => "html",
             ContentSubType::Xml => "xml",
             ContentSubType::Sgml => "sgml",
@@ -190,6 +198,10 @@ pub struct Classification {
     pub tier: Tier,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub detections: BTreeMap<TextCategory, Vec<Detection>>,
+    /// Full sub-type probability distribution from the softmax head,
+    /// grouped by parent category. All 31 sub-types, no threshold.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sub_type_scores: BTreeMap<TextCategory, Vec<Detection>>,
 }
 
 /// A detected sub-type with its confidence score.
@@ -251,6 +263,7 @@ pub struct FeatureVector {
     pub parenthesis_density: f32,
     pub section_header_ratio: f32,
     pub json_lines_ratio: f32,
+    pub shebang_present: f32,
     /// Number of lines in the sampled text. Used by rules that need
     /// a minimum sample size (e.g. tabular detection).
     pub line_count: usize,
@@ -300,6 +313,7 @@ impl FeatureVector {
             parenthesis_density: 0.0,
             section_header_ratio: 0.0,
             json_lines_ratio: 0.0,
+            shebang_present: 0.0,
             line_count: 0,
         }
     }

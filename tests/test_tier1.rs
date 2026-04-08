@@ -85,7 +85,7 @@ fn ambiguous_text_low_confidence() {
 // --- Default fallback behavior ---
 
 #[test]
-fn fallback_returns_low_confidence_skip() {
+fn fallback_returns_low_confidence_prose() {
     let features = FeatureVector {
         line_length_cv: 0.5,
         char_entropy: 3.5,
@@ -109,7 +109,7 @@ fn fallback_returns_low_confidence_skip() {
         ..FeatureVector::zeroed()
     };
     let result = classify_tier1(&features);
-    assert_eq!(result.category, TextCategory::Skip);
+    assert_eq!(result.category, TextCategory::Prose);
     assert!(
         result.confidence <= 0.40,
         "fallback confidence should be <= 0.40, got {}",
@@ -120,22 +120,23 @@ fn fallback_returns_low_confidence_skip() {
 // --- Existing basic tests updated for new thresholds ---
 
 #[test]
-fn short_text_classified_as_skip() {
+fn short_text_classified_as_low_confidence_prose() {
     let result = classify("hello world");
-    assert_eq!(result.category, TextCategory::Skip);
-    assert_eq!(result.confidence, 1.0);
+    assert_eq!(result.category, TextCategory::Prose);
+    assert!((result.confidence - 0.5).abs() < f32::EPSILON);
 }
 
 #[test]
-fn empty_text_classified_as_skip() {
+fn empty_text_classified_as_zero_confidence_prose() {
     let result = classify("");
-    assert_eq!(result.category, TextCategory::Skip);
+    assert_eq!(result.category, TextCategory::Prose);
+    assert_eq!(result.confidence, 0.0);
 }
 
 #[test]
-fn empty_features_classified_as_skip() {
+fn empty_features_classified_as_zero_confidence_prose() {
     let features = FeatureVector::zeroed();
     let result = classify_tier1(&features);
-    assert_eq!(result.category, TextCategory::Skip);
-    assert_eq!(result.confidence, 1.0);
+    assert_eq!(result.category, TextCategory::Prose);
+    assert_eq!(result.confidence, 0.0);
 }
