@@ -429,3 +429,40 @@ class TestRoutingAnnotation:
         assert len(calls) == 1
         assert calls[0]["api_key"] == "anthropic-key"
         assert calls[0]["backend"] == "anthropic"
+
+
+class TestSemanticLabels:
+    """Detection labels that are NOT mirrored by a ContentSubType.
+
+    These are cross-cutting phenomena (stack traces, diffs, embedded
+    log content) that can appear inside any primary sub_type. They
+    are the first detection-only labels in the classifier.
+    """
+
+    def test_constant_exists(self):
+        from trainr.core.annotate_detections import SEMANTIC_LABELS
+
+        assert isinstance(SEMANTIC_LABELS, frozenset)
+
+    def test_semantic_labels_are_subset_of_detection_labels(self):
+        from trainr.core.annotate_detections import (
+            DETECTION_LABELS, SEMANTIC_LABELS,
+        )
+
+        for label in SEMANTIC_LABELS:
+            assert label in DETECTION_LABELS, (
+                f"Semantic label {label!r} declared but not in DETECTION_LABELS"
+            )
+
+    def test_semantic_labels_are_not_in_routing_table(self):
+        """Semantic (detection-only) labels have no sub_type, so they
+        must not appear as keys in ROUTING_TABLE."""
+        from trainr.core.annotate_detections import (
+            ROUTING_TABLE, SEMANTIC_LABELS,
+        )
+
+        for label in SEMANTIC_LABELS:
+            assert label not in ROUTING_TABLE, (
+                f"Semantic label {label!r} must not be in ROUTING_TABLE "
+                f"(ROUTING_TABLE is keyed by sub_type)"
+            )

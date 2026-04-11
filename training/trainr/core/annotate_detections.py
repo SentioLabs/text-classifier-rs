@@ -42,6 +42,18 @@ DETECTION_LABELS: list[str] = [
 ]
 
 # ---------------------------------------------------------------------------
+# Semantic (cross-cutting) detection labels — NOT mirrored by ContentSubType.
+# These fire when the corresponding phenomenon is embedded anywhere in the
+# text, regardless of the row's primary sub_type. Added in iter16 (2026-04-10).
+# ---------------------------------------------------------------------------
+
+SEMANTIC_LABELS: frozenset[str] = frozenset()
+"""Detection labels that have no corresponding ContentSubType.
+
+Empty until phases 3-5 append log_content, stack_trace, diff_patch.
+"""
+
+# ---------------------------------------------------------------------------
 # Default model
 # ---------------------------------------------------------------------------
 
