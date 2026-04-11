@@ -21,7 +21,7 @@ class TestDetectionLabels:
         assert isinstance(DETECTION_LABELS, list)
         # After phase 1: 39. After phase 3: log_content → 40.
         # After phase 4: stack_trace → 41. After phase 5: diff_patch → 42.
-        assert len(DETECTION_LABELS) == 41
+        assert len(DETECTION_LABELS) == 42
 
     def test_expected_labels_present(self):
         from trainr.core.annotate_detections import DETECTION_LABELS
@@ -569,3 +569,52 @@ class TestStackTraceLabel:
         from trainr.core.annotate_detections import SYSTEM_PROMPT
 
         assert '"stack_trace": 1 AND "log_content": 1' in SYSTEM_PROMPT
+
+
+class TestDiffPatchLabel:
+    """Regression-guard tests for the diff_patch semantic detection label."""
+
+    def test_in_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS
+
+        assert "diff_patch" in DETECTION_LABELS
+
+    def test_in_semantic_labels(self):
+        from trainr.core.annotate_detections import SEMANTIC_LABELS
+
+        assert "diff_patch" in SEMANTIC_LABELS
+
+    def test_in_system_prompt_label_list(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        label_list_line = next(
+            line for line in SYSTEM_PROMPT.splitlines() if line.startswith("Labels:")
+        )
+        assert "diff_patch" in label_list_line
+
+    def test_in_json_template(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert '"diff_patch": 0' in SYSTEM_PROMPT
+
+    def test_definition_includes_required_markers(self):
+        """The REQUIRED marker set is the load-bearing anti-markdown-list
+        rule. If this is loosened, bullet lists will dominate false
+        positives at 0.1% class prevalence."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "REQUIRED" in SYSTEM_PROMPT
+        assert "@@ -X,Y +A,B @@" in SYSTEM_PROMPT
+        assert "diff --git" in SYSTEM_PROMPT
+
+    def test_definition_includes_adjacent_file_markers_rule(self):
+        """--- and +++ must be on adjacent lines so YAML frontmatter
+        doesn't false-fire."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "adjacent lines" in SYSTEM_PROMPT
+
+    def test_definition_excludes_markdown_bullet_lists(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "markdown bullet lists" in SYSTEM_PROMPT

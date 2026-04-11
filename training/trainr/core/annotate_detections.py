@@ -40,7 +40,7 @@ DETECTION_LABELS: list[str] = [
     "csv", "tsv", "pipe_table", "fixed_width",
     "json", "jsonl", "key_value",
     # Added iter16 (2026-04-10): cross-cutting semantic detection labels
-    "log_content", "stack_trace",
+    "log_content", "stack_trace", "diff_patch",
 ]
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,9 @@ DETECTION_LABELS: list[str] = [
 # text, regardless of the row's primary sub_type. Added in iter16 (2026-04-10).
 # ---------------------------------------------------------------------------
 
-SEMANTIC_LABELS: frozenset[str] = frozenset({"log_content", "stack_trace"})
+SEMANTIC_LABELS: frozenset[str] = frozenset(
+    {"log_content", "stack_trace", "diff_patch"}
+)
 """Detection labels that have no corresponding ContentSubType.
 
 Empty until phases 3-5 append log_content, stack_trace, diff_patch.
@@ -112,7 +114,7 @@ Labels: plain, markdown, rst, latex, python, javascript, typescript, rust, go, \
 java, c_cpp, objc, csharp, powershell, ruby, php, swift, kotlin, r, lua, \
 graphql, sql, shell, css, yaml, toml, ini, dockerfile, makefile, html, xml, \
 sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, \
-log_content, stack_trace
+log_content, stack_trace, diff_patch
 
 For each label, output 1 if that content type is present in the text, or 0 if not.
 
@@ -214,6 +216,18 @@ a trace. Do NOT fire on: single-line error messages, the literal phrase \
 like, profiler output tables, or prose like "at line 5 it crashed, at \
 line 6 it retried". If this trace appears inside log output, fire BOTH \
 "stack_trace": 1 AND "log_content": 1.
+- "diff_patch" = unified diff or git patch format. REQUIRED: at least one \
+of {`@@ -X,Y +A,B @@` hunk header, `diff --git a/... b/...` header, paired \
+`--- a/path` / `+++ b/path` file markers on adjacent lines}. Line prefixes \
+alone are NOT sufficient. Additional signals: `+`/`-`/space line prefixes \
+within a hunk, `index abc1234..def5678 100644` git metadata. The \
+email-patch header `From abc1234 Mon Sep 17 00:00:00 2001` is a signal \
+ONLY when co-occurring with `---`/`+++` or `@@` markers (otherwise a \
+regular email header). CRITICAL anti-signals: markdown bullet lists using \
+`-` or `+`, pro/con lists, code containing arithmetic `+`/`-`, isolated \
+`+`/`-` lines without hunk context, YAML frontmatter `---` without an \
+adjacent `+++`. Unified diffs only — context diffs (`*** file ***` \
+separators) out of scope.
 
 ## Rules
 - When in doubt, label 1. It is better to include a borderline detection than \
@@ -230,7 +244,7 @@ No explanation, no markdown formatting.
 "r": 0, "lua": 0, "graphql": 0, "sql": 0, "shell": 0, "css": 0, "yaml": 0, \
 "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, "xml": 0, \
 "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, "json": 0, \
-"jsonl": 0, "key_value": 0, "log_content": 0, "stack_trace": 0}"""
+"jsonl": 0, "key_value": 0, "log_content": 0, "stack_trace": 0, "diff_patch": 0}"""
 
 
 def build_prompt(text: str) -> str:
