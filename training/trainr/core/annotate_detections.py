@@ -218,12 +218,13 @@ line 6 it retried". If this trace appears inside log output, fire BOTH \
 "stack_trace": 1 AND "log_content": 1.
 - "diff_patch" = unified diff or git patch format. REQUIRED: at least one \
 of {`@@ -X,Y +A,B @@` hunk header, `diff --git a/... b/...` header, paired \
-`--- a/path` / `+++ b/path` file markers on adjacent lines}. Line prefixes \
+`--- a/path` / `+++ b/path` file markers on adjacent lines, meaning immediately consecutive lines with no blank line between them}. Line prefixes \
 alone are NOT sufficient. Additional signals: `+`/`-`/space line prefixes \
 within a hunk, `index abc1234..def5678 100644` git metadata. The \
-email-patch header `From abc1234 Mon Sep 17 00:00:00 2001` is a signal \
-ONLY when co-occurring with `---`/`+++` or `@@` markers (otherwise a \
-regular email header). CRITICAL anti-signals: markdown bullet lists using \
+email-patch header `From abc1234 Mon Sep 17 00:00:00 2001` (a literal \
+constant emitted by `git format-patch`) is a signal ONLY when it appears \
+within the same contiguous block as `---`/`+++` or `@@` markers \
+(otherwise treat as a regular email header). CRITICAL anti-signals: markdown bullet lists using \
 `-` or `+`, pro/con lists, code containing arithmetic `+`/`-`, isolated \
 `+`/`-` lines without hunk context, YAML frontmatter `---` without an \
 adjacent `+++`. Unified diffs only — context diffs (`*** file ***` \
