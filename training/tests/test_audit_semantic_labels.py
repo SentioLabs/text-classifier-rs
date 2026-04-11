@@ -189,6 +189,30 @@ class TestLoadAnnotatorParquets:
         with pytest.raises(ValueError):
             load_annotator_parquets(paths)
 
+    def test_rejects_true_duplicate_slug(self, tmp_path):
+        """Two paths that both parse to the same canonical slug must raise."""
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        def _make(path: Path):
+            pl.DataFrame({"audit_source": ["stratified"]}).write_parquet(path)
+
+        # Two files in different dirs that both parse to slug "gemini3flash".
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        _make(dir_a / "iter17_ab_gemini3flash.parquet")
+        _make(dir_b / "iter17_ab_gemini3flash.parquet")
+        _make(dir_a / "iter17_ab_sonnet.parquet")
+
+        paths = [
+            dir_a / "iter17_ab_gemini3flash.parquet",
+            dir_b / "iter17_ab_gemini3flash.parquet",
+            dir_a / "iter17_ab_sonnet.parquet",
+        ]
+        with pytest.raises(ValueError, match="duplicate slug"):
+            load_annotator_parquets(paths)
+
     def test_rejects_unknown_slug(self, tmp_path):
         from trainr.core.audit_semantic_labels import load_annotator_parquets
 
