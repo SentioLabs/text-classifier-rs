@@ -22,7 +22,9 @@ This follows iter16's "one branch = one seam" lesson: small, focused branches wi
 
 Gate outcome model:
 - **PASS** → iter18 unblocked. The 12 pre-existing "failing" labels in iter16's absolute audit are shown to be pre-existing floors (stable across prompt versions), not iter16-induced regressions.
-- **FAIL** → iter17 iterates on prompt (likely: trim verbosity in the 3 new definition blocks, or reorder to reduce attention dilution on earlier labels) and re-runs the iter16 side. Each iteration costs ~$15 (iter16-side rerun on all 5065 rows × 3 models — the annotator emits all `det_*` columns in a single global-`SYSTEM_PROMPT` call, so partial label re-annotation is not possible). The iter15-side parquets and noise-floor run are cached and reused across iterations. Only the *report* filters to the regressed labels for readability.
+- **FAIL** → iter17 iterates on prompt (likely: trim verbosity in the 3 new definition blocks, or reorder to reduce attention dilution on earlier labels) and re-runs **both** iter16 sides. Each iteration costs ~$30 (iter16a **and** iter16b rerun on all 5065 rows × 3 models each — the annotator emits all `det_*` columns in a single global-`SYSTEM_PROMPT` call, so partial label re-annotation is not possible, **and** the noise floor must come from a pair of runs on the *new* prompt, not the original iter16b). The iter15-side parquets are cached and reused across iterations. Only the *report* filters to the regressed labels for readability.
+
+> **Why both iter16 sides must rerun on every prompt iteration:** noise floor is defined as `|agr(iter16a) - agr(iter16b)|` where both sides use the *same* prompt. If a prompt iteration reruns only iter16a against a cached iter16b (on the old prompt), the resulting "noise floor" measures prompt drift between the two iter16 revisions instead of same-prompt LLM variance — the exact failure mode Codex caught for the original archived-parquet plan. The iteration cost is therefore $30 not $15.
 
 ## Key Design Decisions
 
@@ -180,17 +182,33 @@ trainr data compare-prompts \
 Globs are expanded **inside the CLI** via Python's `glob` module, not by the shell. Quoted glob arguments work regardless of caller environment, and the CLI asserts that each glob resolves to exactly 3 parquets (one per model) — mismatch raises a clear error before any compute.
 
 **Algorithm:**
-1. Expand each glob via Python's `glob` module; assert each resolves to exactly 3 parquets.
+1. Expand each glob via Python's `glob` module. For each glob, **parse the model slug out of each filename** (regex `iter17_ab_<side>_(?P<slug>[a-z0-9]+)\.parquet`) and assert:
+   - Exactly 3 parquets matched.
+   - The slug set equals the expected set `{gemini3flash, sonnet46, gpt54mini}` (or whatever canonical slugs the plan locks in; the set is a module-level constant).
+   - No duplicates (implied by set equality but named explicitly in the error message on violation).
+
+   This catches the "three files in the right glob but one of them is a duplicate or misnamed" failure mode that a naive count check cannot. It also produces a deterministic model→parquet mapping for downstream majority-voting.
+
 2. Load all 10 parquets (3 before + 3 after + 3 noise-floor + 1 input) via `polars`.
 3. **Row-alignment validation (fingerprint-based).** The current `iter16_5k_input.parquet` has 5065 rows but only 5059 unique `text` values, so `text`-only equality is insufficient. Instead, build a fingerprint per row by hashing the concatenation of all non-`det_*` columns from the input parquet (e.g., `text`, `sub_type`, `source`, `audit_source`, any other passthrough columns). For each annotation parquet, compute the same fingerprint and assert it equals the input's fingerprint column-for-column, row-for-row. Any mismatch raises `ValueError` with the first differing row index and the offending columns named.
-4. Discover `det_*` columns in each frame. Compute the union, intersection, and per-side uniques across the `before` vs `after` frames (the `noise_floor` frames share the `after` side's column set by construction).
+4. Discover `det_*` columns in each frame. Compute the union, intersection, and per-side uniques across the `before` vs `after` frames. **Then hard-assert that `after` and `noise_floor` have identical `det_*` column sets** — if they differ, raise `ValueError` naming the symmetric difference. The noise floor arm's correctness depends on this; we do not silently tolerate schema mismatch on the input to the override criterion.
 5. Categorize every `det_*` label: `shared` (in both `before` and `after`) / `iter15-only` / `iter16-only`.
-6. For each label, compute (stratified rows only — filter out `audit_source=injected` using the column written by `build_audit_sample.py`):
+6. For each label, compute (stratified rows only — filter to `audit_source == "stratified"` using the column written by `build_audit_sample.py`; injected rows have values of the form `inject_<label>` and must be excluded from agreement and prevalence metrics):
    - `iter15_agr` from `before` frames (inter-annotator agreement, majority-of-3)
    - `iter16_agr` from `after` frames
    - `iter15_prev`, `iter16_prev` — fire rate (majority-of-3)
    - `Δagr = iter16_agr - iter15_agr` (shared labels only)
-   - `prev_ratio = iter16_prev / iter15_prev` (shared labels only, with zero-prevalence guard — emit `inf`/`0.0`/sentinel rather than crash)
+   - `prev_ratio = iter16_prev / iter15_prev` (shared labels only, with explicit zero-handling rules below)
+
+**Zero-prevalence rules for `prev_ratio`:**
+| `iter15_prev` | `iter16_prev` | `prev_ratio` | WARN-prevalence? |
+|---|---|---|---|
+| 0 | 0 | `1.0` | no — label is silent on both sides, no drift |
+| 0 | >0 | `inf` | yes — new-firing label, semantic drift |
+| >0 | 0 | `0.0` | yes — newly silent label, semantic drift |
+| >0 | >0 | `iter16_prev / iter15_prev` | yes iff `∉ [0.5, 2.0]` |
+
+The `0/0 → 1.0` rule is load-bearing: without it, a shared label that never fires on the stratified sample (common at ~0.001 prevalence) would produce a sentinel `prev_ratio` that trips WARN-prevalence for no semantic reason.
 7. **Noise floor.** For each label present in both `after` and `noise_floor` frame sets, compute `noise_floor[label] = |agr(after) - agr(noise_floor)|`. This is real same-prompt variance because both sets use the iter16 prompt at commit HEAD.
 8. Compute verdict per label:
    - `shared` + `|Δagr| > 0.005` → `FAIL-agreement`
@@ -200,7 +218,7 @@ Globs are expanded **inside the CLI** via Python's `glob` module, not by the she
 9. Emit markdown report (section structure below).
 10. Return `DeltaReport` object for programmatic access by tests.
 
-**Schema-drift guards:** raise `ValueError` with explanatory message if any glob doesn't resolve to 3 parquets, if parquets have different row counts from the input, if fingerprint rows mismatch (name the first diverging row index and columns), if `sub_type` column is missing, if `audit_source` column is missing, if any parquet is empty, or if `before` and `after` have zero shared labels.
+**Schema-drift guards:** raise `ValueError` with explanatory message if any glob doesn't resolve to exactly 3 parquets, if a glob's model-slug set differs from the expected canonical set (naming the missing/extra slugs), if parquets have different row counts from the input, if fingerprint rows mismatch (name the first diverging row index and columns), if `sub_type` column is missing, if `audit_source` column is missing, if any parquet is empty, if `before` and `after` have zero shared labels, or if `after` and `noise_floor` have differing `det_*` column sets (naming the symmetric difference).
 
 **NaN-aware aggregation:** follow iter16 Phase 7 patterns. Missing data never silently resolves to PASS.
 
@@ -285,10 +303,9 @@ iter16_5k_input.parquet (unchanged, apples-to-apples anchor)
                                               ┌───────────┴───────────┐
                                               ▼                       ▼
                                         PASS → iter18           FAIL → iter17 iterates
-                                                                      (full iter16-side rerun,
-                                                                       ~$15 per iteration;
-                                                                       iter15 + noise-floor
-                                                                       parquets cached)
+                                                                      (fresh iter16a + iter16b
+                                                                       pair per iteration, ~$30;
+                                                                       only iter15 cached)
 ```
 
 ## Report Schema
@@ -357,6 +374,12 @@ Fixture DataFrames covering:
 - **Empty parquet:** raises ValueError
 - **Zero shared labels:** raises ValueError
 - **Glob resolves to wrong parquet count:** < 3 or > 3 → raises ValueError before any compute
+- **Glob resolves to 3 parquets but wrong slug set:** e.g. `{gemini3flash, sonnet46, sonnet46}` (duplicate) or `{gemini3flash, sonnet46, claude35}` (unknown slug) → raises ValueError naming the symmetric difference against the canonical set
+- **`after` and `noise_floor` column set mismatch:** e.g. `noise_floor` missing `det_python` → raises ValueError naming the diff; the error comes before any noise floor computation
+- **`prev_ratio` zero/zero:** `iter15_prev=0, iter16_prev=0` → `prev_ratio = 1.0`, no WARN-prevalence (label silent on both sides)
+- **`prev_ratio` zero/nonzero:** `iter15_prev=0, iter16_prev=0.03` → `prev_ratio = inf`, WARN-prevalence fires
+- **`prev_ratio` nonzero/zero:** `iter15_prev=0.03, iter16_prev=0` → `prev_ratio = 0.0`, WARN-prevalence fires
+- **`audit_source` filtering:** fixture containing both `stratified` and `inject_det_python` rows → metrics computed only over `stratified` subset
 - **Dynamic column introspection:** correctly identifies shared set when `before` and `after` have different column sets
 - **Zero-prevalence prev_ratio:** handled gracefully (e.g., `inf` or sentinel, not crash)
 - **Noise floor computation:** `|agr(after) - agr(noise_floor)|` matches hand-computed fixture for a multi-label case
@@ -396,7 +419,7 @@ Deferred to later iterations:
 | iter16b side (noise floor companion): 5065 rows × 3 models | ~$15 |
 | **Total annotation** | **~$45** |
 | Tooling, review, worktree setup | $0 (time only) |
-| Each FAIL-path prompt iteration (if needed) | +~$15 (iter16-side rerun only; iter15 and noise-floor cached) |
+| Each FAIL-path prompt iteration (if needed) | +~$30 (iter16a **and** iter16b rerun; only iter15 cached — see FAIL-path note in §Scope) |
 
 ## Estimated Commit Plan
 
@@ -424,7 +447,7 @@ At end of iter17, before closing the branch:
 2. Enumerate all `FAIL-agreement` rows.
 3. For each, compare `|Δagr|` against `noise_floor` (both reported in the shared-labels table):
    - `|Δagr| ≤ 2 × noise_floor` → eligible for override. Document in iteration doc with label name, Δagr, noise floor, `|Δagr| / noise_floor` ratio, and explicit reviewer sign-off accepting iter18 risk.
-   - `|Δagr| > 2 × noise_floor` → real regression, not overridable. Block iter18, iterate on iter16 prompt, run a new iter16-side annotation pass (~$15, iter15 and noise-floor parquets cached and reused), and re-run `trainr data compare-prompts` with the new iter16-side parquets against the cached iter15 and noise-floor parquets.
+   - `|Δagr| > 2 × noise_floor` → real regression, not overridable. Block iter18, iterate on iter16 prompt, run a **fresh pair** of iter16 annotation passes (iter16a + iter16b, ~$30 total; only iter15 parquets cached and reused), and re-run `trainr data compare-prompts` with the new iter16a/iter16b parquets against the cached iter15 parquets. Reusing the original iter16b would turn noise floor back into prompt-drift measurement.
 4. Enumerate all `WARN-prevalence` rows. For each, review the label's before/after prevalence and semantic definition, and document sign-off or objection in the iteration doc.
 5. Final gate decision committed as `docs(iter17): gate decision — {PASS|FAIL}` with a one-paragraph justification.
 
