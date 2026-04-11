@@ -166,7 +166,13 @@ def compare_prompt_versions(
                 iter16_prev.get(label, 0.0),
             ),
             noise_floor=nf,
-            verdict=LabelVerdict.PASS,  # placeholder; Task 2.3 adds real logic
+            verdict=_compute_verdict(
+                delta_agreement=iter16_agr[label] - iter15_agr[label],
+                prevalence_ratio=_compute_prev_ratio(
+                    iter15_prev.get(label, 0.0),
+                    iter16_prev.get(label, 0.0),
+                ),
+            ),
         )
 
     # --- iter15-only labels: partial metrics, no verdict.
@@ -210,3 +216,37 @@ def _compute_prev_ratio(iter15_prev: float, iter16_prev: float) -> float:
     if iter15_prev == 0:
         return math.inf
     return iter16_prev / iter15_prev
+
+
+def _compute_verdict(
+    delta_agreement: float,
+    prevalence_ratio: float,
+) -> LabelVerdict:
+    """Combine hard agreement gate + soft prevalence gate into a verdict.
+
+    - |Δagr| > AGREEMENT_DELTA_THRESHOLD → FAIL-agreement (hard gate)
+    - prev_ratio outside [PREVALENCE_RATIO_LOW, PREVALENCE_RATIO_HIGH] → WARN-prevalence (soft gate)
+    - Both → FAIL_AND_WARN
+    - Neither → PASS
+
+    Note: override eligibility (|Δagr| ≤ 2 × noise_floor) is NOT applied
+    here. The verdict reflects the raw gate outcome; human review applies
+    override logic per the Gate Decision Protocol.
+    """
+    fail = abs(delta_agreement) > AGREEMENT_DELTA_THRESHOLD
+    # math.inf, math.nan, 0.0, and any number outside [0.5, 2.0] warn.
+    # Only 0/0 → 1.0 is explicitly in-range via _compute_prev_ratio; all
+    # other zero cases produce inf or 0.0 (both outside the band).
+    warn = (
+        math.isinf(prevalence_ratio)
+        or math.isnan(prevalence_ratio)
+        or prevalence_ratio < PREVALENCE_RATIO_LOW
+        or prevalence_ratio > PREVALENCE_RATIO_HIGH
+    )
+    if fail and warn:
+        return LabelVerdict.FAIL_AND_WARN
+    if fail:
+        return LabelVerdict.FAIL_AGREEMENT
+    if warn:
+        return LabelVerdict.WARN_PREVALENCE
+    return LabelVerdict.PASS

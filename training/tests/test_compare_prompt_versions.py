@@ -7,10 +7,13 @@ filesystem-interacting functions (glob handling, parquet reading).
 
 from __future__ import annotations
 
+import math
+
 import polars as pl
 import pytest
 
 from trainr.core.compare_prompt_versions import (
+    AGREEMENT_DELTA_THRESHOLD,
     DeltaReport,
     LabelCategory,
     LabelVerdict,
@@ -150,3 +153,186 @@ class TestColumnCategorization:
                 noise_floor_frames=noise_frames,
                 input_frame=input_frame,
             )
+
+
+class TestVerdictLogic:
+    """Verdict logic per the spec's hard/soft gate rules."""
+
+    def _frames_with_votes(
+        self,
+        before_votes: list[list[int]],
+        after_votes: list[list[int]],
+        noise_votes: list[list[int]] | None = None,
+    ) -> tuple[dict, dict, dict, pl.DataFrame]:
+        """Build 3-model frame sets from per-model vote lists.
+
+        Each *_votes arg is a list of 3 lists (one per model), each of
+        length n_rows. Returns (before_frames, after_frames, noise_frames,
+        input_frame).
+        """
+        n_rows = len(before_votes[0])
+        input_frame = _make_input_frame(n_strat=n_rows, n_inject=0)
+        noise_votes_actual = noise_votes if noise_votes is not None else after_votes
+
+        def _build(vote_lists):
+            return {
+                slug: _make_annotator_frame(input_frame, {"det_python": votes})
+                for slug, votes in zip(
+                    ("gemini3flash", "sonnet", "gpt54mini"),
+                    vote_lists,
+                )
+            }
+
+        return _build(before_votes), _build(after_votes), _build(noise_votes_actual), input_frame
+
+    def test_pass_when_delta_zero(self):
+        before_frames, after_frames, noise_frames, input_frame = self._frames_with_votes(
+            before_votes=[[1, 1, 0, 0]] * 3,  # unanimous 0.5 prev, agr=1.0
+            after_votes=[[1, 1, 0, 0]] * 3,
+        )
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        assert report.labels["python"].verdict == LabelVerdict.PASS
+
+    def test_fail_agreement_hard_gate(self):
+        # iter15 unanimous on all 10 rows (agr=1.0); iter16 has 1 split (2-1)
+        # on row 9, giving iter16_agr = (9 + 2/3) / 10 ≈ 0.9666. Δ ≈ -0.0333
+        # which exceeds the 0.005 threshold → FAIL-agreement.
+        before_frames, after_frames, noise_frames, input_frame = self._frames_with_votes(
+            before_votes=[
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            after_votes=[
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],  # row 9 dissent
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            # noise == after → noise_floor = 0
+        )
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        row = report.labels["python"]
+        assert abs(row.delta_agreement) > AGREEMENT_DELTA_THRESHOLD
+        assert row.verdict == LabelVerdict.FAIL_AGREEMENT
+
+    def test_warn_prevalence_low_ratio(self):
+        # iter15 fires 3/4 rows, iter16 fires 1/4 → ratio = 0.33 → WARN.
+        # Agreement is full 1.0 on both sides so no FAIL — pure WARN test.
+        before_frames, after_frames, noise_frames, input_frame = self._frames_with_votes(
+            before_votes=[[1, 1, 1, 0]] * 3,
+            after_votes=[[1, 0, 0, 0]] * 3,
+        )
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        row = report.labels["python"]
+        assert row.iter15_prevalence == 0.75
+        assert row.iter16_prevalence == 0.25
+        assert row.prevalence_ratio == pytest.approx(0.333, rel=0.01)
+        # Note: Δagr=0 so this should be WARN_PREVALENCE, NOT FAIL_AND_WARN.
+        assert row.verdict == LabelVerdict.WARN_PREVALENCE
+
+    def test_warn_prevalence_high_ratio(self):
+        before_frames, after_frames, noise_frames, input_frame = self._frames_with_votes(
+            before_votes=[[1, 0, 0, 0]] * 3,
+            after_votes=[[1, 1, 1, 0]] * 3,
+        )
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        row = report.labels["python"]
+        assert row.prevalence_ratio == pytest.approx(3.0)
+        assert row.verdict == LabelVerdict.WARN_PREVALENCE
+
+    def test_fail_and_warn_co_occur(self):
+        # Construct a case where Δagr > 0.005 AND prev_ratio > 2.0 both hold.
+        # iter15: 1/10 rows fire unanimously (agr=1.0, prev=0.1)
+        # iter16: 3/10 rows with 2-1 split on one of them
+        #   → prev = 3/10 = 0.3, ratio = 3.0 (out of [0.5, 2.0], WARN)
+        #   → agr = (9 + 2/3)/10 ≈ 0.9666, Δ ≈ -0.0333 (FAIL)
+        before_frames, after_frames, noise_frames, input_frame = self._frames_with_votes(
+            before_votes=[
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+            after_votes=[
+                [1, 1, 1, 0, 0, 0, 0, 0, 0, 1],  # 4 fires with 1 dissent on row 9
+                [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            ],
+        )
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        row = report.labels["python"]
+        # Agreement: iter15=1.0 (all unanimous); iter16 has 1 row with 2-1 split.
+        assert abs(row.delta_agreement) > AGREEMENT_DELTA_THRESHOLD
+        # Prevalence ratio: iter15=1/10=0.1; iter16 majority fires on rows
+        # 0,1,2 (the 2-1 row on row 9 does NOT meet majority). ratio=0.3/0.1=3.0
+        assert row.prevalence_ratio == pytest.approx(3.0)
+        assert row.verdict == LabelVerdict.FAIL_AND_WARN
+
+    def test_zero_prevalence_both_sides_no_warn(self):
+        before_frames, after_frames, noise_frames, input_frame = self._frames_with_votes(
+            before_votes=[[0, 0, 0, 0]] * 3,
+            after_votes=[[0, 0, 0, 0]] * 3,
+        )
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        row = report.labels["python"]
+        assert row.prevalence_ratio == 1.0
+        assert row.verdict == LabelVerdict.PASS
+
+    def test_zero_to_nonzero_warn(self):
+        before_frames, after_frames, noise_frames, input_frame = self._frames_with_votes(
+            before_votes=[[0, 0, 0, 0]] * 3,
+            after_votes=[[1, 1, 1, 1]] * 3,
+        )
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        row = report.labels["python"]
+        assert math.isinf(row.prevalence_ratio)
+        assert row.verdict == LabelVerdict.WARN_PREVALENCE
+
+
+def test_agreement_delta_threshold_constant():
+    """Pin the threshold so future edits don't silently move it."""
+    from trainr.core.compare_prompt_versions import AGREEMENT_DELTA_THRESHOLD
+    assert AGREEMENT_DELTA_THRESHOLD == 0.005
+
+
+def test_prevalence_ratio_bounds_constants():
+    from trainr.core.compare_prompt_versions import (
+        PREVALENCE_RATIO_HIGH,
+        PREVALENCE_RATIO_LOW,
+    )
+    assert PREVALENCE_RATIO_LOW == 0.5
+    assert PREVALENCE_RATIO_HIGH == 2.0
