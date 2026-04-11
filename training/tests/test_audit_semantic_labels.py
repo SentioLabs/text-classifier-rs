@@ -117,3 +117,21 @@ class TestComputePrevalencePerLabel:
         result = compute_prevalence_per_label({"only": df})
         assert result["python"] == 0.0
 
+    def test_skips_label_missing_from_some_models(self):
+        # det_markdown is in df_a only. Function must skip it rather than crash.
+        df_a = pl.DataFrame({
+            "audit_source": ["stratified"] * 2,
+            "det_python": [1, 0],
+            "det_markdown": [0, 0],
+        })
+        df_b = pl.DataFrame({
+            "audit_source": ["stratified"] * 2,
+            "det_python": [1, 1],
+            # intentionally missing det_markdown
+        })
+        result = compute_prevalence_per_label({"a": df_a, "b": df_b})
+        assert "python" in result
+        assert "markdown" not in result, (
+            "Labels missing from one frame must be skipped, not included"
+        )
+
