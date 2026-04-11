@@ -30,7 +30,11 @@ from trainr.shared.api import get_openrouter_api_key
 
 DETECTION_LABELS: list[str] = [
     "plain", "markdown", "rst", "latex",
-    "python", "javascript", "typescript", "rust", "go", "java", "sql", "shell", "css",
+    # Core languages
+    "python", "javascript", "typescript", "rust", "go", "java", "c_cpp", "objc",
+    # Added 2026-04-10: popular embedded languages not previously in label set
+    "csharp", "powershell", "ruby", "php", "swift", "kotlin", "r", "lua", "graphql",
+    "sql", "shell", "css",
     "yaml", "toml", "ini", "dockerfile", "makefile",
     "html", "xml", "sgml",
     "csv", "tsv", "pipe_table", "fixed_width",
@@ -92,8 +96,9 @@ document with embedded Python code blocks should have both "markdown": 1 and \
 "python": 1).
 
 Labels: plain, markdown, rst, latex, python, javascript, typescript, rust, go, \
-java, sql, shell, css, yaml, toml, ini, dockerfile, makefile, html, xml, sgml, \
-csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, log_lines
+java, c_cpp, objc, csharp, powershell, ruby, php, swift, kotlin, r, lua, \
+graphql, sql, shell, css, yaml, toml, ini, dockerfile, makefile, html, xml, \
+sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, log_lines
 
 For each label, output 1 if that content type is present in the text, or 0 if not.
 
@@ -107,6 +112,44 @@ underlines with === or ---
 characters between fields
 - "pipe_table" = fields separated by | pipe characters
 - "csv" vs "tsv": csv uses commas, tsv uses tabs
+- "csharp" = C# code. Look for `using System;`, `namespace Foo`, `public class`, \
+`Task<T>`, `async/await`, `[Attribute]` decorators (`[HttpGet]`, `[Required]`, \
+`[Serializable]`), .NET-specific APIs. Do NOT confuse with `c_cpp` or `java`.
+- "powershell" = PowerShell scripts. Look for cmdlet naming (`Get-*`, `Set-*`, \
+`New-*`, `Invoke-*`), `$variables`, pipeline `|`, `Write-Host`, parameter \
+attributes `[Parameter(Mandatory)]`, `[CmdletBinding()]`. Do NOT confuse with \
+`shell` (bash/sh) which uses different command conventions.
+- "ruby" = Ruby code. Look for `def foo`, `end` blocks, `puts`, `require`, \
+`class Foo`, symbols `:name`, blocks `do |x|`, `attr_accessor`. Do NOT confuse \
+with `python` or `crystal`.
+- "php" = PHP code. Look for `<?php` opening tag, `$variables`, `->` arrow, \
+`echo`, `function foo()`, `use Namespace\\Class;`, array syntax `[]`.
+- "swift" = Swift code. Look for `import Foundation`, `let`/`var` declarations, \
+`func foo() -> Bar`, `guard let`, `??` nil coalescing, `struct Foo`, \
+`extension Bar`, optional `?` syntax, `@` property wrappers (`@State`, \
+`@Published`, `@escaping`, `@objc`). Do NOT confuse with `kotlin` (similar \
+syntax but different keywords). Name alone in prose is not sufficient.
+- "go" = Go/Golang code. Look for `package foo`, `import (...)`, `func Foo() \
+error`, `:=` short declaration, `go func()`, `chan`, `defer`, `interface{}`, \
+error-return `, err := ...; if err != nil`. Do NOT confuse with other \
+C-family languages. Name alone in prose is not sufficient.
+- "kotlin" = Kotlin code. Look for `fun foo(): Bar`, `val`/`var`, `data class`, \
+`sealed class`, `when` expressions, extension functions, `?.` safe calls, \
+`companion object`, `suspend fun` (coroutines), `it` implicit lambda param. \
+Do NOT confuse with `java` (Kotlin uses `fun` not `void`/return type first) \
+or `swift`.
+- "r" = R language code (data science / statistics). Look for `<-` assignment, \
+`library()`, `data.frame`, `ggplot`, `%>%` pipe, vector syntax `c(1, 2, 3)`, \
+`NA`/`NULL`, `tibble`, `dplyr::` namespaced calls. CRITICAL: Do NOT confuse \
+with `ruby`, `rust`, or `rst`. Single-letter code fence tag ```r is the \
+strongest signal. Name alone in prose is not sufficient.
+- "lua" = Lua code. Look for `local` variables, `function foo() ... end`, `--` \
+comments, `require("module")`, table syntax `{key = value}`, \
+`then`/`do`/`end` control flow, `#table` length operator, `~=` not-equal \
+operator. Common in game scripting, Neovim config, Redis, OpenResty.
+- "graphql" = GraphQL query or schema. Look for `query { }` / `mutation { }` \
+blocks with field selectors, `type Foo { ... }` schema definitions, `scalar`, \
+`interface`, `union`, `input`, `@directive`, or fragment syntax `... on Type`.
 
 ## Rules
 - When in doubt, label 1. It is better to include a borderline detection than \
@@ -118,10 +161,12 @@ Return ONLY a JSON object with each label as a key and 0 or 1 as the value. \
 No explanation, no markdown formatting.
 
 {"plain": 0, "markdown": 0, "rst": 0, "latex": 0, "python": 0, "javascript": 0, \
-"typescript": 0, "rust": 0, "go": 0, "java": 0, "sql": 0, "shell": 0, "css": 0, \
-"yaml": 0, "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, \
-"xml": 0, "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, \
-"json": 0, "jsonl": 0, "key_value": 0, "log_lines": 0}"""
+"typescript": 0, "rust": 0, "go": 0, "java": 0, "c_cpp": 0, "objc": 0, \
+"csharp": 0, "powershell": 0, "ruby": 0, "php": 0, "swift": 0, "kotlin": 0, \
+"r": 0, "lua": 0, "graphql": 0, "sql": 0, "shell": 0, "css": 0, "yaml": 0, \
+"toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, "xml": 0, \
+"sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, "json": 0, \
+"jsonl": 0, "key_value": 0, "log_lines": 0}"""
 
 
 def build_prompt(text: str) -> str:
