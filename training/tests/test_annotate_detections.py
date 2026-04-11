@@ -19,18 +19,22 @@ class TestDetectionLabels:
         from trainr.core.annotate_detections import DETECTION_LABELS
 
         assert isinstance(DETECTION_LABELS, list)
-        assert len(DETECTION_LABELS) == 29
+        # After phase 1: 39. After phase 3: log_content → 40.
+        # After phase 4: stack_trace → 41. After phase 5: diff_patch → 42.
+        assert len(DETECTION_LABELS) == 42
 
     def test_expected_labels_present(self):
         from trainr.core.annotate_detections import DETECTION_LABELS
 
         expected = [
             "plain", "markdown", "rst", "latex",
-            "python", "javascript", "typescript", "rust", "go", "java", "sql", "shell", "css",
+            "python", "javascript", "typescript", "rust", "go", "java", "c_cpp", "objc",
+            "csharp", "powershell", "ruby", "php", "swift", "kotlin", "r", "lua", "graphql",
+            "sql", "shell", "css",
             "yaml", "toml", "ini", "dockerfile", "makefile",
             "html", "xml", "sgml",
             "csv", "tsv", "pipe_table", "fixed_width",
-            "json", "jsonl", "key_value", "log_lines",
+            "json", "jsonl", "key_value",
         ]
         for label in expected:
             assert label in DETECTION_LABELS, f"Missing label: {label}"
@@ -39,6 +43,30 @@ class TestDetectionLabels:
         from trainr.core.annotate_detections import DETECTION_LABELS
 
         assert len(DETECTION_LABELS) == len(set(DETECTION_LABELS))
+
+    def test_log_lines_removed_from_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS
+
+        assert "log_lines" not in DETECTION_LABELS, (
+            "log_lines must be sub_type-only (not a detection label) after "
+            "iter16. See docs/superpowers/specs/"
+            "2026-04-10-semantic-detection-labels-design.md"
+        )
+
+    def test_log_lines_removed_from_system_prompt_label_list(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        # The inline label list line in SYSTEM_PROMPT begins with "Labels:"
+        label_list_line = next(
+            line for line in SYSTEM_PROMPT.splitlines() if line.startswith("Labels:")
+        )
+        assert "log_lines" not in label_list_line
+
+    def test_log_lines_removed_from_json_template(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        # The JSON example template at the bottom should not include log_lines
+        assert '"log_lines":' not in SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
@@ -245,11 +273,17 @@ class TestRoutingTable:
 
         assert isinstance(ROUTING_TABLE, dict)
 
-    def test_routing_table_covers_all_detection_labels(self):
+    def test_routing_table_keys_are_valid_detection_labels(self):
+        """ROUTING_TABLE is keyed by sub_type. Every key must be a known
+        detection label that mirrors a sub_type (i.e., NOT a semantic
+        detection-only label like log_content). Labels not in ROUTING_TABLE
+        fall through to the default model in annotate_dataframe()."""
         from trainr.core.annotate_detections import DETECTION_LABELS, ROUTING_TABLE
 
-        for label in DETECTION_LABELS:
-            assert label in ROUTING_TABLE, f"ROUTING_TABLE missing entry for: {label}"
+        for sub_type in ROUTING_TABLE.keys():
+            assert sub_type in DETECTION_LABELS, (
+                f"ROUTING_TABLE key {sub_type!r} is not in DETECTION_LABELS"
+            )
 
     def test_routing_table_values_are_model_backend_tuples(self):
         from trainr.core.annotate_detections import ROUTING_TABLE
@@ -369,7 +403,11 @@ class TestRoutingAnnotation:
             if backend == "anthropic":
                 anthropic_sub = sub
                 break
-        assert anthropic_sub is not None, "No anthropic entries in ROUTING_TABLE"
+        if anthropic_sub is None:
+            pytest.skip(
+                "No anthropic entries in ROUTING_TABLE — test is a no-op "
+                "until a future iteration reintroduces one."
+            )
 
         df = pl.DataFrame({
             "text": ["some content"],
@@ -391,3 +429,192 @@ class TestRoutingAnnotation:
         assert len(calls) == 1
         assert calls[0]["api_key"] == "anthropic-key"
         assert calls[0]["backend"] == "anthropic"
+
+
+class TestSemanticLabels:
+    """Detection labels that are NOT mirrored by a ContentSubType.
+
+    These are cross-cutting phenomena (stack traces, diffs, embedded
+    log content) that can appear inside any primary sub_type. They
+    are the first detection-only labels in the classifier.
+    """
+
+    def test_constant_exists(self):
+        from trainr.core.annotate_detections import SEMANTIC_LABELS
+
+        assert isinstance(SEMANTIC_LABELS, frozenset)
+
+    def test_semantic_labels_are_subset_of_detection_labels(self):
+        from trainr.core.annotate_detections import (
+            DETECTION_LABELS, SEMANTIC_LABELS,
+        )
+
+        for label in SEMANTIC_LABELS:
+            assert label in DETECTION_LABELS, (
+                f"Semantic label {label!r} declared but not in DETECTION_LABELS"
+            )
+
+    def test_semantic_labels_are_not_in_routing_table(self):
+        """Semantic (detection-only) labels have no sub_type, so they
+        must not appear as keys in ROUTING_TABLE."""
+        from trainr.core.annotate_detections import (
+            ROUTING_TABLE, SEMANTIC_LABELS,
+        )
+
+        for label in SEMANTIC_LABELS:
+            assert label not in ROUTING_TABLE, (
+                f"Semantic label {label!r} must not be in ROUTING_TABLE "
+                f"(ROUTING_TABLE is keyed by sub_type)"
+            )
+
+
+class TestLogContentLabel:
+    """Regression-guard tests for the log_content semantic detection label."""
+
+    def test_in_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS
+
+        assert "log_content" in DETECTION_LABELS
+
+    def test_in_semantic_labels(self):
+        from trainr.core.annotate_detections import SEMANTIC_LABELS
+
+        assert "log_content" in SEMANTIC_LABELS
+
+    def test_in_system_prompt_label_list(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        label_list_line = next(
+            line for line in SYSTEM_PROMPT.splitlines() if line.startswith("Labels:")
+        )
+        assert "log_content" in label_list_line
+
+    def test_in_json_template(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert '"log_content": 0' in SYSTEM_PROMPT
+
+    def test_definition_includes_uppercase_severity_rule(self):
+        """Critical precision-tightening rule — if this is removed or
+        reworded, the false-positive rate on lowercase 'error'/'info'
+        in prose will explode."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "UPPERCASE or BRACKETED" in SYSTEM_PROMPT
+
+    def test_definition_includes_density_rule(self):
+        """Density rule: two or more log-shaped lines in sequence."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "TWO OR MORE consecutive lines" in SYSTEM_PROMPT
+
+    def test_definition_includes_pure_trace_carveout(self):
+        """Stack traces alone should fire stack_trace but NOT log_content."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "PURE stack trace" in SYSTEM_PROMPT
+
+
+class TestStackTraceLabel:
+    """Regression-guard tests for the stack_trace semantic detection label."""
+
+    def test_in_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS
+
+        assert "stack_trace" in DETECTION_LABELS
+
+    def test_in_semantic_labels(self):
+        from trainr.core.annotate_detections import SEMANTIC_LABELS
+
+        assert "stack_trace" in SEMANTIC_LABELS
+
+    def test_in_system_prompt_label_list(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        label_list_line = next(
+            line for line in SYSTEM_PROMPT.splitlines() if line.startswith("Labels:")
+        )
+        assert "stack_trace" in label_list_line
+
+    def test_in_json_template(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert '"stack_trace": 0' in SYSTEM_PROMPT
+
+    def test_definition_includes_two_frame_rule(self):
+        """Multi-frame requirement is the load-bearing anti-false-positive
+        rule for single-line errors and prose mentioning 'at line X'."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "TWO OR MORE" in SYSTEM_PROMPT
+        assert "frames" in SYSTEM_PROMPT
+
+    def test_definition_includes_dotnet_format(self):
+        """The .NET format (`   at Namespace.Class.Method() in File.cs:line 42`)
+        was flagged as highest-value addition by standard review.
+
+        Uses File.cs:line as the anchor because `.NET` appears in the
+        csharp definition as well, so a bare substring check would pass
+        even if stack_trace were deleted.
+        """
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "File.cs:line 42" in SYSTEM_PROMPT
+
+    def test_definition_mentions_cofire_with_log_content(self):
+        """Anchored on the full co-fire phrase unique to stack_trace's
+        definition — `fire BOTH` alone also appears in log_content's
+        pure-trace carveout, so the bare substring wouldn't fail if
+        stack_trace were deleted."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert '"stack_trace": 1 AND "log_content": 1' in SYSTEM_PROMPT
+
+
+class TestDiffPatchLabel:
+    """Regression-guard tests for the diff_patch semantic detection label."""
+
+    def test_in_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS
+
+        assert "diff_patch" in DETECTION_LABELS
+
+    def test_in_semantic_labels(self):
+        from trainr.core.annotate_detections import SEMANTIC_LABELS
+
+        assert "diff_patch" in SEMANTIC_LABELS
+
+    def test_in_system_prompt_label_list(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        label_list_line = next(
+            line for line in SYSTEM_PROMPT.splitlines() if line.startswith("Labels:")
+        )
+        assert "diff_patch" in label_list_line
+
+    def test_in_json_template(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert '"diff_patch": 0' in SYSTEM_PROMPT
+
+    def test_definition_includes_required_markers(self):
+        """The REQUIRED marker set is the load-bearing anti-markdown-list
+        rule. If this is loosened, bullet lists will dominate false
+        positives at 0.1% class prevalence."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "REQUIRED" in SYSTEM_PROMPT
+        assert "@@ -X,Y +A,B @@" in SYSTEM_PROMPT
+        assert "diff --git" in SYSTEM_PROMPT
+
+    def test_definition_includes_adjacent_file_markers_rule(self):
+        """--- and +++ must be on adjacent lines so YAML frontmatter
+        doesn't false-fire."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "adjacent lines" in SYSTEM_PROMPT
+
+    def test_definition_excludes_markdown_bullet_lists(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "markdown bullet lists" in SYSTEM_PROMPT

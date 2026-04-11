@@ -38,8 +38,24 @@ DETECTION_LABELS: list[str] = [
     "yaml", "toml", "ini", "dockerfile", "makefile",
     "html", "xml", "sgml",
     "csv", "tsv", "pipe_table", "fixed_width",
-    "json", "jsonl", "key_value", "log_lines",
+    "json", "jsonl", "key_value",
+    # Added iter16 (2026-04-10): cross-cutting semantic detection labels
+    "log_content", "stack_trace", "diff_patch",
 ]
+
+# ---------------------------------------------------------------------------
+# Semantic (cross-cutting) detection labels — NOT mirrored by ContentSubType.
+# These fire when the corresponding phenomenon is embedded anywhere in the
+# text, regardless of the row's primary sub_type. Added in iter16 (2026-04-10).
+# ---------------------------------------------------------------------------
+
+SEMANTIC_LABELS: frozenset[str] = frozenset(
+    {"log_content", "stack_trace", "diff_patch"}
+)
+"""Detection labels that have no corresponding ContentSubType.
+
+Empty until phases 3-5 append log_content, stack_trace, diff_patch.
+"""
 
 # ---------------------------------------------------------------------------
 # Default model
@@ -57,7 +73,6 @@ ROUTING_TABLE: dict[str, tuple[str, str]] = {
     "css": ("openai/gpt-5.4-nano", "openrouter"),
     "dockerfile": ("openai/gpt-5.4-nano", "openrouter"),
     "java": ("openai/gpt-5.4-nano", "openrouter"),
-    "log_lines": ("openai/gpt-5.4-nano", "openrouter"),
     "rust": ("openai/gpt-5.4-nano", "openrouter"),
     "sql": ("openai/gpt-5.4-nano", "openrouter"),
     "csv": ("google/gemini-3.1-flash-lite-preview", "openrouter"),
@@ -98,7 +113,8 @@ document with embedded Python code blocks should have both "markdown": 1 and \
 Labels: plain, markdown, rst, latex, python, javascript, typescript, rust, go, \
 java, c_cpp, objc, csharp, powershell, ruby, php, swift, kotlin, r, lua, \
 graphql, sql, shell, css, yaml, toml, ini, dockerfile, makefile, html, xml, \
-sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, log_lines
+sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, \
+log_content, stack_trace, diff_patch
 
 For each label, output 1 if that content type is present in the text, or 0 if not.
 
@@ -150,6 +166,75 @@ operator. Common in game scripting, Neovim config, Redis, OpenResty.
 - "graphql" = GraphQL query or schema. Look for `query { }` / `mutation { }` \
 blocks with field selectors, `type Foo { ... }` schema definitions, `scalar`, \
 `interface`, `union`, `input`, `@directive`, or fragment syntax `... on Type`.
+- "log_content" = embedded log output (distinct from sub_type=log_lines, \
+which means the row IS primarily logs). Requires TWO OR MORE consecutive \
+lines that each independently match a log-line schema. A log-line schema is \
+ONE of:
+  * `<timestamp> <severity-or-component> <message>` where timestamp is ISO \
+8601 (`2024-01-15T10:23:45Z`), apache-style (`[15/Jan/2024:10:23:45 +0000]`), \
+syslog-style (`Jan 15 10:23:45`), or unix epoch (ms/seconds)
+  * A recognized named format: nginx/apache access log, syslog \
+(`<pri>timestamp host proc[pid]: msg`), dockerd/container log, logfmt \
+(`key=value key2=value2`) ONLY when the same line also contains a \
+timestamp key (`ts=`, `time=`) or severity key (`level=`, `severity=`)
+  * JSON log records: >=2 consecutive JSON objects (which may each span \
+multiple lines when pretty-printed) each containing BOTH a timestamp field \
+AND a `level`/`severity` field. When counting density, treat each JSON \
+record as ONE unit regardless of its line count.
+  * CSV/TSV log records: >=2 data rows when the header or first-row \
+columns contain BOTH a timestamp-like name (`timestamp`, `time`, `ts`, \
+`date`) AND a severity-like name (`level`, `severity`, `log_level`, \
+`loglevel`), AND severity values are uppercase log levels (INFO, WARN, \
+ERROR, DEBUG, TRACE, FATAL). A CSV with only a date column is NOT \
+log_content — both columns must be present.
+Severity tokens must be UPPERCASE or BRACKETED (`INFO`, `[info]`, `WARN`, \
+`WARNING`, `ERROR`, `DEBUG`, `TRACE`, `FATAL`, `CRITICAL`) — lowercase \
+`error`/`info` in prose or code identifiers does NOT count.
+Do NOT fire on: single-line error messages (even inside code fences or \
+blockquotes), code that CALLS a logger (`log.info(...)`), sentences \
+describing logging behavior, changelogs with leading dates (`2024-01-15 - \
+fixed bug`), CSV/TSV with only a date column and no severity column, \
+`ls -la` output, git commit logs. Lines inside quotation marks or markdown \
+blockquotes do not contribute to the density count.
+If the embedded output is a PURE stack trace (no surrounding non-trace log \
+lines), fire "stack_trace": 1 but NOT "log_content": 1. If a stack trace \
+appears inside otherwise-normal log output, fire BOTH.
+- "stack_trace" = programmatic stack trace / traceback. Requires TWO OR \
+MORE frames (a frame may span multiple source lines, e.g. Python emits \
+two lines per frame) where each frame carries a file:line locator OR a \
+package.Class.method locator (not just an `at` keyword). Strong signals \
+by language:
+  * Python: `Traceback (most recent call last):` header + `File "foo.py", \
+line N, in func` frames + final `ErrorType: message` line
+  * Java/JVM: `Exception in thread "..."` + \
+`at com.pkg.Class.method(File.java:42)` + optional `Caused by:` + \
+`... N more`
+  * .NET: `   at Namespace.Class.Method() in File.cs:line 42` (leading \
+whitespace is distinctive)
+  * JS/Node: `Error: message` + `at fn (file:line:col)` / `at async fn`
+  * Go: `goroutine N [running]:` + `main.foo(0x0)\n\tpath/file.go:42 +0x1a`
+  * Rust: `thread 'main' panicked at` + numbered backtrace frames `0: ...`, \
+`1: ...` with file:line
+  * Ruby: from file.rb:42:in `method' chain (one frame per line)
+Truncation markers (`... N more frames`, `[truncated]`) do not disqualify \
+a trace. Do NOT fire on: single-line error messages, the literal phrase \
+"stack trace" in prose, tutorial pseudocode describing what a trace looks \
+like, profiler output tables, or prose like "at line 5 it crashed, at \
+line 6 it retried". If this trace appears inside log output, fire BOTH \
+"stack_trace": 1 AND "log_content": 1.
+- "diff_patch" = unified diff or git patch format. REQUIRED: at least one \
+of {`@@ -X,Y +A,B @@` hunk header, `diff --git a/... b/...` header, paired \
+`--- a/path` / `+++ b/path` file markers on adjacent lines, meaning immediately consecutive lines with no blank line between them}. Line prefixes \
+alone are NOT sufficient. Additional signals: `+`/`-`/space line prefixes \
+within a hunk, `index abc1234..def5678 100644` git metadata. The \
+email-patch header `From abc1234 Mon Sep 17 00:00:00 2001` (a literal \
+constant emitted by `git format-patch`) is a signal ONLY when it appears \
+within the same contiguous block as `---`/`+++` or `@@` markers \
+(otherwise treat as a regular email header). CRITICAL anti-signals: markdown bullet lists using \
+`-` or `+`, pro/con lists, code containing arithmetic `+`/`-`, isolated \
+`+`/`-` lines without hunk context, YAML frontmatter `---` without an \
+adjacent `+++`. Unified diffs only — context diffs (`*** file ***` \
+separators) out of scope.
 
 ## Rules
 - When in doubt, label 1. It is better to include a borderline detection than \
@@ -166,7 +251,7 @@ No explanation, no markdown formatting.
 "r": 0, "lua": 0, "graphql": 0, "sql": 0, "shell": 0, "css": 0, "yaml": 0, \
 "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, "xml": 0, \
 "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, "json": 0, \
-"jsonl": 0, "key_value": 0, "log_lines": 0}"""
+"jsonl": 0, "key_value": 0, "log_content": 0, "stack_trace": 0, "diff_patch": 0}"""
 
 
 def build_prompt(text: str) -> str:
