@@ -181,15 +181,21 @@ timestamp key (`ts=`, `time=`) or severity key (`level=`, `severity=`)
 multiple lines when pretty-printed) each containing BOTH a timestamp field \
 AND a `level`/`severity` field. When counting density, treat each JSON \
 record as ONE unit regardless of its line count.
+  * CSV/TSV log records: >=2 data rows when the header or first-row \
+columns contain BOTH a timestamp-like name (`timestamp`, `time`, `ts`, \
+`date`) AND a severity-like name (`level`, `severity`, `log_level`, \
+`loglevel`), AND severity values are uppercase log levels (INFO, WARN, \
+ERROR, DEBUG, TRACE, FATAL). A CSV with only a date column is NOT \
+log_content — both columns must be present.
 Severity tokens must be UPPERCASE or BRACKETED (`INFO`, `[info]`, `WARN`, \
 `WARNING`, `ERROR`, `DEBUG`, `TRACE`, `FATAL`, `CRITICAL`) — lowercase \
 `error`/`info` in prose or code identifiers does NOT count.
 Do NOT fire on: single-line error messages (even inside code fences or \
 blockquotes), code that CALLS a logger (`log.info(...)`), sentences \
 describing logging behavior, changelogs with leading dates (`2024-01-15 - \
-fixed bug`), CSV/TSV with date columns, `ls -la` output, git commit logs. \
-Lines inside quotation marks or markdown blockquotes do not contribute to \
-the density count.
+fixed bug`), CSV/TSV with only a date column and no severity column, \
+`ls -la` output, git commit logs. Lines inside quotation marks or markdown \
+blockquotes do not contribute to the density count.
 If the embedded output is a PURE stack trace (no surrounding non-trace log \
 lines), fire "stack_trace": 1 but NOT "log_content": 1. If a stack trace \
 appears inside otherwise-normal log output, fire BOTH.
