@@ -2,6 +2,8 @@
 
 import polars as pl
 
+from trainr.core.audit_semantic_labels import compute_prevalence_per_label
+
 
 def _make_fake_annotated(
     audit_source_values: list[str],
@@ -72,3 +74,46 @@ def test_agreement_excludes_injected_rows():
     filtered = filter_for_agreement(df)
     assert len(filtered) == 2
     assert all(s == "stratified" for s in filtered["audit_source"].to_list())
+
+
+class TestComputePrevalencePerLabel:
+    def test_majority_fire_rate_single_model(self):
+        # Single model: prevalence is simply mean fire rate.
+        df = pl.DataFrame({
+            "audit_source": ["stratified"] * 10,
+            "det_python": [1, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+            "det_markdown": [0] * 10,
+        })
+        result = compute_prevalence_per_label({"only": df})
+        assert result["python"] == 0.3
+        assert result["markdown"] == 0.0
+
+    def test_majority_of_three_fire(self):
+        # 3 models: prevalence = fraction of rows where majority (>=2 of 3) fires.
+        base = pl.DataFrame({
+            "audit_source": ["stratified"] * 4,
+        })
+        df1 = base.with_columns(pl.Series("det_python", [1, 1, 0, 0]))
+        df2 = base.with_columns(pl.Series("det_python", [1, 0, 1, 0]))
+        df3 = base.with_columns(pl.Series("det_python", [0, 1, 1, 0]))
+        # Row-by-row: 2+, 2+, 2+, 0 → majority fires on rows 0, 1, 2 → prev = 3/4
+        result = compute_prevalence_per_label({"a": df1, "b": df2, "c": df3})
+        assert result["python"] == 0.75
+
+    def test_zero_rows_returns_zero(self):
+        df = pl.DataFrame({
+            "audit_source": pl.Series([], dtype=pl.Utf8),
+            "det_python": pl.Series([], dtype=pl.Int64),
+        })
+        result = compute_prevalence_per_label({"only": df})
+        assert result["python"] == 0.0
+
+    def test_filters_out_injected_rows(self):
+        # Only stratified rows count. Injected rows that fire must be excluded.
+        df = pl.DataFrame({
+            "audit_source": ["stratified", "stratified", "inject_det_python"],
+            "det_python": [0, 0, 1],  # only the injected row fires
+        })
+        result = compute_prevalence_per_label({"only": df})
+        assert result["python"] == 0.0
+

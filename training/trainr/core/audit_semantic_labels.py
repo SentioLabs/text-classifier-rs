@@ -106,6 +106,60 @@ def compute_agreement_across_models(
     return result
 
 
+def compute_prevalence_per_label(
+    dfs: dict[str, pl.DataFrame],
+) -> dict[str, float]:
+    """Majority-of-N fire rate per label on stratified rows.
+
+    For each `det_*` column present in the first DataFrame, compute the
+    fraction of stratified rows where at least ceil(N/2) of the N models
+    fired (det == 1). Zero-row inputs return 0.0.
+
+    Args:
+        dfs: {model_slug: DataFrame}. All DataFrames must already be
+            filtered to stratified rows (use filter_for_agreement upstream)
+            and share row ordering.
+
+    Returns:
+        {label_without_det_prefix: prevalence_float in [0.0, 1.0]}.
+    """
+    model_names = list(dfs.keys())
+    if not model_names:
+        return {}
+
+    first = dfs[model_names[0]]
+    # Filter all frames to stratified rows. Doing this inside the function
+    # makes the function safe to call with raw annotator output (the alt is
+    # requiring every caller to remember to filter first).
+    stratified_dfs = {
+        name: df.filter(pl.col("audit_source") == STRATIFIED)
+        for name, df in dfs.items()
+    }
+    stratified_first = stratified_dfs[model_names[0]]
+    n_rows = len(stratified_first)
+    if n_rows == 0:
+        return {label[len("det_"):]: 0.0 for label in detection_columns(first)}
+
+    n_models = len(model_names)
+    majority_threshold = (n_models + 1) // 2  # ceil(N/2); for N=3 this is 2
+
+    result: dict[str, float] = {}
+    for col in detection_columns(first):
+        label = col[len("det_"):]
+        # Skip columns that don't exist on every frame (asymmetric schemas
+        # are the compare module's problem, not this function's).
+        if not all(col in stratified_dfs[m].columns for m in model_names):
+            continue
+        votes_per_model = [stratified_dfs[m][col].to_list() for m in model_names]
+        fire_count = 0
+        for row_idx in range(n_rows):
+            row_votes = [votes_per_model[m][row_idx] for m in range(n_models)]
+            if sum(row_votes) >= majority_threshold:
+                fire_count += 1
+        result[label] = fire_count / n_rows
+    return result
+
+
 def compute_recall_on_injected(df: pl.DataFrame) -> dict[str, float]:
     """Per-semantic-label recall on injected positives.
 
