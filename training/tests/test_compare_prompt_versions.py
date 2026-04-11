@@ -411,6 +411,111 @@ class TestRowAlignmentFingerprint:
             )
 
 
+class TestFormatReport:
+    def test_report_contains_all_required_sections(self):
+        from trainr.core.compare_prompt_versions import format_delta_report
+
+        input_frame = _make_input_frame(n_strat=5, n_inject=0)
+        before_frames = {
+            slug: _make_annotator_frame(
+                input_frame, {"det_python": [1, 0, 0, 0, 0], "det_log_lines": [0] * 5}
+            )
+            for slug in ("gemini3flash", "sonnet", "gpt54mini")
+        }
+        after_frames = {
+            slug: _make_annotator_frame(
+                input_frame,
+                {"det_python": [1, 0, 0, 0, 0], "det_log_content": [0] * 5},
+            )
+            for slug in ("gemini3flash", "sonnet", "gpt54mini")
+        }
+        noise_frames = {k: v.clone() for k, v in after_frames.items()}
+
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        text = format_delta_report(report)
+
+        assert "# iter17 A/B Regression Audit Report" in text
+        assert "## Gate verdict" in text
+        assert "## Shared labels" in text
+        assert "## iter15-only labels" in text
+        assert "## iter16-only labels" in text
+        assert "## Noise floor table" in text
+        # Shared label row present
+        assert "python" in text
+        # iter15-only label present in its section
+        assert "log_lines" in text
+        # iter16-only label present in its section
+        assert "log_content" in text
+        # No FAIL rows in this fixture → PASS gate verdict
+        assert "**PASS**" in text
+
+    def test_report_summary_shows_fail_count(self):
+        from trainr.core.compare_prompt_versions import format_delta_report
+
+        input_frame = _make_input_frame(n_strat=10, n_inject=0)
+        # Construct a FAIL-agreement row: iter15 unanimous, iter16 has 2-1 split.
+        before_votes = [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]] * 3
+        after_votes = [
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        ]
+        before_frames = {
+            slug: _make_annotator_frame(input_frame, {"det_python": v})
+            for slug, v in zip(("gemini3flash", "sonnet", "gpt54mini"), before_votes)
+        }
+        after_frames = {
+            slug: _make_annotator_frame(input_frame, {"det_python": v})
+            for slug, v in zip(("gemini3flash", "sonnet", "gpt54mini"), after_votes)
+        }
+        noise_frames = {k: v.clone() for k, v in after_frames.items()}
+
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        text = format_delta_report(report)
+        assert "**FAIL**" in text
+        # Summary line should mention the FAIL count
+        assert "1 FAIL-agreement" in text or "FAIL-agreement: 1" in text or "1 FAIL" in text
+
+    def test_report_handles_inf_prevalence_ratio(self):
+        """A label with iter15_prev=0 and iter16_prev>0 should format cleanly."""
+        from trainr.core.compare_prompt_versions import format_delta_report
+
+        input_frame = _make_input_frame(n_strat=4, n_inject=0)
+        # iter15: 0 fires; iter16: all 4 fire → ratio = inf
+        before_votes = [[0, 0, 0, 0]] * 3
+        after_votes = [[1, 1, 1, 1]] * 3
+        before_frames = {
+            slug: _make_annotator_frame(input_frame, {"det_python": v})
+            for slug, v in zip(("gemini3flash", "sonnet", "gpt54mini"), before_votes)
+        }
+        after_frames = {
+            slug: _make_annotator_frame(input_frame, {"det_python": v})
+            for slug, v in zip(("gemini3flash", "sonnet", "gpt54mini"), after_votes)
+        }
+        noise_frames = {k: v.clone() for k, v in after_frames.items()}
+
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+        text = format_delta_report(report)
+        # Should not crash, should not say "nan". "inf" is OK as a formatted value.
+        assert "nan" not in text.lower() or "inf" in text
+        assert "python" in text
+
+
 def test_agreement_delta_threshold_constant():
     """Pin the threshold so future edits don't silently move it."""
     from trainr.core.compare_prompt_versions import AGREEMENT_DELTA_THRESHOLD

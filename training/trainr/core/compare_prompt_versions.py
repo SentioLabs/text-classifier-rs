@@ -273,6 +273,192 @@ def _compute_prev_ratio(iter15_prev: float, iter16_prev: float) -> float:
     return iter16_prev / iter15_prev
 
 
+def format_delta_report(report: DeltaReport) -> str:
+    """Render the DeltaReport as markdown per the spec's §Report Schema.
+
+    Sections in order:
+      1. Gate verdict summary (PASS/FAIL + row counts)
+      2. Shared labels table (per-label metrics + verdicts)
+      3. iter15-only labels section (removed in iter16)
+      4. iter16-only labels section (new in iter16)
+      5. FAIL-agreement detail with override-eligibility hint
+      6. WARN-prevalence detail
+      7. Noise floor table (per-label)
+    """
+    lines: list[str] = []
+
+    lines.append("# iter17 A/B Regression Audit Report")
+    lines.append("")
+    lines.append("**Date:** 2026-04-10")
+    lines.append("")
+
+    # --- Gate verdict summary
+    n_shared = len(report.shared_labels)
+    n_fail = len(report.fail_agreement_rows)
+    n_warn = len(report.warn_prevalence_rows)
+    overall = "**FAIL**" if n_fail > 0 else "**PASS**"
+    lines.append("## Gate verdict")
+    lines.append("")
+    lines.append(overall)
+    lines.append("")
+    lines.append(
+        f"Summary: {n_shared} shared labels, {n_fail} FAIL-agreement, "
+        f"{n_warn} WARN-prevalence."
+    )
+    lines.append("")
+
+    # --- Shared labels table
+    lines.append("## Shared labels (gate applies)")
+    lines.append("")
+    lines.append(
+        "| label | iter15_agr | iter16_agr | Δagr | iter15_prev | iter16_prev | "
+        "prev_ratio | noise_floor | verdict |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in report.shared_labels:
+        row = report.labels[label]
+        lines.append(
+            f"| det_{row.label} "
+            f"| {_fmt_float(row.iter15_agreement)} "
+            f"| {_fmt_float(row.iter16_agreement)} "
+            f"| {_fmt_signed(row.delta_agreement)} "
+            f"| {_fmt_float(row.iter15_prevalence)} "
+            f"| {_fmt_float(row.iter16_prevalence)} "
+            f"| {_fmt_ratio(row.prevalence_ratio)} "
+            f"| {_fmt_float(row.noise_floor)} "
+            f"| {row.verdict.value} |"
+        )
+    lines.append("")
+
+    # --- iter15-only labels (removed in iter16)
+    lines.append("## iter15-only labels (removed in iter16, context only)")
+    lines.append("")
+    if report.iter15_only_labels:
+        lines.append("| label | iter15_agr | iter15_prev | note |")
+        lines.append("|---|---:|---:|---|")
+        for label in report.iter15_only_labels:
+            row = report.labels[label]
+            lines.append(
+                f"| det_{row.label} "
+                f"| {_fmt_float(row.iter15_agreement)} "
+                f"| {_fmt_float(row.iter15_prevalence)} "
+                f"| Not in iter16 prompt |"
+            )
+    else:
+        lines.append("_None._")
+    lines.append("")
+
+    # --- iter16-only labels (new in iter16)
+    lines.append("## iter16-only labels (new in iter16, cross-ref iter16 audit)")
+    lines.append("")
+    if report.iter16_only_labels:
+        lines.append("| label | iter16_agr | iter16_prev | noise_floor |")
+        lines.append("|---|---:|---:|---:|")
+        for label in report.iter16_only_labels:
+            row = report.labels[label]
+            lines.append(
+                f"| det_{row.label} "
+                f"| {_fmt_float(row.iter16_agreement)} "
+                f"| {_fmt_float(row.iter16_prevalence)} "
+                f"| {_fmt_float(row.noise_floor)} |"
+            )
+    else:
+        lines.append("_None._")
+    lines.append("")
+
+    # --- FAIL-agreement detail with override-eligibility hint
+    lines.append("## FAIL-agreement rows (if any)")
+    lines.append("")
+    if report.fail_agreement_rows:
+        for row in report.fail_agreement_rows:
+            if row.noise_floor and row.noise_floor > 0 and row.delta_agreement is not None:
+                ratio = abs(row.delta_agreement) / row.noise_floor
+                overridable = (
+                    "ELIGIBLE for override" if ratio <= 2.0 else "NOT overridable"
+                )
+                lines.append(
+                    f"- **det_{row.label}**: "
+                    f"Δagr={_fmt_signed(row.delta_agreement)}, "
+                    f"noise_floor={_fmt_float(row.noise_floor)}, "
+                    f"|Δagr|/noise_floor={ratio:.2f} → {overridable}"
+                )
+            else:
+                lines.append(
+                    f"- **det_{row.label}**: "
+                    f"Δagr={_fmt_signed(row.delta_agreement)}, "
+                    f"noise_floor={_fmt_float(row.noise_floor)} → "
+                    f"override eligibility cannot be computed"
+                )
+    else:
+        lines.append("_None._")
+    lines.append("")
+
+    # --- WARN-prevalence detail
+    lines.append("## WARN-prevalence rows (if any)")
+    lines.append("")
+    if report.warn_prevalence_rows:
+        for row in report.warn_prevalence_rows:
+            lines.append(
+                f"- **det_{row.label}**: "
+                f"iter15_prev={_fmt_float(row.iter15_prevalence)}, "
+                f"iter16_prev={_fmt_float(row.iter16_prevalence)}, "
+                f"ratio={_fmt_ratio(row.prevalence_ratio)}"
+            )
+    else:
+        lines.append("_None._")
+    lines.append("")
+
+    # --- Noise floor table (informational, all categorized labels)
+    lines.append("## Noise floor table")
+    lines.append("")
+    lines.append(
+        "Per-label same-prompt variance from iter16a vs iter16b runs. "
+        "Used to bound override eligibility for FAIL-agreement rows per "
+        "the Gate Decision Protocol."
+    )
+    lines.append("")
+    lines.append("| label | category | noise_floor |")
+    lines.append("|---|---|---:|")
+    for label in sorted(report.labels.keys()):
+        row = report.labels[label]
+        lines.append(
+            f"| det_{row.label} | {row.category.value} | {_fmt_float(row.noise_floor)} |"
+        )
+    lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def _fmt_float(value: float | None) -> str:
+    if value is None:
+        return "—"
+    if math.isinf(value):
+        return "inf"
+    if math.isnan(value):
+        return "nan"
+    return f"{value:.4f}"
+
+
+def _fmt_signed(value: float | None) -> str:
+    if value is None:
+        return "—"
+    if math.isinf(value):
+        return "inf"
+    if math.isnan(value):
+        return "nan"
+    return f"{value:+.4f}"
+
+
+def _fmt_ratio(value: float | None) -> str:
+    if value is None:
+        return "—"
+    if math.isinf(value):
+        return "inf"
+    if math.isnan(value):
+        return "nan"
+    return f"{value:.3f}"
+
+
 def _compute_verdict(
     delta_agreement: float,
     prevalence_ratio: float,
