@@ -227,3 +227,47 @@ class TestLoadAnnotatorParquets:
         with pytest.raises(ValueError, match="unexpected slugs"):
             load_annotator_parquets(paths)
 
+
+class TestIter16ReportReproducibility:
+    """Guard against silent drift in audit_semantic_labels output.
+
+    The iter16 audit report is committed at docs/accuracy_runs/... . If any
+    refactor changes agreement math, rounding, column ordering, or
+    format_report output, this test fails loud.
+    """
+
+    def test_iter16_audit_report_reproduces_byte_for_byte(self):
+        from trainr.core.audit_semantic_labels import (
+            compute_agreement_across_models,
+            compute_recall_majority,
+            filter_for_agreement,
+            format_report,
+        )
+
+        repo_root = Path(__file__).resolve().parents[2]
+        parquet_dir = repo_root / "training" / "data" / "audit"
+        report_path = (
+            repo_root / "docs" / "accuracy_runs"
+            / "2026-04-10-iteration-16-audit-report.md"
+        )
+
+        if not parquet_dir.exists() or not report_path.exists():
+            pytest.skip("iter16 fixture data not available in this checkout")
+
+        dfs = {
+            "gemini3flash": pl.read_parquet(parquet_dir / "iter16_5k_gemini3flash.parquet"),
+            "sonnet": pl.read_parquet(parquet_dir / "iter16_5k_sonnet.parquet"),
+            "gpt54mini": pl.read_parquet(parquet_dir / "iter16_5k_gpt54mini.parquet"),
+        }
+        stratified_dfs = {name: filter_for_agreement(df) for name, df in dfs.items()}
+        agreement = compute_agreement_across_models(stratified_dfs)
+        recall = compute_recall_majority(dfs)
+        regenerated = format_report(dfs, agreement, recall)
+
+        committed = report_path.read_text()
+        assert regenerated == committed, (
+            "iter16 audit report drift detected — a refactor changed the "
+            "audit output. If this change is intentional, regenerate the "
+            "committed report and update this test's fixture reference."
+        )
+
