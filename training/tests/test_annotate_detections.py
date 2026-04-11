@@ -19,9 +19,9 @@ class TestDetectionLabels:
         from trainr.core.annotate_detections import DETECTION_LABELS
 
         assert isinstance(DETECTION_LABELS, list)
-        # Current baseline: 40 labels (pre-iter16).
-        # Phase 1 removes log_lines (→39), phases 3-5 add 3 semantic labels (→42).
-        assert len(DETECTION_LABELS) == 40
+        # After phase 1: log_lines removed → 39.
+        # After phases 3-5: 3 semantic labels added → 42.
+        assert len(DETECTION_LABELS) == 39
 
     def test_expected_labels_present(self):
         from trainr.core.annotate_detections import DETECTION_LABELS
@@ -34,7 +34,7 @@ class TestDetectionLabels:
             "yaml", "toml", "ini", "dockerfile", "makefile",
             "html", "xml", "sgml",
             "csv", "tsv", "pipe_table", "fixed_width",
-            "json", "jsonl", "key_value", "log_lines",
+            "json", "jsonl", "key_value",
         ]
         for label in expected:
             assert label in DETECTION_LABELS, f"Missing label: {label}"
@@ -43,6 +43,30 @@ class TestDetectionLabels:
         from trainr.core.annotate_detections import DETECTION_LABELS
 
         assert len(DETECTION_LABELS) == len(set(DETECTION_LABELS))
+
+    def test_log_lines_removed_from_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS
+
+        assert "log_lines" not in DETECTION_LABELS, (
+            "log_lines must be sub_type-only (not a detection label) after "
+            "iter16. See docs/superpowers/specs/"
+            "2026-04-10-semantic-detection-labels-design.md"
+        )
+
+    def test_log_lines_removed_from_system_prompt_label_list(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        # The inline label list line in SYSTEM_PROMPT begins with "Labels:"
+        label_list_line = next(
+            line for line in SYSTEM_PROMPT.splitlines() if line.startswith("Labels:")
+        )
+        assert "log_lines" not in label_list_line
+
+    def test_log_lines_removed_from_json_template(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        # The JSON example template at the bottom should not include log_lines
+        assert '"log_lines":' not in SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------

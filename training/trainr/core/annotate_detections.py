@@ -38,7 +38,7 @@ DETECTION_LABELS: list[str] = [
     "yaml", "toml", "ini", "dockerfile", "makefile",
     "html", "xml", "sgml",
     "csv", "tsv", "pipe_table", "fixed_width",
-    "json", "jsonl", "key_value", "log_lines",
+    "json", "jsonl", "key_value",
 ]
 
 # ---------------------------------------------------------------------------
@@ -57,7 +57,6 @@ ROUTING_TABLE: dict[str, tuple[str, str]] = {
     "css": ("openai/gpt-5.4-nano", "openrouter"),
     "dockerfile": ("openai/gpt-5.4-nano", "openrouter"),
     "java": ("openai/gpt-5.4-nano", "openrouter"),
-    "log_lines": ("openai/gpt-5.4-nano", "openrouter"),
     "rust": ("openai/gpt-5.4-nano", "openrouter"),
     "sql": ("openai/gpt-5.4-nano", "openrouter"),
     "csv": ("google/gemini-3.1-flash-lite-preview", "openrouter"),
@@ -98,7 +97,7 @@ document with embedded Python code blocks should have both "markdown": 1 and \
 Labels: plain, markdown, rst, latex, python, javascript, typescript, rust, go, \
 java, c_cpp, objc, csharp, powershell, ruby, php, swift, kotlin, r, lua, \
 graphql, sql, shell, css, yaml, toml, ini, dockerfile, makefile, html, xml, \
-sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, log_lines
+sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value
 
 For each label, output 1 if that content type is present in the text, or 0 if not.
 
@@ -166,7 +165,7 @@ No explanation, no markdown formatting.
 "r": 0, "lua": 0, "graphql": 0, "sql": 0, "shell": 0, "css": 0, "yaml": 0, \
 "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, "xml": 0, \
 "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, "json": 0, \
-"jsonl": 0, "key_value": 0, "log_lines": 0}"""
+"jsonl": 0, "key_value": 0}"""
 
 
 def build_prompt(text: str) -> str:
