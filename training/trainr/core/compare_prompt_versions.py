@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 import polars as pl
 
@@ -491,3 +492,87 @@ def _compute_verdict(
     if warn:
         return LabelVerdict.WARN_PREVALENCE
     return LabelVerdict.PASS
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: `trainr data compare-prompts`.
+
+    Parses argv, expands globs via Python's `glob` module, loads parquets
+    via `load_annotator_parquets` (which validates the slug set), runs
+    the comparison, writes the markdown report, and exits 2 if any
+    FAIL-agreement row exists so shell callers can gate on it.
+    """
+    import argparse
+    import glob as _glob
+    import sys
+
+    from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--before", required=True,
+        help="Glob for the iter15-side parquets (3 files, one per model slug).",
+    )
+    parser.add_argument(
+        "--after", required=True,
+        help="Glob for the iter16a-side parquets (the A/B 'after' side, 3 files).",
+    )
+    parser.add_argument(
+        "--noise-floor", required=True, dest="noise_floor",
+        help="Glob for the iter16b-side parquets (noise floor companion, 3 files).",
+    )
+    parser.add_argument(
+        "--input", required=True,
+        help="Path to the input parquet used for all annotation runs "
+             "(iter16_5k_input.parquet).",
+    )
+    parser.add_argument(
+        "--output", required=True,
+        help="Path to write the markdown regression report.",
+    )
+    args = parser.parse_args(argv)
+
+    def _resolve(glob_arg: str, name: str) -> list[Path]:
+        paths = sorted(Path(p) for p in _glob.glob(glob_arg))
+        if not paths:
+            raise ValueError(
+                f"--{name}: glob {glob_arg!r} matched zero files"
+            )
+        return paths
+
+    before_paths = _resolve(args.before, "before")
+    after_paths = _resolve(args.after, "after")
+    noise_paths = _resolve(args.noise_floor, "noise-floor")
+
+    before_frames = load_annotator_parquets(before_paths)
+    after_frames = load_annotator_parquets(after_paths)
+    noise_frames = load_annotator_parquets(noise_paths)
+
+    input_frame = pl.read_parquet(args.input)
+
+    report = compare_prompt_versions(
+        before_frames=before_frames,
+        after_frames=after_frames,
+        noise_floor_frames=noise_frames,
+        input_frame=input_frame,
+    )
+    text = format_delta_report(report)
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(text)
+
+    n_fail = len(report.fail_agreement_rows)
+    print(
+        f"compare-prompts: wrote {args.output}. "
+        f"{len(report.shared_labels)} shared labels, "
+        f"{n_fail} FAIL-agreement, "
+        f"{len(report.warn_prevalence_rows)} WARN-prevalence.",
+        file=sys.stderr,
+    )
+    if n_fail > 0:
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

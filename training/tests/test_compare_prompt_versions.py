@@ -529,3 +529,95 @@ def test_prevalence_ratio_bounds_constants():
     )
     assert PREVALENCE_RATIO_LOW == 0.5
     assert PREVALENCE_RATIO_HIGH == 2.0
+
+
+class TestMainCLI:
+    def test_main_end_to_end_from_parquets(self, tmp_path):
+        """Run main() against a small set of real parquet files on disk."""
+        from trainr.core.compare_prompt_versions import main as compare_main
+
+        # Build a tiny input parquet and 9 annotation parquets.
+        input_frame = _make_input_frame(n_strat=5, n_inject=0)
+        input_path = tmp_path / "input.parquet"
+        input_frame.write_parquet(input_path)
+
+        def _write_side(side: str):
+            for slug in ("gemini3flash", "sonnet", "gpt54mini"):
+                df = _make_annotator_frame(input_frame, {"det_python": [0] * 5})
+                df.write_parquet(tmp_path / f"iter17_ab_{side}_{slug}.parquet")
+
+        _write_side("iter15")
+        _write_side("iter16a")
+        _write_side("iter16b")
+
+        output_report = tmp_path / "report.md"
+        compare_main([
+            "--before", str(tmp_path / "iter17_ab_iter15_*.parquet"),
+            "--after", str(tmp_path / "iter17_ab_iter16a_*.parquet"),
+            "--noise-floor", str(tmp_path / "iter17_ab_iter16b_*.parquet"),
+            "--input", str(input_path),
+            "--output", str(output_report),
+        ])
+
+        assert output_report.exists()
+        content = output_report.read_text()
+        assert "# iter17 A/B Regression Audit Report" in content
+        assert "**PASS**" in content
+
+    def test_main_exits_2_on_fail(self, tmp_path):
+        """main() should sys.exit(2) if any FAIL-agreement row exists."""
+        import sys
+
+        from trainr.core.compare_prompt_versions import main as compare_main
+
+        input_frame = _make_input_frame(n_strat=10, n_inject=0)
+        input_path = tmp_path / "input.parquet"
+        input_frame.write_parquet(input_path)
+
+        # iter15 unanimous all-1, iter16 has a 2-1 split on row 9 → FAIL.
+        before_votes = [[1] * 10] * 3
+        after_votes = [
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [1] * 10,
+            [1] * 10,
+        ]
+
+        def _write_side(side: str, votes_list):
+            for slug, votes in zip(("gemini3flash", "sonnet", "gpt54mini"), votes_list):
+                df = _make_annotator_frame(input_frame, {"det_python": votes})
+                df.write_parquet(tmp_path / f"iter17_ab_{side}_{slug}.parquet")
+
+        _write_side("iter15", before_votes)
+        _write_side("iter16a", after_votes)
+        _write_side("iter16b", after_votes)
+
+        output_report = tmp_path / "report.md"
+        with pytest.raises(SystemExit) as excinfo:
+            compare_main([
+                "--before", str(tmp_path / "iter17_ab_iter15_*.parquet"),
+                "--after", str(tmp_path / "iter17_ab_iter16a_*.parquet"),
+                "--noise-floor", str(tmp_path / "iter17_ab_iter16b_*.parquet"),
+                "--input", str(input_path),
+                "--output", str(output_report),
+            ])
+        assert excinfo.value.code == 2
+        # Report should still be written before the exit.
+        assert output_report.exists()
+        assert "**FAIL**" in output_report.read_text()
+
+    def test_main_raises_on_empty_glob(self, tmp_path):
+        from trainr.core.compare_prompt_versions import main as compare_main
+
+        # No parquets exist at these paths.
+        input_path = tmp_path / "input.parquet"
+        _make_input_frame(n_strat=5, n_inject=0).write_parquet(input_path)
+        output_report = tmp_path / "report.md"
+
+        with pytest.raises(ValueError, match="matched zero files"):
+            compare_main([
+                "--before", str(tmp_path / "nonexistent_*.parquet"),
+                "--after", str(tmp_path / "also_missing_*.parquet"),
+                "--noise-floor", str(tmp_path / "also_gone_*.parquet"),
+                "--input", str(input_path),
+                "--output", str(output_report),
+            ])
