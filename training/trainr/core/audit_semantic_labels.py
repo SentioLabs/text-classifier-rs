@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -29,6 +30,17 @@ import polars as pl
 from trainr.core.annotate_detections import SEMANTIC_LABELS
 
 STRATIFIED = "stratified"
+
+# Canonical model slug set for iter16/iter17 annotation parquets. This is
+# the authoritative set — every loader that accepts a glob of 3 parquets
+# asserts its parsed slugs equal this set. Duplicates, misnames, and
+# unknown slugs all fail loud here rather than silently corrupting metrics.
+EXPECTED_MODEL_SLUGS: frozenset[str] = frozenset({"gemini3flash", "sonnet", "gpt54mini"})
+
+# Filename pattern: <anything>_<slug>.parquet where slug is alphanumeric.
+# The capture group extracts the slug. Validation against EXPECTED_MODEL_SLUGS
+# happens in load_annotator_parquets.
+_SLUG_RE = re.compile(r".*_(?P<slug>[a-z0-9]+)\.parquet$")
 
 # Pass criteria thresholds (from spec)
 AGREEMENT_THRESHOLD = 0.995
@@ -43,6 +55,63 @@ def filter_for_agreement(df: pl.DataFrame) -> pl.DataFrame:
 def detection_columns(df: pl.DataFrame) -> list[str]:
     """Return det_* column names present in the DataFrame."""
     return [c for c in df.columns if c.startswith("det_")]
+
+
+def load_annotator_parquets(
+    paths: list[Path],
+) -> dict[str, pl.DataFrame]:
+    """Load annotator parquets keyed by model slug parsed from filename.
+
+    Asserts that exactly 3 parquets are passed AND that their parsed slug
+    set equals EXPECTED_MODEL_SLUGS. This catches the "three files but one
+    is a duplicate or misnamed" failure mode that a count check alone
+    cannot — critical because gate metrics depend on knowing which model
+    produced which parquet.
+
+    Args:
+        paths: List of 3 parquet file paths.
+
+    Returns:
+        {slug: DataFrame} with keys exactly equal to EXPECTED_MODEL_SLUGS.
+
+    Raises:
+        ValueError: If count != 3, a filename doesn't match the slug regex,
+            or the parsed slug set != EXPECTED_MODEL_SLUGS.
+    """
+    if len(paths) != 3:
+        raise ValueError(
+            f"load_annotator_parquets: expected 3 parquets, got {len(paths)}: "
+            f"{[str(p) for p in paths]}"
+        )
+
+    parsed: dict[str, Path] = {}
+    for path in paths:
+        match = _SLUG_RE.match(path.name)
+        if match is None:
+            raise ValueError(
+                f"load_annotator_parquets: could not parse model slug from "
+                f"{path.name!r}; expected format '<prefix>_<slug>.parquet' "
+                f"with slug in {sorted(EXPECTED_MODEL_SLUGS)}"
+            )
+        slug = match.group("slug")
+        if slug in parsed:
+            raise ValueError(
+                f"load_annotator_parquets: duplicate slug {slug!r} "
+                f"(already mapped to {parsed[slug].name}, now {path.name})"
+            )
+        parsed[slug] = path
+
+    parsed_slugs = frozenset(parsed.keys())
+    if parsed_slugs != EXPECTED_MODEL_SLUGS:
+        missing = EXPECTED_MODEL_SLUGS - parsed_slugs
+        extra = parsed_slugs - EXPECTED_MODEL_SLUGS
+        raise ValueError(
+            f"load_annotator_parquets: parsed slugs do not match expected set. "
+            f"missing={sorted(missing)}, unexpected slugs={sorted(extra)}. "
+            f"expected={sorted(EXPECTED_MODEL_SLUGS)}"
+        )
+
+    return {slug: pl.read_parquet(path) for slug, path in parsed.items()}
 
 
 def compute_agreement_across_models(

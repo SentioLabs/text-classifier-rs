@@ -1,6 +1,10 @@
 """Smoke tests for trainr.core.audit_semantic_labels."""
 
+import re
+from pathlib import Path
+
 import polars as pl
+import pytest
 
 from trainr.core.audit_semantic_labels import compute_prevalence_per_label
 
@@ -134,4 +138,68 @@ class TestComputePrevalencePerLabel:
         assert "markdown" not in result, (
             "Labels missing from one frame must be skipped, not included"
         )
+
+
+class TestLoadAnnotatorParquets:
+    def test_expected_slug_set_constant(self):
+        from trainr.core.audit_semantic_labels import EXPECTED_MODEL_SLUGS
+        assert EXPECTED_MODEL_SLUGS == frozenset({"gemini3flash", "sonnet", "gpt54mini"})
+
+    def test_loads_three_parquets_by_slug(self, tmp_path):
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        def _make(path: Path, val: int):
+            pl.DataFrame({
+                "audit_source": ["stratified"],
+                "det_python": [val],
+            }).write_parquet(path)
+
+        _make(tmp_path / "iter17_ab_iter15_gemini3flash.parquet", 1)
+        _make(tmp_path / "iter17_ab_iter15_sonnet.parquet", 0)
+        _make(tmp_path / "iter17_ab_iter15_gpt54mini.parquet", 1)
+
+        paths = sorted(tmp_path.glob("iter17_ab_iter15_*.parquet"))
+        result = load_annotator_parquets(paths)
+
+        assert set(result.keys()) == {"gemini3flash", "sonnet", "gpt54mini"}
+        assert result["gemini3flash"]["det_python"][0] == 1
+        assert result["sonnet"]["det_python"][0] == 0
+
+    def test_rejects_wrong_count(self, tmp_path):
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        pl.DataFrame({"audit_source": ["stratified"]}).write_parquet(
+            tmp_path / "iter17_ab_iter15_gemini3flash.parquet"
+        )
+        paths = [tmp_path / "iter17_ab_iter15_gemini3flash.parquet"]
+        with pytest.raises(ValueError, match="expected 3 parquets"):
+            load_annotator_parquets(paths)
+
+    def test_rejects_duplicate_slug(self, tmp_path):
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        def _make(path: Path):
+            pl.DataFrame({"audit_source": ["stratified"]}).write_parquet(path)
+
+        _make(tmp_path / "iter17_ab_iter15_gemini3flash.parquet")
+        _make(tmp_path / "iter17_ab_iter15_sonnet.parquet")
+        _make(tmp_path / "iter17_ab_iter15_sonnet_copy.parquet")
+        # The "copy" one won't match the regex expected set and will be rejected.
+        paths = sorted(tmp_path.glob("iter17_ab_iter15_*.parquet"))
+        with pytest.raises(ValueError):
+            load_annotator_parquets(paths)
+
+    def test_rejects_unknown_slug(self, tmp_path):
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        def _make(path: Path):
+            pl.DataFrame({"audit_source": ["stratified"]}).write_parquet(path)
+
+        _make(tmp_path / "iter17_ab_iter15_gemini3flash.parquet")
+        _make(tmp_path / "iter17_ab_iter15_sonnet.parquet")
+        _make(tmp_path / "iter17_ab_iter15_claude35.parquet")
+
+        paths = sorted(tmp_path.glob("iter17_ab_iter15_*.parquet"))
+        with pytest.raises(ValueError, match="unexpected slugs"):
+            load_annotator_parquets(paths)
 
