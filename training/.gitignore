@@ -1,6 +1,9 @@
 # Regenerable pilot data (not DVC-tracked)
 data/source/pilot/
 
+# Audit staging (LLM annotations — reproducible from scripts; findings live in docs/plans/)
+data/audit/
+
 # Model artifacts (large binaries)
 models/*.onnx
 models/metrics.json
