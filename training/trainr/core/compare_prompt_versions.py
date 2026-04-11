@@ -18,6 +18,7 @@ import polars as pl
 from trainr.core.audit_semantic_labels import (
     compute_agreement_across_models,
     compute_prevalence_per_label,
+    detection_columns,
     filter_for_agreement,
 )
 
@@ -90,12 +91,50 @@ def compare_prompt_versions(
     `input_frame`. The caller is responsible for loading and filtering —
     this function works in-memory only.
 
-    Future tasks (2.2-2.6) extend this function; for now it handles the
-    simple all-shared, all-pass case.
+    `input_frame` is reserved for fingerprint validation in Task 2.4; it
+    is currently unused at the function body level but the parameter is
+    part of the locked-in public API.
+
+    Future tasks (2.3+) extend the verdict logic; this task (2.2) handles
+    column categorization and the hard schema assertion between
+    after_frames and noise_floor_frames.
     """
     report = DeltaReport()
 
-    # Stratified frames for agreement.
+    # --- Hard schema assertion: after and noise_floor must agree on det_* cols.
+    # Noise floor correctness depends on both sides having the same label set.
+    after_first = next(iter(after_frames.values()))
+    noise_first = next(iter(noise_floor_frames.values()))
+    after_det = set(detection_columns(after_first))
+    noise_det = set(detection_columns(noise_first))
+    if after_det != noise_det:
+        diff = sorted(after_det.symmetric_difference(noise_det))
+        raise ValueError(
+            f"compare_prompt_versions: after and noise_floor have differing "
+            f"det_* column sets. symmetric_difference={diff}. "
+            f"after_only={sorted(after_det - noise_det)}, "
+            f"noise_only={sorted(noise_det - after_det)}"
+        )
+
+    # --- Column categorization via dynamic introspection.
+    before_first = next(iter(before_frames.values()))
+    before_det = set(detection_columns(before_first))
+
+    def _strip(col: str) -> str:
+        return col[len("det_"):]
+
+    before_labels = {_strip(c) for c in before_det}
+    after_labels = {_strip(c) for c in after_det}
+
+    shared = sorted(before_labels & after_labels)
+    iter15_only = sorted(before_labels - after_labels)
+    iter16_only = sorted(after_labels - before_labels)
+
+    report.shared_labels = shared
+    report.iter15_only_labels = iter15_only
+    report.iter16_only_labels = iter16_only
+
+    # --- Filter to stratified rows for agreement (prevalence filters itself).
     before_strat = {k: filter_for_agreement(v) for k, v in before_frames.items()}
     after_strat = {k: filter_for_agreement(v) for k, v in after_frames.items()}
     noise_strat = {k: filter_for_agreement(v) for k, v in noise_floor_frames.items()}
@@ -104,15 +143,17 @@ def compare_prompt_versions(
     iter16_agr = compute_agreement_across_models(after_strat)
     noise_agr = compute_agreement_across_models(noise_strat)
 
-    # compute_prevalence_per_label filters internally, so pass raw frames.
     iter15_prev = compute_prevalence_per_label(before_frames)
     iter16_prev = compute_prevalence_per_label(after_frames)
 
-    shared_labels = sorted(set(iter15_agr.keys()) & set(iter16_agr.keys()))
-    report.shared_labels = shared_labels
-
-    for label in shared_labels:
-        row = LabelRow(
+    # --- Shared labels: full metrics, placeholder PASS verdict (Task 2.3 fixes).
+    for label in shared:
+        # Noise floor: same-prompt variance between iter16a and iter16b
+        # measured as |agr(iter16a) - agr(iter16b)|. Available iff the label
+        # is in noise_agr (guaranteed for shared labels given the schema
+        # assert above, but defensive check retained).
+        nf = abs(noise_agr[label] - iter16_agr[label]) if label in noise_agr else None
+        report.labels[label] = LabelRow(
             label=label,
             category=LabelCategory.SHARED,
             iter15_agreement=iter15_agr[label],
@@ -124,10 +165,40 @@ def compare_prompt_versions(
                 iter15_prev.get(label, 0.0),
                 iter16_prev.get(label, 0.0),
             ),
-            noise_floor=abs(noise_agr[label] - iter16_agr[label]) if label in noise_agr else None,
-            verdict=LabelVerdict.PASS,  # placeholder; Task 2.3 adds real verdict logic
+            noise_floor=nf,
+            verdict=LabelVerdict.PASS,  # placeholder; Task 2.3 adds real logic
         )
-        report.labels[label] = row
+
+    # --- iter15-only labels: partial metrics, no verdict.
+    for label in iter15_only:
+        report.labels[label] = LabelRow(
+            label=label,
+            category=LabelCategory.ITER15_ONLY,
+            iter15_agreement=iter15_agr[label],
+            iter16_agreement=None,
+            delta_agreement=None,
+            iter15_prevalence=iter15_prev.get(label, 0.0),
+            iter16_prevalence=None,
+            prevalence_ratio=None,
+            noise_floor=None,
+            verdict=LabelVerdict.NO_VERDICT,
+        )
+
+    # --- iter16-only labels: partial metrics, no verdict.
+    for label in iter16_only:
+        nf = abs(noise_agr[label] - iter16_agr[label]) if label in noise_agr else None
+        report.labels[label] = LabelRow(
+            label=label,
+            category=LabelCategory.ITER16_ONLY,
+            iter15_agreement=None,
+            iter16_agreement=iter16_agr[label],
+            delta_agreement=None,
+            iter15_prevalence=None,
+            iter16_prevalence=iter16_prev.get(label, 0.0),
+            prevalence_ratio=None,
+            noise_floor=nf,
+            verdict=LabelVerdict.NO_VERDICT,
+        )
 
     return report
 

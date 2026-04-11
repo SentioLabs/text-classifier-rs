@@ -12,6 +12,7 @@ import pytest
 
 from trainr.core.compare_prompt_versions import (
     DeltaReport,
+    LabelCategory,
     LabelVerdict,
     compare_prompt_versions,
 )
@@ -70,3 +71,82 @@ class TestHappyPath:
         assert py.iter16_prevalence == pytest.approx(0.3)
         assert py.prevalence_ratio == pytest.approx(1.0)
         assert py.noise_floor == pytest.approx(0.0)
+
+
+class TestColumnCategorization:
+    def _make_frames(self, det_columns: list[str]) -> tuple[dict[str, pl.DataFrame], pl.DataFrame]:
+        input_frame = _make_input_frame(n_strat=5, n_inject=0)
+        frames = {}
+        for slug in ("gemini3flash", "sonnet", "gpt54mini"):
+            frames[slug] = _make_annotator_frame(
+                input_frame,
+                {col: [0] * 5 for col in det_columns},
+            )
+        return frames, input_frame
+
+    def test_iter15_only_label_categorized(self):
+        before_frames, input_frame = self._make_frames(["det_python", "det_log_lines"])
+        after_frames, _ = self._make_frames(["det_python"])
+        noise_frames = {k: v.clone() for k, v in after_frames.items()}
+
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+
+        assert "log_lines" in report.iter15_only_labels
+        assert "log_lines" in report.labels
+        assert report.labels["log_lines"].category == LabelCategory.ITER15_ONLY
+        assert report.labels["log_lines"].verdict == LabelVerdict.NO_VERDICT
+        assert report.labels["log_lines"].iter16_agreement is None
+        assert report.labels["log_lines"].delta_agreement is None
+        assert "python" in report.shared_labels
+
+    def test_iter16_only_label_categorized(self):
+        before_frames, input_frame = self._make_frames(["det_python"])
+        after_frames, _ = self._make_frames(["det_python", "det_log_content"])
+        noise_frames = {k: v.clone() for k, v in after_frames.items()}
+
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+
+        assert "log_content" in report.iter16_only_labels
+        assert report.labels["log_content"].category == LabelCategory.ITER16_ONLY
+        assert report.labels["log_content"].verdict == LabelVerdict.NO_VERDICT
+        assert report.labels["log_content"].iter15_agreement is None
+
+    def test_mixed_asymmetry(self):
+        before_frames, input_frame = self._make_frames(["det_python", "det_log_lines"])
+        after_frames, _ = self._make_frames(["det_python", "det_log_content"])
+        noise_frames = {k: v.clone() for k, v in after_frames.items()}
+
+        report = compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+
+        assert report.shared_labels == ["python"]
+        assert report.iter15_only_labels == ["log_lines"]
+        assert report.iter16_only_labels == ["log_content"]
+
+    def test_after_and_noise_floor_column_mismatch_raises(self):
+        before_frames, input_frame = self._make_frames(["det_python"])
+        after_frames, _ = self._make_frames(["det_python", "det_log_content"])
+        # noise_floor missing det_log_content — this must fail loud.
+        noise_frames, _ = self._make_frames(["det_python"])
+
+        with pytest.raises(ValueError, match="det_log_content"):
+            compare_prompt_versions(
+                before_frames=before_frames,
+                after_frames=after_frames,
+                noise_floor_frames=noise_frames,
+                input_frame=input_frame,
+            )
