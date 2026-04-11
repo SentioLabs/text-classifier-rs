@@ -1,8 +1,5 @@
 """Smoke tests for trainr.core.audit_semantic_labels."""
 
-import tempfile
-from pathlib import Path
-
 import polars as pl
 
 

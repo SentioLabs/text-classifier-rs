@@ -20,12 +20,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
 import polars as pl
 
-from trainr.core.annotate_detections import DETECTION_LABELS, SEMANTIC_LABELS
+from trainr.core.annotate_detections import SEMANTIC_LABELS
 
 STRATIFIED = "stratified"
 
@@ -50,12 +51,17 @@ def compute_agreement_across_models(
     """Compute per-label mean agreement across models on aligned rows.
 
     Assumes all DataFrames have the same row ordering (which they will
-    if produced from the same input by annotate_dataframe).
+    if produced from the same input by annotate_dataframe). Raises
+    ValueError if the DataFrames have mismatched det_* columns or row
+    counts -- catching this at the top is much clearer than a
+    downstream KeyError mid-loop.
 
     Returns {label: agreement} where agreement is the fraction of rows
     on which the majority vote matches the modal vote, averaged across
     rows. Unanimous rows contribute 1.0; split rows contribute
-    max(ones, zeros) / n_models.
+    max(ones, zeros) / n_models. For n_models=3, the floor is 2/3
+    (a 2-1 split) and the ceiling is 1.0 (unanimous), so the metric
+    lives in [0.667, 1.0], not [0, 1].
     """
     model_names = list(dfs.keys())
     n_models = len(model_names)
@@ -65,6 +71,26 @@ def compute_agreement_across_models(
     first = dfs[model_names[0]]
     det_cols = detection_columns(first)
     n_rows = len(first)
+
+    # Validate schema and row alignment across all models
+    first_det_set = set(det_cols)
+    for m in model_names[1:]:
+        other = dfs[m]
+        other_det_set = set(detection_columns(other))
+        if other_det_set != first_det_set:
+            missing = first_det_set - other_det_set
+            extra = other_det_set - first_det_set
+            raise ValueError(
+                f"Model {m!r} has mismatched det_* columns vs "
+                f"{model_names[0]!r}: missing={sorted(missing)}, "
+                f"extra={sorted(extra)}"
+            )
+        if len(other) != n_rows:
+            raise ValueError(
+                f"Model {m!r} has {len(other)} rows but "
+                f"{model_names[0]!r} has {n_rows}; annotated "
+                f"parquets must share row ordering"
+            )
 
     result: dict[str, float] = {}
     for col in det_cols:
@@ -167,6 +193,9 @@ def format_report(
     all_agree_pass = True
     for label in sorted(agreement.keys()):
         score = agreement[label]
+        if math.isnan(score):
+            lines.append(f"| {label} | N/A | N/A (no data) |")
+            continue
         passed = score >= AGREEMENT_THRESHOLD
         if not passed:
             all_agree_pass = False
@@ -187,6 +216,10 @@ def format_report(
     all_recall_pass = True
     for label in sorted(SEMANTIC_LABELS):
         score = recall.get(label, float("nan"))
+        if math.isnan(score):
+            lines.append(f"| {label} | N/A | N/A (no injected rows) |")
+            all_recall_pass = False  # missing data fails criterion 2
+            continue
         passed = score >= RECALL_THRESHOLD
         if not passed:
             all_recall_pass = False
