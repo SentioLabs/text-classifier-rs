@@ -173,10 +173,12 @@ ONE of:
 syslog-style (`Jan 15 10:23:45`), or unix epoch (ms/seconds)
   * A recognized named format: nginx/apache access log, syslog \
 (`<pri>timestamp host proc[pid]: msg`), dockerd/container log, logfmt \
-(`key=value key2=value2`) ONLY when co-occurring with a timestamp OR \
-severity field
-  * JSON log records: >=2 consecutive JSON objects each containing BOTH a \
-timestamp field AND a `level`/`severity` field
+(`key=value key2=value2`) ONLY when the same line also contains a \
+timestamp key (`ts=`, `time=`) or severity key (`level=`, `severity=`)
+  * JSON log records: >=2 consecutive JSON objects (which may each span \
+multiple lines when pretty-printed) each containing BOTH a timestamp field \
+AND a `level`/`severity` field. When counting density, treat each JSON \
+record as ONE unit regardless of its line count.
 Severity tokens must be UPPERCASE or BRACKETED (`INFO`, `[info]`, `WARN`, \
 `WARNING`, `ERROR`, `DEBUG`, `TRACE`, `FATAL`, `CRITICAL`) — lowercase \
 `error`/`info` in prose or code identifiers does NOT count.
