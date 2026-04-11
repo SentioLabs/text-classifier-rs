@@ -32,12 +32,21 @@ from trainr.core.annotate_detections import stratified_sample
 # true positives for manual review.
 INJECTION_PATTERNS: dict[str, list[str]] = {
     "stack_trace": [
-        r"Traceback \(most recent call last\)",
-        r"Exception in thread",
+        # Python: Traceback header + "File " adjacency within ~200 chars.
+        # [\s\S]{0,200} is the polars-compatible equivalent of (?s:.{0,200}) —
+        # "any char including newlines", up to a bounded count.
+        r'Traceback \(most recent call last\):[\s\S]{0,200}File "',
+        # Java: "Exception in thread" header + "at <class>.<method>(File.java:N)"
+        # frame adjacency within ~400 chars.
+        r"Exception in thread[\s\S]{0,400}\s+at [\w.$]+\(.*\.java:\d+\)",
+        # Go is unchanged — "goroutine N [" header is already specific.
         r"goroutine \d+ \[",
-        r"panicked at",
-        r"\s+at [\w.$]+\(.*\.java:\d+\)",
-        r"^\s+at \w+\.\w+\.\w+\(\) in .*\.cs:line \d+",  # .NET
+        # Rust: (?m)^ anchors to line start, which excludes the test directive
+        # "// error-pattern:thread 'main' panicked at" (not at line start) while
+        # still matching real runtime panics (printed at line start).
+        r"(?m)^thread '[^']+' panicked at",
+        # .NET is unchanged — the "in <file>.cs:line N" suffix is specific.
+        r"^\s+at \w+\.\w+\.\w+\(\) in .*\.cs:line \d+",
     ],
     "diff_patch": [
         r"(?m)^@@ -\d+(,\d+)? \+\d+(,\d+)? @@",
