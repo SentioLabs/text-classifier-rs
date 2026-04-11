@@ -70,6 +70,11 @@ def find_injection_candidates(
     combined = "|".join(f"(?:{p})" for p in patterns)
     matched = corpus.filter(pl.col("text").str.contains(combined))
     if len(matched) == 0:
+        print(
+            f"  WARNING: zero corpus matches for {label!r} injection "
+            f"regexes — check patterns or corpus content.",
+            file=sys.stderr,
+        )
         return matched.with_columns(pl.lit(f"inject_{label}").alias("audit_source"))
     if len(matched) > n:
         matched = matched.sample(n=n, seed=seed)
@@ -102,6 +107,16 @@ def build_audit_sample(
         f"  Corpus loaded: {len(corpus)} rows.",
         file=sys.stderr,
     )
+    if "sub_type" not in corpus.columns:
+        raise ValueError(
+            f"Corpus at {input_path} is missing required 'sub_type' column; "
+            f"got columns: {corpus.columns}"
+        )
+    if "text" not in corpus.columns:
+        raise ValueError(
+            f"Corpus at {input_path} is missing required 'text' column; "
+            f"got columns: {corpus.columns}"
+        )
 
     # 1. Stratified sample tagged as 'stratified'
     stratified = stratified_sample(corpus, n=stratified_n, seed=seed)
