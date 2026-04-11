@@ -19,9 +19,9 @@ class TestDetectionLabels:
         from trainr.core.annotate_detections import DETECTION_LABELS
 
         assert isinstance(DETECTION_LABELS, list)
-        # After phase 1: 39. After phase 3: log_content added → 40.
-        # After phases 4-5: 2 more semantic labels → 42.
-        assert len(DETECTION_LABELS) == 40
+        # After phase 1: 39. After phase 3: log_content → 40.
+        # After phase 4: stack_trace → 41. After phase 5: diff_patch → 42.
+        assert len(DETECTION_LABELS) == 41
 
     def test_expected_labels_present(self):
         from trainr.core.annotate_detections import DETECTION_LABELS
@@ -513,3 +513,50 @@ class TestLogContentLabel:
         from trainr.core.annotate_detections import SYSTEM_PROMPT
 
         assert "PURE stack trace" in SYSTEM_PROMPT
+
+
+class TestStackTraceLabel:
+    """Regression-guard tests for the stack_trace semantic detection label."""
+
+    def test_in_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS
+
+        assert "stack_trace" in DETECTION_LABELS
+
+    def test_in_semantic_labels(self):
+        from trainr.core.annotate_detections import SEMANTIC_LABELS
+
+        assert "stack_trace" in SEMANTIC_LABELS
+
+    def test_in_system_prompt_label_list(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        label_list_line = next(
+            line for line in SYSTEM_PROMPT.splitlines() if line.startswith("Labels:")
+        )
+        assert "stack_trace" in label_list_line
+
+    def test_in_json_template(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert '"stack_trace": 0' in SYSTEM_PROMPT
+
+    def test_definition_includes_two_frame_rule(self):
+        """Multi-frame requirement is the load-bearing anti-false-positive
+        rule for single-line errors and prose mentioning 'at line X'."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "TWO OR MORE" in SYSTEM_PROMPT
+        assert "frames" in SYSTEM_PROMPT
+
+    def test_definition_includes_dotnet_format(self):
+        """The .NET format (`   at Namespace.Class.Method() in File.cs:line 42`)
+        was flagged as highest-value addition by standard review."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert ".NET" in SYSTEM_PROMPT
+
+    def test_definition_mentions_cofire_with_log_content(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert 'fire BOTH' in SYSTEM_PROMPT

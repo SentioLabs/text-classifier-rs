@@ -40,7 +40,7 @@ DETECTION_LABELS: list[str] = [
     "csv", "tsv", "pipe_table", "fixed_width",
     "json", "jsonl", "key_value",
     # Added iter16 (2026-04-10): cross-cutting semantic detection labels
-    "log_content",
+    "log_content", "stack_trace",
 ]
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ DETECTION_LABELS: list[str] = [
 # text, regardless of the row's primary sub_type. Added in iter16 (2026-04-10).
 # ---------------------------------------------------------------------------
 
-SEMANTIC_LABELS: frozenset[str] = frozenset({"log_content"})
+SEMANTIC_LABELS: frozenset[str] = frozenset({"log_content", "stack_trace"})
 """Detection labels that have no corresponding ContentSubType.
 
 Empty until phases 3-5 append log_content, stack_trace, diff_patch.
@@ -112,7 +112,7 @@ Labels: plain, markdown, rst, latex, python, javascript, typescript, rust, go, \
 java, c_cpp, objc, csharp, powershell, ruby, php, swift, kotlin, r, lua, \
 graphql, sql, shell, css, yaml, toml, ini, dockerfile, makefile, html, xml, \
 sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, \
-log_content
+log_content, stack_trace
 
 For each label, output 1 if that content type is present in the text, or 0 if not.
 
@@ -191,6 +191,28 @@ the density count.
 If the embedded output is a PURE stack trace (no surrounding non-trace log \
 lines), fire "stack_trace": 1 but NOT "log_content": 1. If a stack trace \
 appears inside otherwise-normal log output, fire BOTH.
+- "stack_trace" = programmatic stack trace / traceback. Requires TWO OR \
+MORE frames where each frame carries a file:line locator OR a \
+package.Class.method locator (not just an `at` keyword). Strong signals \
+by language:
+  * Python: `Traceback (most recent call last):` header + `File "foo.py", \
+line N, in func` frames + final `ErrorType: message` line
+  * Java/JVM: `Exception in thread "..."` + \
+`at com.pkg.Class.method(File.java:42)` + optional `Caused by:` + \
+`... N more`
+  * .NET: `   at Namespace.Class.Method() in File.cs:line 42` (leading \
+whitespace is distinctive)
+  * JS/Node: `Error: message` + `at fn (file:line:col)` / `at async fn`
+  * Go: `goroutine N [running]:` + `main.foo(0x0)\n\tpath/file.go:42 +0x1a`
+  * Rust: `thread 'main' panicked at` + numbered backtrace frames `0: ...`, \
+`1: ...` with file:line
+  * Ruby: `from file.rb:42:in 'method'` chain (one frame per line)
+Truncation markers (`... N more frames`, `[truncated]`) do not disqualify \
+a trace. Do NOT fire on: single-line error messages, the literal phrase \
+"stack trace" in prose, tutorial pseudocode describing what a trace looks \
+like, profiler output tables, or prose like "at line 5 it crashed, at \
+line 6 it retried". If this trace appears inside log output, fire BOTH \
+"stack_trace": 1 AND "log_content": 1.
 
 ## Rules
 - When in doubt, label 1. It is better to include a borderline detection than \
@@ -207,7 +229,7 @@ No explanation, no markdown formatting.
 "r": 0, "lua": 0, "graphql": 0, "sql": 0, "shell": 0, "css": 0, "yaml": 0, \
 "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, "xml": 0, \
 "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, "json": 0, \
-"jsonl": 0, "key_value": 0, "log_content": 0}"""
+"jsonl": 0, "key_value": 0, "log_content": 0, "stack_trace": 0}"""
 
 
 def build_prompt(text: str) -> str:
