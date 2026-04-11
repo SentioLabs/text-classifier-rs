@@ -192,7 +192,8 @@ If the embedded output is a PURE stack trace (no surrounding non-trace log \
 lines), fire "stack_trace": 1 but NOT "log_content": 1. If a stack trace \
 appears inside otherwise-normal log output, fire BOTH.
 - "stack_trace" = programmatic stack trace / traceback. Requires TWO OR \
-MORE frames where each frame carries a file:line locator OR a \
+MORE frames (a frame may span multiple source lines, e.g. Python emits \
+two lines per frame) where each frame carries a file:line locator OR a \
 package.Class.method locator (not just an `at` keyword). Strong signals \
 by language:
   * Python: `Traceback (most recent call last):` header + `File "foo.py", \
@@ -206,7 +207,7 @@ whitespace is distinctive)
   * Go: `goroutine N [running]:` + `main.foo(0x0)\n\tpath/file.go:42 +0x1a`
   * Rust: `thread 'main' panicked at` + numbered backtrace frames `0: ...`, \
 `1: ...` with file:line
-  * Ruby: `from file.rb:42:in 'method'` chain (one frame per line)
+  * Ruby: from file.rb:42:in `method' chain (one frame per line)
 Truncation markers (`... N more frames`, `[truncated]`) do not disqualify \
 a trace. Do NOT fire on: single-line error messages, the literal phrase \
 "stack trace" in prose, tutorial pseudocode describing what a trace looks \

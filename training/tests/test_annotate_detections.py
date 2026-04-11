@@ -551,12 +551,21 @@ class TestStackTraceLabel:
 
     def test_definition_includes_dotnet_format(self):
         """The .NET format (`   at Namespace.Class.Method() in File.cs:line 42`)
-        was flagged as highest-value addition by standard review."""
+        was flagged as highest-value addition by standard review.
+
+        Uses File.cs:line as the anchor because `.NET` appears in the
+        csharp definition as well, so a bare substring check would pass
+        even if stack_trace were deleted.
+        """
         from trainr.core.annotate_detections import SYSTEM_PROMPT
 
-        assert ".NET" in SYSTEM_PROMPT
+        assert "File.cs:line 42" in SYSTEM_PROMPT
 
     def test_definition_mentions_cofire_with_log_content(self):
+        """Anchored on the full co-fire phrase unique to stack_trace's
+        definition — `fire BOTH` alone also appears in log_content's
+        pure-trace carveout, so the bare substring wouldn't fail if
+        stack_trace were deleted."""
         from trainr.core.annotate_detections import SYSTEM_PROMPT
 
-        assert 'fire BOTH' in SYSTEM_PROMPT
+        assert '"stack_trace": 1 AND "log_content": 1' in SYSTEM_PROMPT
