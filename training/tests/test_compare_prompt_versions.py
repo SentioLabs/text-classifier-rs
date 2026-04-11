@@ -323,6 +323,94 @@ class TestVerdictLogic:
         assert row.verdict == LabelVerdict.WARN_PREVALENCE
 
 
+class TestRowAlignmentFingerprint:
+    def test_passing_fingerprint_does_not_raise(self):
+        input_frame = _make_input_frame(n_strat=5, n_inject=0)
+        before_frames = {
+            slug: _make_annotator_frame(input_frame, {"det_python": [0] * 5})
+            for slug in ("gemini3flash", "sonnet", "gpt54mini")
+        }
+        after_frames = {k: v.clone() for k, v in before_frames.items()}
+        noise_frames = {k: v.clone() for k, v in before_frames.items()}
+
+        # Should succeed without raising.
+        compare_prompt_versions(
+            before_frames=before_frames,
+            after_frames=after_frames,
+            noise_floor_frames=noise_frames,
+            input_frame=input_frame,
+        )
+
+    def test_text_mutation_raises_with_row_index(self):
+        input_frame = _make_input_frame(n_strat=5, n_inject=0)
+        before_frames = {
+            slug: _make_annotator_frame(input_frame, {"det_python": [0] * 5})
+            for slug in ("gemini3flash", "sonnet", "gpt54mini")
+        }
+        # Corrupt one model's parquet by mutating a text row.
+        bad = before_frames["gemini3flash"].with_columns(
+            pl.Series("text", ["row-0", "row-1", "CORRUPTED", "row-3", "row-4"])
+        )
+        before_frames["gemini3flash"] = bad
+        after_frames = {k: v.clone() for k, v in before_frames.items()}
+        noise_frames = {k: v.clone() for k, v in before_frames.items()}
+
+        with pytest.raises(ValueError) as excinfo:
+            compare_prompt_versions(
+                before_frames=before_frames,
+                after_frames=after_frames,
+                noise_floor_frames=noise_frames,
+                input_frame=input_frame,
+            )
+        msg = str(excinfo.value)
+        # Error must name the row index and the diverging column.
+        assert "row 2" in msg or "index 2" in msg, f"row index missing from error: {msg!r}"
+        assert "text" in msg, f"column name missing from error: {msg!r}"
+        assert "gemini3flash" in msg, f"source slug missing from error: {msg!r}"
+
+    def test_row_count_mismatch_raises(self):
+        input_frame = _make_input_frame(n_strat=5, n_inject=0)
+        smaller = input_frame.head(3)
+        before_frames = {
+            "gemini3flash": _make_annotator_frame(smaller, {"det_python": [0, 0, 0]}),
+            "sonnet": _make_annotator_frame(input_frame, {"det_python": [0] * 5}),
+            "gpt54mini": _make_annotator_frame(input_frame, {"det_python": [0] * 5}),
+        }
+        after_frames = {k: v.clone() for k, v in before_frames.items()}
+        noise_frames = {k: v.clone() for k, v in before_frames.items()}
+
+        with pytest.raises(ValueError, match="row count"):
+            compare_prompt_versions(
+                before_frames=before_frames,
+                after_frames=after_frames,
+                noise_floor_frames=noise_frames,
+                input_frame=input_frame,
+            )
+
+    def test_missing_non_det_column_raises(self):
+        input_frame = _make_input_frame(n_strat=5, n_inject=0)
+        # Drop sub_type from one annotation frame to simulate a column-schema
+        # mismatch on a non-det column. The fingerprint check should catch it.
+        before_frames = {
+            slug: _make_annotator_frame(input_frame, {"det_python": [0] * 5})
+            for slug in ("gemini3flash", "sonnet", "gpt54mini")
+        }
+        before_frames["sonnet"] = before_frames["sonnet"].drop("sub_type")
+        after_frames = {k: v.clone() for k, v in before_frames.items()}
+        # Restore sub_type on after/noise so the mismatch is only on before.
+        after_frames["sonnet"] = _make_annotator_frame(input_frame, {"det_python": [0] * 5})
+        noise_frames = {k: v.clone() for k, v in before_frames.items()}
+        noise_frames["sonnet"] = _make_annotator_frame(input_frame, {"det_python": [0] * 5})
+
+        with pytest.raises(ValueError, match="sub_type|non-det"):
+            compare_prompt_versions(
+                before_frames=before_frames,
+                after_frames=after_frames,
+                noise_floor_frames=noise_frames,
+                input_frame=input_frame,
+            )
+
+
 def test_agreement_delta_threshold_constant():
     """Pin the threshold so future edits don't silently move it."""
     from trainr.core.compare_prompt_versions import AGREEMENT_DELTA_THRESHOLD

@@ -91,15 +91,23 @@ def compare_prompt_versions(
     `input_frame`. The caller is responsible for loading and filtering —
     this function works in-memory only.
 
-    `input_frame` is reserved for fingerprint validation in Task 2.4; it
-    is currently unused at the function body level but the parameter is
-    part of the locked-in public API.
-
-    Future tasks (2.3+) extend the verdict logic; this task (2.2) handles
-    column categorization and the hard schema assertion between
-    after_frames and noise_floor_frames.
+    `input_frame` is used for fingerprint validation: every annotation
+    frame must row-match the input on all non-det_* columns. This catches
+    row-order drift, row count mismatches, and silent corruption.
     """
     report = DeltaReport()
+
+    # --- Fingerprint validation. Every annotation frame must row-match the
+    # input parquet on all non-det_* columns. This catches row-order drift,
+    # row count mismatches, and silent corruption of the input passthrough
+    # columns. Must run BEFORE any metric computation so failures are
+    # caught early with a clear row index.
+    for slug, frame in before_frames.items():
+        _assert_fingerprint_matches_input(frame, input_frame, f"iter15/{slug}")
+    for slug, frame in after_frames.items():
+        _assert_fingerprint_matches_input(frame, input_frame, f"iter16a/{slug}")
+    for slug, frame in noise_floor_frames.items():
+        _assert_fingerprint_matches_input(frame, input_frame, f"iter16b/{slug}")
 
     # --- Hard schema assertion: after and noise_floor must agree on det_* cols.
     # Noise floor correctness depends on both sides having the same label set.
@@ -207,6 +215,53 @@ def compare_prompt_versions(
         )
 
     return report
+
+
+def _non_det_columns(frame: pl.DataFrame) -> list[str]:
+    """Non-`det_*` columns in the frame's natural order."""
+    return [c for c in frame.columns if not c.startswith("det_")]
+
+
+def _assert_fingerprint_matches_input(
+    frame: pl.DataFrame,
+    input_frame: pl.DataFrame,
+    source: str,
+) -> None:
+    """Assert that `frame`'s non-det_* columns row-match `input_frame`.
+
+    Fingerprint = concatenation of all non-`det_*` column values per row.
+    The input_frame defines the column set; frame must have every column
+    the input has (and may have more — the extras are det_* columns
+    added by the annotator).
+
+    Raises ValueError with the first diverging row index and column name
+    on mismatch. `source` is a tag included in the error message so the
+    caller can identify which parquet failed (e.g., "iter15/gemini3flash").
+    """
+    if len(frame) != len(input_frame):
+        raise ValueError(
+            f"{source}: row count mismatch — frame has {len(frame)} rows, "
+            f"input has {len(input_frame)}"
+        )
+
+    cols = _non_det_columns(input_frame)
+    missing = [c for c in cols if c not in frame.columns]
+    if missing:
+        raise ValueError(
+            f"{source}: annotation parquet missing non-det columns from "
+            f"input: {missing}"
+        )
+
+    # Column-by-column equality check. Stop on first diverging row.
+    for col in cols:
+        left = input_frame[col].to_list()
+        right = frame[col].to_list()
+        for row_idx, (l, r) in enumerate(zip(left, right)):
+            if l != r:
+                raise ValueError(
+                    f"{source}: fingerprint mismatch at row {row_idx}, "
+                    f"column {col!r}: input={l!r} vs annotation={r!r}"
+                )
 
 
 def _compute_prev_ratio(iter15_prev: float, iter16_prev: float) -> float:
