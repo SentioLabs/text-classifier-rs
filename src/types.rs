@@ -70,7 +70,7 @@ pub enum ContentSubType {
     // Code > Config
     Dockerfile,
     Makefile,
-    // Code > Native
+    // Code > C/C++
     CCpp,
     #[serde(rename = "objc")]
     ObjC,
