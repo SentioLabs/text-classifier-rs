@@ -108,6 +108,62 @@ def relabel_unknowns_cmd(**kwargs):
     _main(argv)
 
 
+@data.command("pull")
+@click.option("--output", default=None, help="Output parquet path.")
+@click.option(
+    "--phase",
+    type=click.Choice(["code", "config", "prose", "structured", "all"]),
+    default=None,
+    help="Which sub_type phase to pull (default: all). Ignored if --sub-type is set.",
+)
+@click.option("--dry-run", is_flag=True, default=False, help="Print plan without downloading.")
+@click.option("--seed", type=int, default=None, help="Random seed for shuffle (default: 42).")
+@click.option(
+    "--sub-type",
+    default=None,
+    help="Targeted single sub_type to pull (overrides --phase). Output goes to a fresh parquet.",
+)
+@click.option(
+    "--target",
+    type=int,
+    default=None,
+    help="Target row count for targeted pulls. Required when --sub-type is set.",
+)
+@click.option(
+    "--content-filter",
+    default=None,
+    help="Optional regex pattern that text content must match (re.search).",
+)
+@click.option(
+    "--source-label",
+    default=None,
+    help="Provenance label written to source/model columns. Use unique labels for targeted pulls.",
+)
+@click.option(
+    "--max-skips-multiplier",
+    type=int,
+    default=None,
+    help="Streaming abort threshold: target * multiplier failed candidates (default: 50).",
+)
+def pull_cmd(**kwargs):
+    """Pull real samples from The Stack on HuggingFace.
+
+    Two modes:
+
+    \b
+    1. Phase pull: pulls a configured phase (code/config/prose/structured/all)
+       using TARGET_COUNTS, appends to golden_train.parquet.
+
+    \b
+    2. Targeted pull: --sub-type X --target N --content-filter REGEX
+       writes a fresh parquet, does NOT append to golden_train.
+    """
+    from trainr.core.pull_real_data import main as _main
+
+    argv = _build_argv(kwargs, flags=("dry_run",))
+    _main(argv)
+
+
 def _build_argv(kwargs: dict, flags: tuple[str, ...] = ()) -> list[str]:
     """Convert click kwargs to an argv list for argparse-based entry points."""
     argv: list[str] = []

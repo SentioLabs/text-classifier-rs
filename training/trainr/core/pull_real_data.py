@@ -401,19 +401,31 @@ def passes_size_filter(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def build_row(text: str, sub_type: str, category: str = "code") -> dict:
+_DEFAULT_SOURCE_LABEL = "real/the-stack-v2"
+
+
+def build_row(
+    text: str,
+    sub_type: str,
+    category: str = "code",
+    source_label: str = _DEFAULT_SOURCE_LABEL,
+) -> dict:
     """Build a single row dict matching the golden_train.parquet schema.
 
-    Sets source and model to ``real/the-stack-v2`` and all 38 feature
-    columns to None.  The *category* defaults to ``"code"`` but should
-    be set to ``"prose"`` for prose sub_types.
+    Sets source and model to *source_label* (default ``real/the-stack-v2``)
+    and all feature columns to None.  The *category* defaults to ``"code"``
+    but should be set to ``"prose"`` for prose sub_types.
+
+    The *source_label* lets targeted pulls (e.g.
+    ``real/the-stack-v2-targeted-rust-2026-04-10``) be identified later in
+    audits and rolled back independently of the main corpus.
     """
     row: dict = {
         "text": text,
         "category": category,
         "sub_type": sub_type,
-        "source": "real/the-stack-v2",
-        "model": "real/the-stack-v2",
+        "source": source_label,
+        "model": source_label,
     }
     for col in FEATURE_COLUMNS:
         row[col] = None
@@ -438,6 +450,9 @@ def _stream_sub_type(
     sub_type: str,
     target: int,
     seed: int = 42,
+    content_filter: re.Pattern[str] | None = None,
+    source_label: str = _DEFAULT_SOURCE_LABEL,
+    max_skips_multiplier: int = 50,
 ) -> list[dict]:
     """Stream samples from The Stack for a single sub_type.
 
@@ -445,6 +460,28 @@ def _stream_sub_type(
     from that directory.  For rare structured types without a direct source
     (pipe_table, fixed_width, key_value, log_lines) we fall back to broader
     data dirs and rely on the format validator to filter.
+
+    Parameters
+    ----------
+    sub_type:
+        Sub-type to pull (e.g. ``"markdown"``, ``"rust"``).
+    target:
+        Number of rows to collect.
+    seed:
+        Shuffle seed for the streaming iterator.
+    content_filter:
+        Optional pre-compiled regex; only rows whose ``content`` matches
+        the pattern are kept. Used for targeted pulls (e.g. markdown
+        documents containing rust code blocks).
+    source_label:
+        Provenance label written to ``source`` and ``model`` columns. Use
+        a unique label for targeted pulls so they can be identified in
+        audits.
+    max_skips_multiplier:
+        Streaming abort threshold. The streamer gives up after
+        ``target * max_skips_multiplier`` rows that fail any filter
+        (size, format validator, content filter). Default 50; increase for
+        targeted pulls where the content filter rejection rate is high.
     """
     if datasets is None:
         raise ImportError("The 'datasets' package is required: pip install datasets")
@@ -490,7 +527,7 @@ def _stream_sub_type(
             continue
 
         skipped = 0
-        max_skips = target * 50  # stop after too many misses
+        max_skips = target * max_skips_multiplier
 
         for item in ds.shuffle(seed=seed, buffer_size=5000):
             content = item.get("content", "")
@@ -507,9 +544,21 @@ def _stream_sub_type(
                     break
                 continue
 
+            # Apply content filter if one was provided (targeted pulls)
+            if content_filter is not None and not content_filter.search(content):
+                skipped += 1
+                if skipped >= max_skips:
+                    break
+                continue
+
             category = SUB_TYPE_CATEGORY.get(sub_type, "code")
             rows.append(
-                build_row(text=content, sub_type=sub_type, category=category)
+                build_row(
+                    text=content,
+                    sub_type=sub_type,
+                    category=category,
+                    source_label=source_label,
+                )
             )
             pbar.update(1)
 
@@ -519,7 +568,7 @@ def _stream_sub_type(
         if len(rows) < target and len(data_dirs) == 1:
             print(
                 f"  WARNING: only found {len(rows)}/{target} for {sub_type} "
-                f"from {data_dir}",
+                f"from {data_dir} (skipped {skipped} candidates)",
                 file=sys.stderr,
             )
 
@@ -563,6 +612,30 @@ def append_to_parquet(
     return len(new_rows)
 
 
+def write_new_parquet(
+    new_rows: list[dict],
+    parquet_path: str,
+    schema_reference: str = _DEFAULT_PARQUET,
+) -> int:
+    """Write new rows to a fresh Parquet file (does not append).
+
+    Used by targeted pulls where the output is staged separately for review
+    before being merged into the main corpus. The schema is taken from
+    *schema_reference* (default: golden_train.parquet) so the new file is
+    column-compatible with the main corpus.
+
+    Returns the number of rows written.
+    """
+    if not new_rows:
+        return 0
+    reference = pl.read_parquet(schema_reference)
+    new_df = pl.DataFrame(new_rows, schema=reference.schema)
+    out_path = Path(parquet_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    new_df.write_parquet(out_path)
+    return len(new_rows)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -595,13 +668,130 @@ def build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Random seed for shuffle (default: 42)",
     )
+    # Targeted-pull options. When --sub-type is set, --phase is ignored
+    # and a single targeted pull is performed.
+    parser.add_argument(
+        "--sub-type",
+        type=str,
+        default=None,
+        help=(
+            "Targeted single sub_type to pull (overrides --phase). "
+            "Used with --target, --content-filter, and --source-label "
+            "for targeted pulls. The output goes to a fresh parquet, "
+            "NOT appended to golden_train."
+        ),
+    )
+    parser.add_argument(
+        "--target",
+        type=int,
+        default=None,
+        help=(
+            "Override target row count for targeted pulls. Required when "
+            "--sub-type is set."
+        ),
+    )
+    parser.add_argument(
+        "--content-filter",
+        type=str,
+        default=None,
+        help=(
+            "Optional regex pattern that text content must match to be kept. "
+            "Used for targeted pulls (e.g. markdown documents containing "
+            "rust code blocks). Pattern is compiled and applied via re.search()."
+        ),
+    )
+    parser.add_argument(
+        "--source-label",
+        type=str,
+        default=_DEFAULT_SOURCE_LABEL,
+        help=(
+            f"Provenance label written to source/model columns "
+            f"(default: {_DEFAULT_SOURCE_LABEL}). Use a unique label for "
+            f"targeted pulls so they can be identified in audits and "
+            f"rolled back independently."
+        ),
+    )
+    parser.add_argument(
+        "--max-skips-multiplier",
+        type=int,
+        default=50,
+        help=(
+            "Streaming abort threshold: stop after target * multiplier "
+            "candidates fail filters. Default 50; raise to 60-120 for "
+            "targeted pulls where the content filter rejection rate is high."
+        ),
+    )
     return parser
+
+
+def _run_targeted_pull(args: argparse.Namespace) -> None:
+    """Execute a single targeted pull and write to a fresh parquet.
+
+    Used when --sub-type is set. Bypasses TARGET_COUNTS and PHASE_SUB_TYPES.
+    The output is written to a NEW parquet (not appended to golden_train)
+    so it can be reviewed and merged separately via the expansion pipeline.
+    """
+    if args.target is None:
+        print(
+            "ERROR: --target is required when --sub-type is set",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    sub_type = args.sub_type
+    target = args.target
+
+    content_filter: re.Pattern[str] | None = None
+    if args.content_filter:
+        try:
+            content_filter = re.compile(args.content_filter)
+        except re.error as exc:
+            print(
+                f"ERROR: invalid --content-filter regex: {exc}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    print(f"Targeted pull: sub_type={sub_type}")
+    print(f"  Target: {target:,}")
+    print(f"  Content filter: {args.content_filter or '(none)'}")
+    print(f"  Source label: {args.source_label}")
+    print(f"  Max skips multiplier: {args.max_skips_multiplier}")
+    print(f"  Output: {args.output}")
+    print()
+
+    if args.dry_run:
+        print("[dry-run] Exiting without downloading.")
+        return
+
+    rows = _stream_sub_type(
+        sub_type=sub_type,
+        target=target,
+        seed=args.seed,
+        content_filter=content_filter,
+        source_label=args.source_label,
+        max_skips_multiplier=args.max_skips_multiplier,
+    )
+    print(f"\n  Collected {len(rows):,} rows")
+
+    if not rows:
+        print("No rows collected. Exiting.")
+        return
+
+    print(f"\nWriting {len(rows):,} rows to {args.output}...")
+    written = write_new_parquet(rows, parquet_path=args.output)
+    print(f"Done. Wrote {written:,} rows.")
 
 
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Targeted single-sub_type pull mode (bypasses phase/TARGET_COUNTS)
+    if args.sub_type is not None:
+        _run_targeted_pull(args)
+        return
 
     # Determine which sub_types to pull
     if args.phase == "all":
@@ -644,7 +834,13 @@ def main(argv: list[str] | None = None) -> None:
     all_rows: list[dict] = []
     for st, target in plan:
         print(f"\nPulling {st} ({target:,} target)...")
-        rows = _stream_sub_type(st, target, seed=args.seed)
+        rows = _stream_sub_type(
+            st,
+            target,
+            seed=args.seed,
+            source_label=args.source_label,
+            max_skips_multiplier=args.max_skips_multiplier,
+        )
         print(f"  Collected {len(rows):,} rows")
         all_rows.extend(rows)
 

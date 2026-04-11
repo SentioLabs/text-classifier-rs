@@ -10,6 +10,8 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+import re
+
 from trainr.core.pull_real_data import (
     FEATURE_COLUMNS,
     PHASE_SUB_TYPES,
@@ -17,6 +19,7 @@ from trainr.core.pull_real_data import (
     SUB_TYPE_CATEGORY,
     TARGET_COUNTS,
     VALIDATORS,
+    _DEFAULT_SOURCE_LABEL,
     _FALLBACK_DATA_DIRS,
     append_to_parquet,
     build_parser,
@@ -29,6 +32,7 @@ from trainr.core.pull_real_data import (
     validate_jsonl,
     validate_pipe_table,
     validate_tsv,
+    write_new_parquet,
 )
 
 
@@ -914,3 +918,347 @@ class TestBuildParser:
         parser = build_parser()
         args = parser.parse_args(["--output", "/tmp/test.parquet"])
         assert args.output == "/tmp/test.parquet"
+
+
+# ---------------------------------------------------------------------------
+# Targeted-pull CLI flags
+# ---------------------------------------------------------------------------
+
+
+class TestTargetedPullFlags:
+    """Test the new --sub-type / --target / --content-filter / --source-label / --max-skips-multiplier flags."""
+
+    def test_sub_type_default_none(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.sub_type is None
+
+    def test_sub_type_set(self):
+        parser = build_parser()
+        args = parser.parse_args(["--sub-type", "markdown"])
+        assert args.sub_type == "markdown"
+
+    def test_target_default_none(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.target is None
+
+    def test_target_set(self):
+        parser = build_parser()
+        args = parser.parse_args(["--target", "350"])
+        assert args.target == 350
+
+    def test_content_filter_default_none(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.content_filter is None
+
+    def test_content_filter_set(self):
+        parser = build_parser()
+        args = parser.parse_args(["--content-filter", "```rust"])
+        assert args.content_filter == "```rust"
+
+    def test_source_label_default(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.source_label == _DEFAULT_SOURCE_LABEL
+
+    def test_source_label_set(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            ["--source-label", "real/the-stack-v2-targeted-rust-2026-04-10"]
+        )
+        assert args.source_label == "real/the-stack-v2-targeted-rust-2026-04-10"
+
+    def test_max_skips_multiplier_default(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.max_skips_multiplier == 50
+
+    def test_max_skips_multiplier_set(self):
+        parser = build_parser()
+        args = parser.parse_args(["--max-skips-multiplier", "120"])
+        assert args.max_skips_multiplier == 120
+
+
+# ---------------------------------------------------------------------------
+# build_row with source_label override
+# ---------------------------------------------------------------------------
+
+
+class TestBuildRowSourceLabel:
+    """Test that build_row respects the source_label parameter."""
+
+    def test_default_source_label(self):
+        row = build_row(text="hello", sub_type="markdown", category="prose")
+        assert row["source"] == _DEFAULT_SOURCE_LABEL
+        assert row["model"] == _DEFAULT_SOURCE_LABEL
+
+    def test_custom_source_label(self):
+        row = build_row(
+            text="hello",
+            sub_type="markdown",
+            category="prose",
+            source_label="real/the-stack-v2-targeted-rust-2026-04-10",
+        )
+        assert row["source"] == "real/the-stack-v2-targeted-rust-2026-04-10"
+        assert row["model"] == "real/the-stack-v2-targeted-rust-2026-04-10"
+
+    def test_source_label_does_not_affect_other_fields(self):
+        row = build_row(
+            text="content",
+            sub_type="markdown",
+            category="prose",
+            source_label="custom/label",
+        )
+        assert row["text"] == "content"
+        assert row["sub_type"] == "markdown"
+        assert row["category"] == "prose"
+
+
+# ---------------------------------------------------------------------------
+# write_new_parquet (used by targeted pulls)
+# ---------------------------------------------------------------------------
+
+
+class TestWriteNewParquet:
+    """Test write_new_parquet — fresh-file output for targeted pulls."""
+
+    def _make_schema_reference(self, path: Path, n_rows: int = 1) -> None:
+        """Create a minimal parquet matching golden_train schema for use as schema reference."""
+        data: dict = {
+            "text": [f"sample {i}" for i in range(n_rows)],
+            "category": ["prose"] * n_rows,
+            "sub_type": ["markdown"] * n_rows,
+            "source": ["real/test"] * n_rows,
+            "model": ["real/test"] * n_rows,
+        }
+        for col in FEATURE_COLUMNS:
+            data[col] = [None] * n_rows
+        schema = {
+            "text": pl.Utf8,
+            "category": pl.Utf8,
+            "sub_type": pl.Utf8,
+            "source": pl.Utf8,
+            "model": pl.Utf8,
+        }
+        for col in FEATURE_COLUMNS:
+            schema[col] = pl.Float32
+        df = pl.DataFrame(data, schema=schema)
+        df.write_parquet(path)
+
+    def test_writes_rows_to_new_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ref_path = Path(tmp) / "ref.parquet"
+            out_path = Path(tmp) / "out.parquet"
+            self._make_schema_reference(ref_path)
+            new_rows = [
+                build_row("hello", "markdown", "prose", source_label="targeted/x")
+                for _ in range(3)
+            ]
+            written = write_new_parquet(
+                new_rows, parquet_path=str(out_path), schema_reference=str(ref_path)
+            )
+            assert written == 3
+            assert out_path.exists()
+            df = pl.read_parquet(out_path)
+            assert df.shape[0] == 3
+            assert all(df["source"].to_list()) == ("targeted/x" == "targeted/x")
+
+    def test_writes_correct_source_label(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ref_path = Path(tmp) / "ref.parquet"
+            out_path = Path(tmp) / "out.parquet"
+            self._make_schema_reference(ref_path)
+            new_rows = [
+                build_row(
+                    "test", "markdown", "prose",
+                    source_label="real/the-stack-v2-targeted-rust-2026-04-10",
+                )
+            ]
+            write_new_parquet(
+                new_rows, parquet_path=str(out_path), schema_reference=str(ref_path)
+            )
+            df = pl.read_parquet(out_path)
+            assert df["source"][0] == "real/the-stack-v2-targeted-rust-2026-04-10"
+            assert df["model"][0] == "real/the-stack-v2-targeted-rust-2026-04-10"
+
+    def test_does_not_modify_schema_reference(self):
+        """write_new_parquet should not touch the schema reference file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ref_path = Path(tmp) / "ref.parquet"
+            out_path = Path(tmp) / "out.parquet"
+            self._make_schema_reference(ref_path, n_rows=2)
+            ref_before = pl.read_parquet(ref_path)
+            new_rows = [build_row("x", "markdown", "prose")]
+            write_new_parquet(
+                new_rows, parquet_path=str(out_path), schema_reference=str(ref_path)
+            )
+            ref_after = pl.read_parquet(ref_path)
+            assert ref_before.shape == ref_after.shape
+
+    def test_creates_parent_directory(self):
+        """Output path with non-existent parent directory should be created."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ref_path = Path(tmp) / "ref.parquet"
+            out_path = Path(tmp) / "nested" / "subdir" / "out.parquet"
+            self._make_schema_reference(ref_path)
+            new_rows = [build_row("x", "markdown", "prose")]
+            write_new_parquet(
+                new_rows, parquet_path=str(out_path), schema_reference=str(ref_path)
+            )
+            assert out_path.exists()
+
+    def test_empty_rows_returns_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ref_path = Path(tmp) / "ref.parquet"
+            out_path = Path(tmp) / "out.parquet"
+            self._make_schema_reference(ref_path)
+            written = write_new_parquet(
+                [], parquet_path=str(out_path), schema_reference=str(ref_path)
+            )
+            assert written == 0
+
+
+# ---------------------------------------------------------------------------
+# Content filter regex patterns (CRITICAL for targeted pulls)
+# ---------------------------------------------------------------------------
+
+
+class TestContentFilterRegexes:
+    """Pre-flight validation of the content filter regexes used by the
+    dataset expansion plan. The 'r' regex in particular is risky because
+    it's a single letter and could match 'ruby', 'rust', 'rs' etc.
+    These tests block the pull until the regex is precision-correct.
+    """
+
+    # Patterns pulled from docs/plans/dataset-expansion-plan.md
+    RUST_PATTERN = r'```\s*(rust|rs)\b'
+    GO_PATTERN = r'```\s*(go|golang)\b'
+    OBJC_PATTERN = r'```\s*(objc|objective-?c)\b'
+    SWIFT_PATTERN = r'```\s*swift\b'
+    KOTLIN_PATTERN = r'```\s*(kotlin|kt)\b'
+    LUA_PATTERN = r'```\s*lua\b'
+    PYTHON_PATTERN = r'```\s*(python|py3?|ipython)\b'
+    # The dangerous one — single letter, must NOT match ruby/rust/rs
+    R_PATTERN = r'```\s*r(?:\s|$|\n)'
+
+    def _matches(self, pattern: str, text: str) -> bool:
+        return re.search(pattern, text) is not None
+
+    # --- rust ---
+
+    def test_rust_pattern_matches_basic(self):
+        assert self._matches(self.RUST_PATTERN, "```rust\nfn main() {}\n```")
+
+    def test_rust_pattern_matches_rs_alias(self):
+        assert self._matches(self.RUST_PATTERN, "```rs\nfn main() {}\n```")
+
+    def test_rust_pattern_matches_with_whitespace(self):
+        assert self._matches(self.RUST_PATTERN, "```  rust\ncode\n```")
+
+    def test_rust_pattern_does_not_match_ruby(self):
+        assert not self._matches(self.RUST_PATTERN, "```ruby\nputs 'hi'\n```")
+
+    def test_rust_pattern_does_not_match_rstudio(self):
+        assert not self._matches(self.RUST_PATTERN, "```rstudio\ncode\n```")
+
+    # --- go ---
+
+    def test_go_pattern_matches_basic(self):
+        assert self._matches(self.GO_PATTERN, "```go\nfunc main() {}\n```")
+
+    def test_go_pattern_matches_golang(self):
+        assert self._matches(self.GO_PATTERN, "```golang\ncode\n```")
+
+    def test_go_pattern_does_not_match_gosh(self):
+        assert not self._matches(self.GO_PATTERN, "```gosh\ncode\n```")
+
+    # --- objc ---
+
+    def test_objc_pattern_matches_basic(self):
+        assert self._matches(self.OBJC_PATTERN, "```objc\n@interface\n```")
+
+    def test_objc_pattern_matches_objective_c(self):
+        assert self._matches(self.OBJC_PATTERN, "```objective-c\ncode\n```")
+
+    def test_objc_pattern_matches_objectivec(self):
+        assert self._matches(self.OBJC_PATTERN, "```objectivec\ncode\n```")
+
+    # --- swift ---
+
+    def test_swift_pattern_matches_basic(self):
+        assert self._matches(self.SWIFT_PATTERN, "```swift\nlet x = 1\n```")
+
+    def test_swift_pattern_does_not_match_swiftcode(self):
+        assert not self._matches(self.SWIFT_PATTERN, "```swiftcode\ncode\n```")
+
+    # --- kotlin ---
+
+    def test_kotlin_pattern_matches_basic(self):
+        assert self._matches(self.KOTLIN_PATTERN, "```kotlin\nfun main() {}\n```")
+
+    def test_kotlin_pattern_matches_kt(self):
+        assert self._matches(self.KOTLIN_PATTERN, "```kt\ncode\n```")
+
+    # --- lua ---
+
+    def test_lua_pattern_matches_basic(self):
+        assert self._matches(self.LUA_PATTERN, "```lua\nlocal x = 1\n```")
+
+    def test_lua_pattern_does_not_match_luau(self):
+        assert not self._matches(self.LUA_PATTERN, "```luau\ncode\n```")
+
+    # --- python ---
+
+    def test_python_pattern_matches_python(self):
+        assert self._matches(self.PYTHON_PATTERN, "```python\nprint(1)\n```")
+
+    def test_python_pattern_matches_py(self):
+        assert self._matches(self.PYTHON_PATTERN, "```py\nprint(1)\n```")
+
+    def test_python_pattern_matches_py3(self):
+        assert self._matches(self.PYTHON_PATTERN, "```py3\nprint(1)\n```")
+
+    def test_python_pattern_matches_ipython(self):
+        assert self._matches(self.PYTHON_PATTERN, "```ipython\nprint(1)\n```")
+
+    def test_python_pattern_does_not_match_pyc(self):
+        assert not self._matches(self.PYTHON_PATTERN, "```pyc\ncode\n```")
+
+    # --- R (the dangerous one) ---
+
+    def test_r_pattern_matches_r_with_newline(self):
+        assert self._matches(self.R_PATTERN, "```r\nlibrary(ggplot2)\n```")
+
+    def test_r_pattern_matches_r_with_space(self):
+        assert self._matches(self.R_PATTERN, "```r data\nx <- 1\n```")
+
+    def test_r_pattern_matches_r_at_eol(self):
+        # Edge case: ```r at end of string
+        assert self._matches(self.R_PATTERN, "Some text\n```r")
+
+    def test_r_pattern_does_NOT_match_ruby(self):
+        """CRITICAL: r pattern must not match ruby code blocks."""
+        assert not self._matches(self.R_PATTERN, "```ruby\nputs 'hi'\n```")
+
+    def test_r_pattern_does_NOT_match_rust(self):
+        """CRITICAL: r pattern must not match rust code blocks."""
+        assert not self._matches(self.R_PATTERN, "```rust\nfn main() {}\n```")
+
+    def test_r_pattern_does_NOT_match_rs(self):
+        """CRITICAL: r pattern must not match rs (rust) code blocks."""
+        assert not self._matches(self.R_PATTERN, "```rs\nfn main() {}\n```")
+
+    def test_r_pattern_does_NOT_match_rstudio(self):
+        assert not self._matches(self.R_PATTERN, "```rstudio\ncode\n```")
+
+    def test_r_pattern_does_NOT_match_random_word_starting_with_r(self):
+        assert not self._matches(self.R_PATTERN, "```ruby2\ncode\n```")
+        assert not self._matches(self.R_PATTERN, "```react\ncode\n```")
+
+    def test_r_pattern_does_NOT_match_capital_R_in_word(self):
+        # Edge case: word starting with R like "Ruby" — case-sensitive
+        # so this only matters if upstream uses lowercase. The pattern
+        # is case-sensitive by default in re.search().
+        assert not self._matches(self.R_PATTERN, "```Ruby\ncode\n```")
