@@ -39,6 +39,8 @@ DETECTION_LABELS: list[str] = [
     "html", "xml", "sgml",
     "csv", "tsv", "pipe_table", "fixed_width",
     "json", "jsonl", "key_value",
+    # Added iter16 (2026-04-10): cross-cutting semantic detection labels
+    "log_content",
 ]
 
 # ---------------------------------------------------------------------------
@@ -47,7 +49,7 @@ DETECTION_LABELS: list[str] = [
 # text, regardless of the row's primary sub_type. Added in iter16 (2026-04-10).
 # ---------------------------------------------------------------------------
 
-SEMANTIC_LABELS: frozenset[str] = frozenset()
+SEMANTIC_LABELS: frozenset[str] = frozenset({"log_content"})
 """Detection labels that have no corresponding ContentSubType.
 
 Empty until phases 3-5 append log_content, stack_trace, diff_patch.
@@ -109,7 +111,8 @@ document with embedded Python code blocks should have both "markdown": 1 and \
 Labels: plain, markdown, rst, latex, python, javascript, typescript, rust, go, \
 java, c_cpp, objc, csharp, powershell, ruby, php, swift, kotlin, r, lua, \
 graphql, sql, shell, css, yaml, toml, ini, dockerfile, makefile, html, xml, \
-sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value
+sgml, csv, tsv, pipe_table, fixed_width, json, jsonl, key_value, \
+log_content
 
 For each label, output 1 if that content type is present in the text, or 0 if not.
 
@@ -161,6 +164,31 @@ operator. Common in game scripting, Neovim config, Redis, OpenResty.
 - "graphql" = GraphQL query or schema. Look for `query { }` / `mutation { }` \
 blocks with field selectors, `type Foo { ... }` schema definitions, `scalar`, \
 `interface`, `union`, `input`, `@directive`, or fragment syntax `... on Type`.
+- "log_content" = embedded log output (distinct from sub_type=log_lines, \
+which means the row IS primarily logs). Requires TWO OR MORE consecutive \
+lines that each independently match a log-line schema. A log-line schema is \
+ONE of:
+  * `<timestamp> <severity-or-component> <message>` where timestamp is ISO \
+8601 (`2024-01-15T10:23:45Z`), apache-style (`[15/Jan/2024:10:23:45 +0000]`), \
+syslog-style (`Jan 15 10:23:45`), or unix epoch (ms/seconds)
+  * A recognized named format: nginx/apache access log, syslog \
+(`<pri>timestamp host proc[pid]: msg`), dockerd/container log, logfmt \
+(`key=value key2=value2`) ONLY when co-occurring with a timestamp OR \
+severity field
+  * JSON log records: >=2 consecutive JSON objects each containing BOTH a \
+timestamp field AND a `level`/`severity` field
+Severity tokens must be UPPERCASE or BRACKETED (`INFO`, `[info]`, `WARN`, \
+`WARNING`, `ERROR`, `DEBUG`, `TRACE`, `FATAL`, `CRITICAL`) — lowercase \
+`error`/`info` in prose or code identifiers does NOT count.
+Do NOT fire on: single-line error messages (even inside code fences or \
+blockquotes), code that CALLS a logger (`log.info(...)`), sentences \
+describing logging behavior, changelogs with leading dates (`2024-01-15 - \
+fixed bug`), CSV/TSV with date columns, `ls -la` output, git commit logs. \
+Lines inside quotation marks or markdown blockquotes do not contribute to \
+the density count.
+If the embedded output is a PURE stack trace (no surrounding non-trace log \
+lines), fire "stack_trace": 1 but NOT "log_content": 1. If a stack trace \
+appears inside otherwise-normal log output, fire BOTH.
 
 ## Rules
 - When in doubt, label 1. It is better to include a borderline detection than \
@@ -177,7 +205,7 @@ No explanation, no markdown formatting.
 "r": 0, "lua": 0, "graphql": 0, "sql": 0, "shell": 0, "css": 0, "yaml": 0, \
 "toml": 0, "ini": 0, "dockerfile": 0, "makefile": 0, "html": 0, "xml": 0, \
 "sgml": 0, "csv": 0, "tsv": 0, "pipe_table": 0, "fixed_width": 0, "json": 0, \
-"jsonl": 0, "key_value": 0}"""
+"jsonl": 0, "key_value": 0, "log_content": 0}"""
 
 
 def build_prompt(text: str) -> str:

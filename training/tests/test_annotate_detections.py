@@ -19,9 +19,9 @@ class TestDetectionLabels:
         from trainr.core.annotate_detections import DETECTION_LABELS
 
         assert isinstance(DETECTION_LABELS, list)
-        # After phase 1: log_lines removed → 39.
-        # After phases 3-5: 3 semantic labels added → 42.
-        assert len(DETECTION_LABELS) == 39
+        # After phase 1: 39. After phase 3: log_content added → 40.
+        # After phases 4-5: 2 more semantic labels → 42.
+        assert len(DETECTION_LABELS) == 40
 
     def test_expected_labels_present(self):
         from trainr.core.annotate_detections import DETECTION_LABELS
@@ -466,3 +466,50 @@ class TestSemanticLabels:
                 f"Semantic label {label!r} must not be in ROUTING_TABLE "
                 f"(ROUTING_TABLE is keyed by sub_type)"
             )
+
+
+class TestLogContentLabel:
+    """Regression-guard tests for the log_content semantic detection label."""
+
+    def test_in_detection_labels(self):
+        from trainr.core.annotate_detections import DETECTION_LABELS
+
+        assert "log_content" in DETECTION_LABELS
+
+    def test_in_semantic_labels(self):
+        from trainr.core.annotate_detections import SEMANTIC_LABELS
+
+        assert "log_content" in SEMANTIC_LABELS
+
+    def test_in_system_prompt_label_list(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        label_list_line = next(
+            line for line in SYSTEM_PROMPT.splitlines() if line.startswith("Labels:")
+        )
+        assert "log_content" in label_list_line
+
+    def test_in_json_template(self):
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert '"log_content": 0' in SYSTEM_PROMPT
+
+    def test_definition_includes_uppercase_severity_rule(self):
+        """Critical precision-tightening rule — if this is removed or
+        reworded, the false-positive rate on lowercase 'error'/'info'
+        in prose will explode."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "UPPERCASE or BRACKETED" in SYSTEM_PROMPT
+
+    def test_definition_includes_density_rule(self):
+        """Density rule: two or more log-shaped lines in sequence."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "TWO OR MORE consecutive lines" in SYSTEM_PROMPT
+
+    def test_definition_includes_pure_trace_carveout(self):
+        """Stack traces alone should fire stack_trace but NOT log_content."""
+        from trainr.core.annotate_detections import SYSTEM_PROMPT
+
+        assert "PURE stack trace" in SYSTEM_PROMPT
