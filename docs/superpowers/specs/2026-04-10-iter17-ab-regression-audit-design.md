@@ -52,13 +52,13 @@ Both sides write their output parquets to the **main repo's** `training/data/aud
 
 ```
 training/data/audit/iter17_ab_iter15_gemini3flash.parquet
-training/data/audit/iter17_ab_iter15_sonnet46.parquet
+training/data/audit/iter17_ab_iter15_sonnet.parquet
 training/data/audit/iter17_ab_iter15_gpt54mini.parquet
 training/data/audit/iter17_ab_iter16a_gemini3flash.parquet
-training/data/audit/iter17_ab_iter16a_sonnet46.parquet
+training/data/audit/iter17_ab_iter16a_sonnet.parquet
 training/data/audit/iter17_ab_iter16a_gpt54mini.parquet
 training/data/audit/iter17_ab_iter16b_gemini3flash.parquet
-training/data/audit/iter17_ab_iter16b_sonnet46.parquet
+training/data/audit/iter17_ab_iter16b_sonnet.parquet
 training/data/audit/iter17_ab_iter16b_gpt54mini.parquet
 ```
 
@@ -184,7 +184,7 @@ Globs are expanded **inside the CLI** via Python's `glob` module, not by the she
 **Algorithm:**
 1. Expand each glob via Python's `glob` module. For each glob, **parse the model slug out of each filename** (regex `iter17_ab_<side>_(?P<slug>[a-z0-9]+)\.parquet`) and assert:
    - Exactly 3 parquets matched.
-   - The slug set equals the expected set `{gemini3flash, sonnet46, gpt54mini}` (or whatever canonical slugs the plan locks in; the set is a module-level constant).
+   - The slug set equals the expected set `{gemini3flash, sonnet, gpt54mini}` (or whatever canonical slugs the plan locks in; the set is a module-level constant).
    - No duplicates (implied by set equality but named explicitly in the error message on violation).
 
    This catches the "three files in the right glob but one of them is a duplicate or misnamed" failure mode that a naive count check cannot. It also produces a deterministic model→parquet mapping for downstream majority-voting.
@@ -246,7 +246,7 @@ The plan picks the exact scheduling, but one workable schedule is "iter15 side a
 
 **Run iter15 side (from worktree, one model at a time). `$REPO_ROOT` is the absolute path to the main repo:**
 ```bash
-for model_slug in gemini3flash sonnet46 gpt54mini; do
+for model_slug in gemini3flash sonnet gpt54mini; do
     uv run trainr data annotate-detections \
         --input "$REPO_ROOT/training/data/audit/iter16_5k_input.parquet" \
         --model "<openrouter-id-for-$model_slug>" \
@@ -256,7 +256,7 @@ done
 
 **Run iter16a side (from main repo, may run concurrently with iter15 side — max 2 in flight):**
 ```bash
-for model_slug in gemini3flash sonnet46 gpt54mini; do
+for model_slug in gemini3flash sonnet gpt54mini; do
     uv run trainr data annotate-detections \
         --input training/data/audit/iter16_5k_input.parquet \
         --model "<openrouter-id-for-$model_slug>" \
@@ -266,7 +266,7 @@ done
 
 **Run iter16b side (from main repo, after iter15 and iter16a complete, one job at a time):**
 ```bash
-for model_slug in gemini3flash sonnet46 gpt54mini; do
+for model_slug in gemini3flash sonnet gpt54mini; do
     uv run trainr data annotate-detections \
         --input training/data/audit/iter16_5k_input.parquet \
         --model "<openrouter-id-for-$model_slug>" \
@@ -283,11 +283,11 @@ Run the `trainr data compare-prompts` CLI as shown above. Output: `docs/accuracy
 ```
 iter16_5k_input.parquet (unchanged, apples-to-apples anchor)
         │
-        ├─► .worktrees/iter17-iter15-prompt/@22bc292 ─► iter17_ab_iter15_{gemini3flash,sonnet46,gpt54mini}.parquet
+        ├─► .worktrees/iter17-iter15-prompt/@22bc292 ─► iter17_ab_iter15_{gemini3flash,sonnet,gpt54mini}.parquet
         │
-        ├─► main repo @HEAD (run A, iter16 prompt)   ─► iter17_ab_iter16a_{gemini3flash,sonnet46,gpt54mini}.parquet
+        ├─► main repo @HEAD (run A, iter16 prompt)   ─► iter17_ab_iter16a_{gemini3flash,sonnet,gpt54mini}.parquet
         │
-        └─► main repo @HEAD (run B, iter16 prompt)   ─► iter17_ab_iter16b_{gemini3flash,sonnet46,gpt54mini}.parquet
+        └─► main repo @HEAD (run B, iter16 prompt)   ─► iter17_ab_iter16b_{gemini3flash,sonnet,gpt54mini}.parquet
                                                           │
                                                           ▼
                                              compare_prompt_versions
@@ -374,7 +374,7 @@ Fixture DataFrames covering:
 - **Empty parquet:** raises ValueError
 - **Zero shared labels:** raises ValueError
 - **Glob resolves to wrong parquet count:** < 3 or > 3 → raises ValueError before any compute
-- **Glob resolves to 3 parquets but wrong slug set:** e.g. `{gemini3flash, sonnet46, sonnet46}` (duplicate) or `{gemini3flash, sonnet46, claude35}` (unknown slug) → raises ValueError naming the symmetric difference against the canonical set
+- **Glob resolves to 3 parquets but wrong slug set:** e.g. `{gemini3flash, sonnet, sonnet}` (duplicate) or `{gemini3flash, sonnet, claude35}` (unknown slug) → raises ValueError naming the symmetric difference against the canonical set
 - **`after` and `noise_floor` column set mismatch:** e.g. `noise_floor` missing `det_python` → raises ValueError naming the diff; the error comes before any noise floor computation
 - **`prev_ratio` zero/zero:** `iter15_prev=0, iter16_prev=0` → `prev_ratio = 1.0`, no WARN-prevalence (label silent on both sides)
 - **`prev_ratio` zero/nonzero:** `iter15_prev=0, iter16_prev=0.03` → `prev_ratio = inf`, WARN-prevalence fires
