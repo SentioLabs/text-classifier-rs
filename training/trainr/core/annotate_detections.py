@@ -783,3 +783,7 @@ def main(argv: list[str] | None = None) -> None:
         print("  Checkpoint removed (run complete).", file=sys.stderr)
 
     print(f"  Done. {len(result_df)} samples with {len(DETECTION_LABELS)} detection columns.", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

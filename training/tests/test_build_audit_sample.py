@@ -156,3 +156,78 @@ def test_build_audit_sample_injection_regexes_match_positives():
         assert inject_sources.count("inject_stack_trace") == 2
         assert inject_sources.count("inject_diff_patch") == 2
         assert inject_sources.count("inject_log_content") == 2
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for tightened stack_trace INJECTION_PATTERNS (iter17)
+# ---------------------------------------------------------------------------
+
+import re
+
+from trainr.core.build_audit_sample import INJECTION_PATTERNS
+
+
+def _matches(label: str, text: str) -> bool:
+    """Return True if any pattern for `label` matches `text`.
+
+    Each pattern is compiled individually so that Rust-regex inline flags
+    like `(?m)` (which Python's `re` only allows at the start of a full
+    pattern) are accepted. This matches the semantics of polars'
+    `str.contains` OR composition used in `find_injection_candidates`.
+    """
+    for pattern in INJECTION_PATTERNS[label]:
+        if re.search(pattern, text) is not None:
+            return True
+    return False
+
+
+class TestStackTraceInjectionPatternTightening:
+    """Regression tests: each case SHOULD NOT match after the tightening."""
+
+    def test_rust_error_pattern_directive_does_not_match(self):
+        text = "// error-pattern:thread 'main' panicked at"
+        assert not _matches("stack_trace", text), (
+            "Rust test directive must not be injected as a stack_trace candidate"
+        )
+
+    def test_python_prose_at_line_without_traceback_does_not_match(self):
+        text = "the parser errored at line 42 of the config"
+        assert not _matches("stack_trace", text), (
+            "Prose mentioning 'at line N' without a Traceback header must not match"
+        )
+
+    def test_java_frame_without_exception_header_does_not_match(self):
+        text = "  See also: at com.foo.Bar.method(Bar.java:15) for details"
+        assert not _matches("stack_trace", text), (
+            "Java frame with no 'Exception in thread' context must not match"
+        )
+
+    def test_real_python_traceback_still_matches(self):
+        text = (
+            'Traceback (most recent call last):\n'
+            '  File "foo.py", line 5, in <module>\n'
+            '    raise ValueError("bad")\n'
+            'ValueError: bad'
+        )
+        assert _matches("stack_trace", text), (
+            "Real Python traceback must still be detected"
+        )
+
+    def test_real_java_trace_still_matches(self):
+        text = (
+            'Exception in thread "main" java.lang.NullPointerException\n'
+            '    at com.foo.Bar.method(Bar.java:15)\n'
+            '    at com.foo.Baz.run(Baz.java:22)'
+        )
+        assert _matches("stack_trace", text), (
+            "Real Java trace with Exception header must still be detected"
+        )
+
+    def test_real_rust_panic_still_matches(self):
+        text = (
+            "thread 'main' panicked at 'assertion failed', src/lib.rs:42\n"
+            "note: run with `RUST_BACKTRACE=1`"
+        )
+        assert _matches("stack_trace", text), (
+            "Real Rust panic at runtime must still match"
+        )

@@ -1,6 +1,12 @@
 """Smoke tests for trainr.core.audit_semantic_labels."""
 
+import re
+from pathlib import Path
+
 import polars as pl
+import pytest
+
+from trainr.core.audit_semantic_labels import compute_prevalence_per_label
 
 
 def _make_fake_annotated(
@@ -72,3 +78,196 @@ def test_agreement_excludes_injected_rows():
     filtered = filter_for_agreement(df)
     assert len(filtered) == 2
     assert all(s == "stratified" for s in filtered["audit_source"].to_list())
+
+
+class TestComputePrevalencePerLabel:
+    def test_majority_fire_rate_single_model(self):
+        # Single model: prevalence is simply mean fire rate.
+        df = pl.DataFrame({
+            "audit_source": ["stratified"] * 10,
+            "det_python": [1, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+            "det_markdown": [0] * 10,
+        })
+        result = compute_prevalence_per_label({"only": df})
+        assert result["python"] == 0.3
+        assert result["markdown"] == 0.0
+
+    def test_majority_of_three_fire(self):
+        # 3 models: prevalence = fraction of rows where majority (>=2 of 3) fires.
+        base = pl.DataFrame({
+            "audit_source": ["stratified"] * 4,
+        })
+        df1 = base.with_columns(pl.Series("det_python", [1, 1, 0, 0]))
+        df2 = base.with_columns(pl.Series("det_python", [1, 0, 1, 0]))
+        df3 = base.with_columns(pl.Series("det_python", [0, 1, 1, 0]))
+        # Row-by-row: 2+, 2+, 2+, 0 → majority fires on rows 0, 1, 2 → prev = 3/4
+        result = compute_prevalence_per_label({"a": df1, "b": df2, "c": df3})
+        assert result["python"] == 0.75
+
+    def test_zero_rows_returns_zero(self):
+        df = pl.DataFrame({
+            "audit_source": pl.Series([], dtype=pl.Utf8),
+            "det_python": pl.Series([], dtype=pl.Int64),
+        })
+        result = compute_prevalence_per_label({"only": df})
+        assert result["python"] == 0.0
+
+    def test_filters_out_injected_rows(self):
+        # Only stratified rows count. Injected rows that fire must be excluded.
+        df = pl.DataFrame({
+            "audit_source": ["stratified", "stratified", "inject_det_python"],
+            "det_python": [0, 0, 1],  # only the injected row fires
+        })
+        result = compute_prevalence_per_label({"only": df})
+        assert result["python"] == 0.0
+
+    def test_skips_label_missing_from_some_models(self):
+        # det_markdown is in df_a only. Function must skip it rather than crash.
+        df_a = pl.DataFrame({
+            "audit_source": ["stratified"] * 2,
+            "det_python": [1, 0],
+            "det_markdown": [0, 0],
+        })
+        df_b = pl.DataFrame({
+            "audit_source": ["stratified"] * 2,
+            "det_python": [1, 1],
+            # intentionally missing det_markdown
+        })
+        result = compute_prevalence_per_label({"a": df_a, "b": df_b})
+        assert "python" in result
+        assert "markdown" not in result, (
+            "Labels missing from one frame must be skipped, not included"
+        )
+
+
+class TestLoadAnnotatorParquets:
+    def test_expected_slug_set_constant(self):
+        from trainr.core.audit_semantic_labels import EXPECTED_MODEL_SLUGS
+        assert EXPECTED_MODEL_SLUGS == frozenset({"gemini3flash", "sonnet", "gpt54mini"})
+
+    def test_loads_three_parquets_by_slug(self, tmp_path):
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        def _make(path: Path, val: int):
+            pl.DataFrame({
+                "audit_source": ["stratified"],
+                "det_python": [val],
+            }).write_parquet(path)
+
+        _make(tmp_path / "iter17_ab_iter15_gemini3flash.parquet", 1)
+        _make(tmp_path / "iter17_ab_iter15_sonnet.parquet", 0)
+        _make(tmp_path / "iter17_ab_iter15_gpt54mini.parquet", 1)
+
+        paths = sorted(tmp_path.glob("iter17_ab_iter15_*.parquet"))
+        result = load_annotator_parquets(paths)
+
+        assert set(result.keys()) == {"gemini3flash", "sonnet", "gpt54mini"}
+        assert result["gemini3flash"]["det_python"][0] == 1
+        assert result["sonnet"]["det_python"][0] == 0
+
+    def test_rejects_wrong_count(self, tmp_path):
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        pl.DataFrame({"audit_source": ["stratified"]}).write_parquet(
+            tmp_path / "iter17_ab_iter15_gemini3flash.parquet"
+        )
+        paths = [tmp_path / "iter17_ab_iter15_gemini3flash.parquet"]
+        with pytest.raises(ValueError, match="expected 3 parquets"):
+            load_annotator_parquets(paths)
+
+    def test_rejects_duplicate_slug(self, tmp_path):
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        def _make(path: Path):
+            pl.DataFrame({"audit_source": ["stratified"]}).write_parquet(path)
+
+        _make(tmp_path / "iter17_ab_iter15_gemini3flash.parquet")
+        _make(tmp_path / "iter17_ab_iter15_sonnet.parquet")
+        _make(tmp_path / "iter17_ab_iter15_sonnet_copy.parquet")
+        # The "copy" one won't match the regex expected set and will be rejected.
+        paths = sorted(tmp_path.glob("iter17_ab_iter15_*.parquet"))
+        with pytest.raises(ValueError):
+            load_annotator_parquets(paths)
+
+    def test_rejects_true_duplicate_slug(self, tmp_path):
+        """Two paths that both parse to the same canonical slug must raise."""
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        def _make(path: Path):
+            pl.DataFrame({"audit_source": ["stratified"]}).write_parquet(path)
+
+        # Two files in different dirs that both parse to slug "gemini3flash".
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        _make(dir_a / "iter17_ab_gemini3flash.parquet")
+        _make(dir_b / "iter17_ab_gemini3flash.parquet")
+        _make(dir_a / "iter17_ab_sonnet.parquet")
+
+        paths = [
+            dir_a / "iter17_ab_gemini3flash.parquet",
+            dir_b / "iter17_ab_gemini3flash.parquet",
+            dir_a / "iter17_ab_sonnet.parquet",
+        ]
+        with pytest.raises(ValueError, match="duplicate slug"):
+            load_annotator_parquets(paths)
+
+    def test_rejects_unknown_slug(self, tmp_path):
+        from trainr.core.audit_semantic_labels import load_annotator_parquets
+
+        def _make(path: Path):
+            pl.DataFrame({"audit_source": ["stratified"]}).write_parquet(path)
+
+        _make(tmp_path / "iter17_ab_iter15_gemini3flash.parquet")
+        _make(tmp_path / "iter17_ab_iter15_sonnet.parquet")
+        _make(tmp_path / "iter17_ab_iter15_claude35.parquet")
+
+        paths = sorted(tmp_path.glob("iter17_ab_iter15_*.parquet"))
+        with pytest.raises(ValueError, match="unexpected slugs"):
+            load_annotator_parquets(paths)
+
+
+class TestIter16ReportReproducibility:
+    """Guard against silent drift in audit_semantic_labels output.
+
+    The iter16 audit report is committed at docs/accuracy_runs/... . If any
+    refactor changes agreement math, rounding, column ordering, or
+    format_report output, this test fails loud.
+    """
+
+    def test_iter16_audit_report_reproduces_byte_for_byte(self):
+        from trainr.core.audit_semantic_labels import (
+            compute_agreement_across_models,
+            compute_recall_majority,
+            filter_for_agreement,
+            format_report,
+        )
+
+        repo_root = Path(__file__).resolve().parents[2]
+        parquet_dir = repo_root / "training" / "data" / "audit"
+        report_path = (
+            repo_root / "docs" / "accuracy_runs"
+            / "2026-04-10-iteration-16-audit-report.md"
+        )
+
+        if not parquet_dir.exists() or not report_path.exists():
+            pytest.skip("iter16 fixture data not available in this checkout")
+
+        dfs = {
+            "gemini3flash": pl.read_parquet(parquet_dir / "iter16_5k_gemini3flash.parquet"),
+            "sonnet": pl.read_parquet(parquet_dir / "iter16_5k_sonnet.parquet"),
+            "gpt54mini": pl.read_parquet(parquet_dir / "iter16_5k_gpt54mini.parquet"),
+        }
+        stratified_dfs = {name: filter_for_agreement(df) for name, df in dfs.items()}
+        agreement = compute_agreement_across_models(stratified_dfs)
+        recall = compute_recall_majority(dfs)
+        regenerated = format_report(dfs, agreement, recall)
+
+        committed = report_path.read_text()
+        assert regenerated == committed, (
+            "iter16 audit report drift detected — a refactor changed the "
+            "audit output. If this change is intentional, regenerate the "
+            "committed report and update this test's fixture reference."
+        )
+

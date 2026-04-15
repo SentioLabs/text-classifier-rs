@@ -94,6 +94,24 @@ def annotate_detections_cmd(**kwargs):
     _main(argv)
 
 
+@data.command("compare-prompts")
+@click.option("--before", required=True, help="Glob for iter15-side parquets (3 files).")
+@click.option("--after", required=True, help="Glob for iter16a-side parquets (3 files, A/B after side).")
+@click.option(
+    "--noise-floor", "noise_floor", required=True,
+    help="Glob for iter16b-side parquets (3 files, same-prompt noise companion).",
+)
+@click.option("--input", required=True, help="Path to input parquet (iter16_5k_input.parquet).")
+@click.option("--output", required=True, help="Markdown report output path.")
+def compare_prompts_cmd(**kwargs):
+    """A/B regression audit between two SYSTEM_PROMPT versions."""
+    from trainr.core.compare_prompt_versions import main as _main
+
+    # Click uses underscores in kwargs; _build_argv converts to dashes.
+    argv = _build_argv(kwargs)
+    _main(argv)
+
+
 @data.command("relabel-unknowns")
 @click.option("--input", required=True, help="Path to input Parquet file with unknown sub_types.")
 @click.option("--output", required=True, help="Path to output Parquet file.")

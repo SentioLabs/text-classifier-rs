@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -29,6 +30,17 @@ import polars as pl
 from trainr.core.annotate_detections import SEMANTIC_LABELS
 
 STRATIFIED = "stratified"
+
+# Canonical model slug set for iter16/iter17 annotation parquets. This is
+# the authoritative set — every loader that accepts a glob of 3 parquets
+# asserts its parsed slugs equal this set. Duplicates, misnames, and
+# unknown slugs all fail loud here rather than silently corrupting metrics.
+EXPECTED_MODEL_SLUGS: frozenset[str] = frozenset({"gemini3flash", "sonnet", "gpt54mini"})
+
+# Filename pattern: <anything>_<slug>.parquet where slug is alphanumeric.
+# The capture group extracts the slug. Validation against EXPECTED_MODEL_SLUGS
+# happens in load_annotator_parquets.
+_SLUG_RE = re.compile(r".*_(?P<slug>[a-z0-9]+)\.parquet$")
 
 # Pass criteria thresholds (from spec)
 AGREEMENT_THRESHOLD = 0.995
@@ -43,6 +55,63 @@ def filter_for_agreement(df: pl.DataFrame) -> pl.DataFrame:
 def detection_columns(df: pl.DataFrame) -> list[str]:
     """Return det_* column names present in the DataFrame."""
     return [c for c in df.columns if c.startswith("det_")]
+
+
+def load_annotator_parquets(
+    paths: list[Path],
+) -> dict[str, pl.DataFrame]:
+    """Load annotator parquets keyed by model slug parsed from filename.
+
+    Asserts that exactly 3 parquets are passed AND that their parsed slug
+    set equals EXPECTED_MODEL_SLUGS. This catches the "three files but one
+    is a duplicate or misnamed" failure mode that a count check alone
+    cannot — critical because gate metrics depend on knowing which model
+    produced which parquet.
+
+    Args:
+        paths: List of 3 parquet file paths.
+
+    Returns:
+        {slug: DataFrame} with keys exactly equal to EXPECTED_MODEL_SLUGS.
+
+    Raises:
+        ValueError: If count != 3, a filename doesn't match the slug regex,
+            or the parsed slug set != EXPECTED_MODEL_SLUGS.
+    """
+    if len(paths) != 3:
+        raise ValueError(
+            f"load_annotator_parquets: expected 3 parquets, got {len(paths)}: "
+            f"{[str(p) for p in paths]}"
+        )
+
+    parsed: dict[str, Path] = {}
+    for path in paths:
+        match = _SLUG_RE.match(path.name)
+        if match is None:
+            raise ValueError(
+                f"load_annotator_parquets: could not parse model slug from "
+                f"{path.name!r}; expected format '<prefix>_<slug>.parquet' "
+                f"with slug in {sorted(EXPECTED_MODEL_SLUGS)}"
+            )
+        slug = match.group("slug")
+        if slug in parsed:
+            raise ValueError(
+                f"load_annotator_parquets: duplicate slug {slug!r} "
+                f"(already mapped to {parsed[slug].name}, now {path.name})"
+            )
+        parsed[slug] = path
+
+    parsed_slugs = frozenset(parsed.keys())
+    if parsed_slugs != EXPECTED_MODEL_SLUGS:
+        missing = EXPECTED_MODEL_SLUGS - parsed_slugs
+        extra = parsed_slugs - EXPECTED_MODEL_SLUGS
+        raise ValueError(
+            f"load_annotator_parquets: parsed slugs do not match expected set. "
+            f"missing={sorted(missing)}, unexpected slugs={sorted(extra)}. "
+            f"expected={sorted(EXPECTED_MODEL_SLUGS)}"
+        )
+
+    return {slug: pl.read_parquet(path) for slug, path in parsed.items()}
 
 
 def compute_agreement_across_models(
@@ -103,6 +172,60 @@ def compute_agreement_across_models(
             zeros = n_models - ones
             agreement_sum += max(ones, zeros) / n_models
         result[label] = agreement_sum / n_rows if n_rows > 0 else 1.0
+    return result
+
+
+def compute_prevalence_per_label(
+    dfs: dict[str, pl.DataFrame],
+) -> dict[str, float]:
+    """Majority-of-N fire rate per label on stratified rows.
+
+    For each `det_*` column present in the first DataFrame, compute the
+    fraction of stratified rows where at least ceil(N/2) of the N models
+    fired (det == 1). Zero-row inputs return 0.0.
+
+    Args:
+        dfs: {model_slug: DataFrame}. All DataFrames must already be
+            filtered to stratified rows (use filter_for_agreement upstream)
+            and share row ordering.
+
+    Returns:
+        {label_without_det_prefix: prevalence_float in [0.0, 1.0]}.
+    """
+    model_names = list(dfs.keys())
+    if not model_names:
+        return {}
+
+    first = dfs[model_names[0]]
+    # Filter all frames to stratified rows. Doing this inside the function
+    # makes the function safe to call with raw annotator output (the alt is
+    # requiring every caller to remember to filter first).
+    stratified_dfs = {
+        name: df.filter(pl.col("audit_source") == STRATIFIED)
+        for name, df in dfs.items()
+    }
+    stratified_first = stratified_dfs[model_names[0]]
+    n_rows = len(stratified_first)
+    if n_rows == 0:
+        return {label[len("det_"):]: 0.0 for label in detection_columns(first)}
+
+    n_models = len(model_names)
+    majority_threshold = (n_models + 1) // 2  # ceil(N/2); for N=3 this is 2
+
+    result: dict[str, float] = {}
+    for col in detection_columns(first):
+        label = col[len("det_"):]
+        # Skip columns that don't exist on every frame (asymmetric schemas
+        # are the compare module's problem, not this function's).
+        if not all(col in stratified_dfs[m].columns for m in model_names):
+            continue
+        votes_per_model = [stratified_dfs[m][col].to_list() for m in model_names]
+        fire_count = 0
+        for row_idx in range(n_rows):
+            row_votes = [votes_per_model[m][row_idx] for m in range(n_models)]
+            if sum(row_votes) >= majority_threshold:
+                fire_count += 1
+        result[label] = fire_count / n_rows
     return result
 
 
