@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.4.0](https://github.com/SentioLabs/text-classifier-rs/compare/text-classifier-v0.3.0...text-classifier-v0.4.0) (2026-04-11)
+
+
+### Features
+
+* add release-please + cross-platform binary builds ([87a9f9f](https://github.com/SentioLabs/text-classifier-rs/commit/87a9f9f828646ad63cca932ef430f70d1590e04c))
+* **detections:** add 3 semantic labels (log_content, stack_trace, diff_patch) ([#13](https://github.com/SentioLabs/text-classifier-rs/issues/13)) ([8dc31cf](https://github.com/SentioLabs/text-classifier-rs/commit/8dc31cf13f94f9715d2dab2d2cc5f2cb85a16209))
+* **features:** implement 8 new feature extraction functions ([74d2c51](https://github.com/SentioLabs/text-classifier-rs/commit/74d2c51b6919ec70c86bfc92268628b197fc2017))
+* initial release ([d03ad20](https://github.com/SentioLabs/text-classifier-rs/commit/d03ad208033d59fc5f71812d8b1492541d7a3f80))
+* **lib:** export new types and use per-type confidence thresholds ([34a78bf](https://github.com/SentioLabs/text-classifier-rs/commit/34a78bf52cc1d6b72f49733ed9dceb69f7a297c6))
+* multi-label classification + accuracy 93% → 97.6% ([#9](https://github.com/SentioLabs/text-classifier-rs/issues/9)) ([861a343](https://github.com/SentioLabs/text-classifier-rs/commit/861a343d8247c96254ad0abe5371ff1696601d9f))
+* **tier1:** redesign classification with two-pass approach and per-type thresholds ([09bfc96](https://github.com/SentioLabs/text-classifier-rs/commit/09bfc9637e2f86f00066fd7d3b70a5b62d217628))
+* **training:** add pipeline run command, update Taskfile, delete standalone scripts ([17da9bd](https://github.com/SentioLabs/text-classifier-rs/commit/17da9bd08dc7c6125553a0943262df9283463e79))
+* **training:** migrate audit commands to trainr package ([f77d8fa](https://github.com/SentioLabs/text-classifier-rs/commit/f77d8faaab79098b07c7fd392a01e2b6f100ba0b))
+* **training:** migrate data commands to trainr package ([bff5d4e](https://github.com/SentioLabs/text-classifier-rs/commit/bff5d4ef6e35e2ab51df4492721d01dac167ee97))
+* **training:** migrate eval_onnx and analyze_eval into trainr package ([6517107](https://github.com/SentioLabs/text-classifier-rs/commit/6517107ba7535c62f1a218ca64fb7ca2a093a6e6))
+* **training:** migrate pipeline commands (featurize, dedup, train) into trainr package ([644acd9](https://github.com/SentioLabs/text-classifier-rs/commit/644acd9e690aeef798a5d1ec5f27f1a4e47746a1))
+* **training:** scaffold trainr package with CLI, shared modules, and schema migration ([aa52d5a](https://github.com/SentioLabs/text-classifier-rs/commit/aa52d5ab23bd4152ed5a9c04e2c348ba82d0ce95))
+* **types:** add hierarchical TextCategory/ContentSubType type system ([4a3f2e3](https://github.com/SentioLabs/text-classifier-rs/commit/4a3f2e377159a386866a2ac06879c8e34f5fc4a0))
+* update tier2/CLI/python for new taxonomy ([2a8c182](https://github.com/SentioLabs/text-classifier-rs/commit/2a8c18240961f27a39ccd381198fb3e616194e9e))
+
+
+### Bug Fixes
+
+* resolve 13 code review findings across classification pipeline ([7f02ef0](https://github.com/SentioLabs/text-classifier-rs/commit/7f02ef0a0755525e1277c54a8da526ddf1c9e2ea))
+* resolve merge conflicts from parallel T1/T2 worktree branches ([bde3a48](https://github.com/SentioLabs/text-classifier-rs/commit/bde3a48a97cbf096570ab08a1a0f9dc947c55c32))
+* **training:** update stale imports after script deletion ([a441a9c](https://github.com/SentioLabs/text-classifier-rs/commit/a441a9c20e51660e90bb2a598c0055eb9c0b363a))
+
+
+### Refactoring
+
+* rename Translatable to Prose across all source files ([1afd04d](https://github.com/SentioLabs/text-classifier-rs/commit/1afd04d3aae375d6866a27af8976442b3529228f))
+
 ## [0.3.0](https://github.com/SentioLabs/text-classifier-rs/compare/text-classifier-v0.2.2...text-classifier-v0.3.0) (2026-04-08)
 
 
